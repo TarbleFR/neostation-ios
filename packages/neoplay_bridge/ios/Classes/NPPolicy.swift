@@ -7,20 +7,64 @@ enum NPPolicy {
     static let maxQueuedBytes = 8 * 1024 * 1024
     // Picture quality is decided here, on the sender, and nowhere else.
     //
-    // The encoded size no longer follows the receiver window: a 1280-px-wide
+    // The encoded size never follows the receiver window: a 1280-px-wide
     // window used to halve the iPhone picture *and* its bit budget (w*h*6 ->
     // 4.5 Mbit/s), which is what "mediocre" looked like. The receiver scales a
     // full picture down losslessly; it cannot invent detail from a small one.
-    static func encodeSize(source: NPSize, display: NPSize, cap: NPSize = NPSize(width: 1920, height: 1080)) -> NPSize {
+    //
+    // Build410: the ceiling is the receiver's advertised decode limit. A
+    // frames receiver (WebCodecs) decodes the native iPhone capture, which
+    // ReplayKit bounds to the display (2868x1320 on an iPhone 16 Pro Max); a
+    // MediaSource receiver keeps the 1080p ceiling it was validated with. The
+    // link tier lowers that ceiling while the link sheds packets.
+    static let legacyCap = NPSize(width: 1920, height: 1080)
+    static let nativeCap = NPSize(width: 7680, height: 4320)
+    static func encodeSize(source: NPSize, display: NPSize, cap: NPSize = legacyCap) -> NPSize {
         guard source.width > 0, source.height > 0 else { return NPSize(width: 1280, height: 720) }
         let scale = min(1.0, Double(cap.width) / Double(source.width), Double(cap.height) / Double(source.height))
         return NPSize(width: max(2, Int(Double(source.width) * scale) / 2 * 2), height: max(2, Int(Double(source.height) * scale) / 2 * 2))
     }
-    // bits per second for a local Wi-Fi link: 12 bit/pixel/s (1920x886 -> 20 Mbit/s,
-    // 1280x720 -> 11 Mbit/s), between 8 and 30 Mbit/s. AirPlay mirroring sits in the
-    // same range. Chromecast keeps a lower cap because its decoders and links are slower.
+    enum Tier: Int, CaseIterable { case native = 0, full = 1, half = 2 }
+    static func cap(tier: Tier, receiverMax: NPSize) -> NPSize {
+        let ceiling = NPSize(width: max(2, min(receiverMax.width, nativeCap.width)), height: max(2, min(receiverMax.height, nativeCap.height)))
+        switch tier {
+        case .native: return ceiling
+        case .full: return NPSize(width: min(ceiling.width, 1920), height: min(ceiling.height, 1080))
+        case .half: return NPSize(width: min(ceiling.width, 1280), height: min(ceiling.height, 720))
+        }
+    }
+    // bits per second for a local Wi-Fi link: 12 bit/pixel/s (2868x1320 -> 45 Mbit/s,
+    // 1920x886 -> 20 Mbit/s, 1280x720 -> 11 Mbit/s), between 8 and 60 Mbit/s.
+    // AirPlay mirroring sits in the same range. Chromecast keeps a lower cap
+    // because its decoders and links are slower.
     static func bitrate(for size: NPSize, cast: Bool = false) -> Int {
-        min(cast ? 12_000_000 : 30_000_000, max(8_000_000, size.width * size.height * 12))
+        min(cast ? 12_000_000 : 60_000_000, max(8_000_000, size.width * size.height * 12))
+    }
+}
+
+// Link adaptation. The transport reports every packet it had to shed. Three
+// sheds within two seconds step the tier down (native -> 1080p -> 720p), at
+// most once per five seconds; twenty seconds without a shed step it back up.
+// Pure state, exercised by the native harness.
+struct NPLinkAdapter {
+    static let window: TimeInterval = 2
+    static let threshold = 3
+    static let cooldown: TimeInterval = 5
+    static let recovery: TimeInterval = 20
+    private(set) var tier: NPPolicy.Tier = .native
+    private var sheds: [TimeInterval] = []
+    private var lastChange: TimeInterval = -.infinity
+    private var lastShed: TimeInterval = -.infinity
+    mutating func shed(at now: TimeInterval, count: Int = 1) -> NPPolicy.Tier? {
+        lastShed = now
+        sheds.append(contentsOf: repeatElement(now, count: max(1, count)))
+        sheds.removeAll { now - $0 > Self.window }
+        guard sheds.count >= Self.threshold, now - lastChange >= Self.cooldown, let lower = NPPolicy.Tier(rawValue: tier.rawValue + 1) else { return nil }
+        tier = lower; lastChange = now; sheds.removeAll(); return lower
+    }
+    mutating func tick(at now: TimeInterval) -> NPPolicy.Tier? {
+        guard tier != .native, now - lastShed >= Self.recovery, now - lastChange >= Self.recovery, let higher = NPPolicy.Tier(rawValue: tier.rawValue - 1) else { return nil }
+        tier = higher; lastChange = now; return higher
     }
 }
 

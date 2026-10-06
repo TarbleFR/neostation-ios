@@ -4,6 +4,7 @@ import { once } from 'node:events';
 import { WebSocket } from 'ws';
 import { createReceiver } from '../server.mjs';
 import { fit, displayLimits, validatePacket, mp4Mime } from '../protocol.mjs';
+import { configPacket, videoPacket, audioPacket } from './packets.mjs';
 const message = ws => new Promise(resolve => ws.once('message', (data, binary) => resolve({data, binary})));
 test('aspect-fit: 4:3, ultrawide, portrait, and invalid dimensions', () => {
   assert.deepEqual(fit(640,480,1920,1080), {width:1440,height:1080,x:240,y:0});
@@ -43,4 +44,36 @@ test('authenticated pairing, live media relay, disconnect and restart', async t 
   assert.equal(JSON.parse((await playback).data).playing,true);
   const closed=once(sender,'close'); viewer.send(JSON.stringify({type:'stop'})); await closed;
   assert.equal((await (await fetch(base+'/v1/info')).json()).available,true);
+});
+test('a frames-capable viewer lifts the ceiling and the relay carries v2 configuration, pictures and sound', async t => {
+  const receiver = await createReceiver({port:0,host:'127.0.0.1',advertise:false}); t.after(() => receiver.close());
+  const base = `http://127.0.0.1:${receiver.port}`, wsbase = `ws://127.0.0.1:${receiver.port}`;
+  const viewer = new WebSocket(wsbase+'/v1/view?token='+receiver.viewerToken); t.after(() => viewer.terminate());
+  const state = message(viewer); await once(viewer,'open'); await state;
+  viewer.send(JSON.stringify({type:'display',width:3840,height:2160,frames:true,supported:true}));
+  await new Promise(resolve => setTimeout(resolve,25));
+  const info = await (await fetch(base+'/v1/info')).json();
+  assert.equal(info.frames,true); assert.equal(info.maxWidth,7680); assert.equal(info.maxHeight,4320); assert.equal(info.fps,60);
+  const response = await fetch(base+'/v1/pair',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({v:1,pin:receiver.pin})});
+  assert.equal(response.status,200); const grant = await response.json(); assert.equal(grant.frames,true);
+  const sender = new WebSocket(wsbase+'/v1/sender',{headers:{Authorization:`Bearer ${grant.token}`}}); t.after(() => sender.terminate());
+  const ready = message(sender); await once(sender,'open'); const hello = JSON.parse((await ready).data);
+  assert.equal(hello.type,'ready'); assert.equal(hello.frames,true); assert.equal(hello.maxWidth,7680);
+  await new Promise(resolve => setTimeout(resolve,25));
+  const config = configPacket(2868,1320), picture = videoPacket(16_667,true), sound = audioPacket(0,480);
+  for (const packet of [config, picture, sound]) { const relayed = message(viewer); sender.send(Buffer.from(packet)); assert.deepEqual((await relayed).data, Buffer.from(packet)); }
+  const closed = once(sender,'close'); sender.send(Buffer.from([5,0,0,0,0,0,0,0,0,1,2,3])); const [code] = await closed; assert.equal(code,1008); // truncated PCM packet
+  assert.equal((await (await fetch(base+'/v1/info')).json()).available,true);
+});
+test('a v2 sender whose first packet is not a configuration is refused', async t => {
+  const receiver = await createReceiver({port:0,host:'127.0.0.1',advertise:false}); t.after(() => receiver.close());
+  const base = `http://127.0.0.1:${receiver.port}`, wsbase = `ws://127.0.0.1:${receiver.port}`;
+  const viewer = new WebSocket(wsbase+'/v1/view?token='+receiver.viewerToken); t.after(() => viewer.terminate());
+  const state = message(viewer); await once(viewer,'open'); await state;
+  viewer.send(JSON.stringify({type:'display',width:1920,height:1080,frames:true,supported:true}));
+  await new Promise(resolve => setTimeout(resolve,25));
+  const grant = await (await fetch(base+'/v1/pair',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({v:1,pin:receiver.pin})})).json();
+  const sender = new WebSocket(wsbase+'/v1/sender',{headers:{Authorization:`Bearer ${grant.token}`}}); t.after(() => sender.terminate());
+  const ready = message(sender); await once(sender,'open'); await ready;
+  const closed = once(sender,'close'); sender.send(Buffer.from(videoPacket(0,true))); const [code] = await closed; assert.equal(code,1008);
 });

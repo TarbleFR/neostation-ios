@@ -12,8 +12,15 @@ final class NPWindowsTransport {
     var onDisplay: ((NPSize) -> Void)?
     var onError: ((NPError) -> Void)?
     var onPlayback: (() -> Void)?
+    // Called on the transport queue with the number of packets just shed.
+    var onShed: ((Int) -> Void)?
     private(set) var framesSupported = false // the receiver accepts the v2 frame protocol
-    private var dropped = 0
+    // Largest picture the receiver decodes (its `ready` maxWidth/maxHeight);
+    // receivers that do not advertise one are MediaSource receivers at 1080p.
+    private(set) var receiverMax = NPPolicy.legacyCap
+    private(set) var dropped = 0
+    static let maxQueuedPackets = 16
+    static let maxQueuedAudio = 24
     init() {
         let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = 8; config.timeoutIntervalForResource = 3600
@@ -39,6 +46,10 @@ final class NPWindowsTransport {
             }
         }.resume()
     }
+    private static func size(_ object: [String: Any], _ widthKey: String, _ heightKey: String, fallback: NPSize) -> NPSize {
+        let width = object[widthKey] as? Int, height = object[heightKey] as? Int
+        return NPSize(width: min(7680, max(2, width ?? fallback.width)), height: min(4320, max(2, height ?? fallback.height)))
+    }
     private func receive() {
         socket?.receive { [weak self] result in
             guard let self else { return }
@@ -47,13 +58,13 @@ final class NPWindowsTransport {
                 guard case .success(.string(let text)) = result, let data = text.data(using: .utf8),
                       let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { self.onError?(.network); return }
                 if object["type"] as? String == "ready", object["v"] as? Int == 1 {
-                    let width = min(7680, max(2, object["width"] as? Int ?? 1280)), height = min(4320, max(2, object["height"] as? Int ?? 720))
                     self.framesSupported = object["frames"] as? Bool == true
-                    self.onReady?(NPSize(width: width, height: height)); self.onReady = nil
+                    self.receiverMax = self.framesSupported ? Self.size(object, "maxWidth", "maxHeight", fallback: NPPolicy.legacyCap) : NPPolicy.legacyCap
+                    NPLog.record("receiver.ready", ["frames": self.framesSupported, "maxWidth": self.receiverMax.width, "maxHeight": self.receiverMax.height])
+                    self.onReady?(Self.size(object, "width", "height", fallback: NPSize(width: 1280, height: 720))); self.onReady = nil
                 }
                 if object["type"] as? String == "display" {
-                    let width = min(7680, max(2, object["width"] as? Int ?? 1280)), height = min(4320, max(2, object["height"] as? Int ?? 720))
-                    self.onDisplay?(NPSize(width: width, height: height))
+                    self.onDisplay?(Self.size(object, "width", "height", fallback: NPSize(width: 1280, height: 720)))
                 }
                 if object["type"] as? String == "playback", object["playing"] as? Bool == true { self.onPlayback?() }
                 self.receive()
@@ -63,18 +74,27 @@ final class NPWindowsTransport {
     func send(_ data: Data, initial: Bool) {
         queue.async { [self] in
             guard !stopped else { return }
-            guard data.count + 1 <= NPPolicy.maxPacket, bytes + data.count + 1 <= NPPolicy.maxQueuedBytes, packets.count < 16 else { onError?(.backpressure); return }
+            guard data.count + 1 <= NPPolicy.maxPacket, bytes + data.count + 1 <= NPPolicy.maxQueuedBytes, packets.count < Self.maxQueuedPackets else { onError?(.backpressure); return }
             var packet = Data([initial ? 1 : 2]); packet.append(data); packets.append(packet); bytes += packet.count; pump()
         }
     }
     // v2 frame protocol: the packet is already typed (first byte = kind). If the
-    // link falls behind, pictures and sound are shed rather than queued: the
-    // receiver resumes at the next key picture. Configuration is never shed.
+    // link falls behind, pictures are shed first: the receiver resumes at the
+    // next key picture (requested through onShed). Sound is shed only when it
+    // alone fills the queue; the receiver fills the hole with silence of the
+    // exact length, so a shed never becomes a seek. Configuration is never shed.
     func sendPacket(_ packet: Data) {
         queue.async { [self] in
             guard !stopped, let kind = packet.first else { return }
             guard packet.count <= NPPolicy.maxPacket, bytes + packet.count <= NPPolicy.maxQueuedBytes else { onError?(.backpressure); return }
-            if packets.count >= 16 && (kind == 4 || kind == 5) { dropped += 1; if dropped % 60 == 1 { NPLog.record("frames.shed", ["dropped": dropped]) }; return }
+            if packets.count >= Self.maxQueuedPackets {
+                let audioQueued = packets.reduce(0) { $0 + ($1.first == 5 ? 1 : 0) }
+                if kind == 4 || (kind == 5 && audioQueued >= Self.maxQueuedAudio) {
+                    dropped += 1
+                    if dropped % 60 == 1 { NPLog.record("frames.shed", ["dropped": dropped, "kind": Int(kind)]) }
+                    onShed?(1); return
+                }
+            }
             packets.append(packet); bytes += packet.count; pump()
         }
     }
@@ -86,5 +106,5 @@ final class NPWindowsTransport {
             self.queue.async { self.bytes -= packet.count; self.sending = false; if error != nil && !self.stopped { self.onError?(.network) }; if !self.stopped { self.pump() } }
         }
     }
-    func stop() { queue.async { [self] in stopped = true; onReady = nil; onDisplay = nil; onError = nil; onPlayback = nil; socket?.cancel(with: .normalClosure, reason: nil); socket = nil; packets.removeAll(); session.invalidateAndCancel() } }
+    func stop() { queue.async { [self] in stopped = true; onReady = nil; onDisplay = nil; onError = nil; onPlayback = nil; onShed = nil; socket?.cancel(with: .normalClosure, reason: nil); socket = nil; packets.removeAll(); session.invalidateAndCancel() } }
 }

@@ -11,28 +11,37 @@ import VideoToolbox
 //  3 config : u16 width, u16 height, u32 audio sample rate, u8 channels, avcC
 //  4 video  : u64 pts µs, u8 flags (bit0 key), AVCC access unit (4-byte NAL lengths)
 //  5 audio  : u64 pts µs, interleaved s16le PCM
-// All append/cancel calls belong to the capture queue; VideoToolbox output is fenced by `cancelled`.
+// Threads: video appends and cancel belong to the capture queue; audio appends
+// belong to the capture's audio queue so sound never waits behind a picture;
+// VideoToolbox calls back on its own thread. The shared words (origin,
+// configuration, key request, cancellation) live under one lock.
 final class NPFrameEncoder {
     let source: NPSize
     let output: NPSize
     private var session: VTCompressionSession?
     private let context = CIContext(options: [.cacheIntermediates: false])
     private var pool: CVPixelBufferPool?
-    private var origin: CMTime?
-    private var lastVideo = CMTime.invalid
-    private var configuration: Data?
-    private var needKey = true
-    private var cancelled = false
+    private let lock = NSLock()
+    private var origin: CMTime?          // lock
+    private var configuration: Data?     // lock
+    private var needKey = true           // lock
+    private var cancelled = false        // lock
+    private var lastVideo = CMTime.invalid // capture queue
     private let pcmFormat = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: 48000, channels: 2, interleaved: true)!
-    private var converter: AVAudioConverter?
-    private var converterInput: AVAudioFormat?
-    private var audioClock: (origin: Int64, frames: Int64)?
+    private var converter: AVAudioConverter?          // audio queue
+    private var converterInput: AVAudioFormat?        // audio queue
+    private var audioClock: (origin: Int64, frames: Int64)? // audio queue
+    private(set) var audioPackets = 0  // audio queue
+    private(set) var reanchors = 0     // audio queue
+    private(set) var passthrough = 0   // capture queue: pictures encoded without a CoreImage pass
     var onPacket: ((Data) -> Void)?
     var onError: ((NPError) -> Void)?
+    private static let directFormats: Set<OSType> = [kCVPixelFormatType_32BGRA, kCVPixelFormatType_420YpCbCr8BiPlanarFullRange, kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange]
 
-    init(source: NPSize, display: NPSize) throws {
+    convenience init(source: NPSize, display: NPSize) throws { try self.init(source: source, display: display, cap: NPPolicy.legacyCap) }
+    init(source: NPSize, display: NPSize, cap: NPSize) throws {
         self.source = source
-        output = NPPolicy.encodeSize(source: source, display: display)
+        output = NPPolicy.encodeSize(source: source, display: display, cap: cap)
         var created: VTCompressionSession?
         let status = VTCompressionSessionCreate(allocator: nil, width: Int32(output.width), height: Int32(output.height), codecType: kCMVideoCodecType_H264,
             encoderSpecification: nil, imageBufferAttributes: nil, compressedDataAllocator: nil, outputCallback: nil, refcon: nil, compressionSessionOut: &created)
@@ -65,32 +74,49 @@ final class NPFrameEncoder {
         NPLog.record("encoder.config", ["cast": false, "width": output.width, "height": output.height, "protocol": 2, "bitrate": bitrate])
     }
 
-    func append(_ sample: CMSampleBuffer, video isVideo: Bool) {
-        guard !cancelled else { return }
-        let timestamp = CMSampleBufferGetPresentationTimeStamp(sample)
-        guard timestamp.isNumeric else { return }
-        if origin == nil { guard isVideo else { return }; origin = timestamp }
-        guard let origin else { return }
+    private var isCancelled: Bool { lock.lock(); defer { lock.unlock() }; return cancelled }
+    // The link shed a picture: the receiver waits for the next key picture.
+    func requestKeyFrame() { lock.lock(); needKey = true; lock.unlock() }
+
+    // Timeline anchor: the first VIDEO sample. Sound before it is dropped (a few milliseconds).
+    private func relative(_ timestamp: CMTime, video isVideo: Bool) -> CMTime? {
+        lock.lock(); defer { lock.unlock() }
+        if origin == nil { guard isVideo else { return nil }; origin = timestamp }
+        guard let origin else { return nil }
         let time = CMTimeSubtract(timestamp, origin)
-        guard time >= .zero else { return }
+        return time >= .zero ? time : nil
+    }
+
+    func append(_ sample: CMSampleBuffer, video isVideo: Bool) {
+        guard !isCancelled else { return }
+        let timestamp = CMSampleBufferGetPresentationTimeStamp(sample)
+        guard timestamp.isNumeric, let time = relative(timestamp, video: isVideo) else { return }
         if isVideo { appendVideo(sample, time: time) } else { appendAudio(sample, time: time) }
     }
 
     private func appendVideo(_ sample: CMSampleBuffer, time: CMTime) {
-        guard let session, let pool, !lastVideo.isNumeric || CMTimeGetSeconds(CMTimeSubtract(time, lastVideo)) >= 1.0 / 61.0,
-              let image = NPMuxer.image(sample) else { return }
-        var pixel: CVPixelBuffer?
-        guard CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &pixel) == kCVReturnSuccess, let pixel else { onError?(.encoder); return }
-        let bounds = CGRect(x: 0, y: 0, width: output.width, height: output.height)
-        let scale = min(bounds.width / image.extent.width, bounds.height / image.extent.height)
-        let normalized = image.transformed(by: CGAffineTransform(translationX: -image.extent.minX, y: -image.extent.minY)).transformed(by: CGAffineTransform(scaleX: scale, y: scale))
-        let centered = normalized.transformed(by: CGAffineTransform(translationX: (bounds.width - normalized.extent.width) / 2, y: (bounds.height - normalized.extent.height) / 2))
-        context.render(centered.composited(over: CIImage(color: .black).cropped(to: bounds)), to: pixel, bounds: bounds, colorSpace: CGColorSpaceCreateDeviceRGB())
+        guard let session, let pool, !lastVideo.isNumeric || CMTimeGetSeconds(CMTimeSubtract(time, lastVideo)) >= 1.0 / 61.0 else { return }
+        var pixel: CVPixelBuffer
+        let orientation = (CMGetAttachment(sample, key: RPVideoSampleOrientationKey as CFString, attachmentModeOut: nil) as? NSNumber)?.int32Value ?? 1
+        if let captured = CMSampleBufferGetImageBuffer(sample), orientation == 1, CVPixelBufferGetWidth(captured) == output.width, CVPixelBufferGetHeight(captured) == output.height, Self.directFormats.contains(CVPixelBufferGetPixelFormatType(captured)) {
+            // Native size, upright: the capture buffer goes straight to the encoder.
+            pixel = captured; passthrough += 1
+        } else {
+            guard let image = NPMuxer.image(sample) else { return }
+            var rendered: CVPixelBuffer?
+            guard CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &rendered) == kCVReturnSuccess, let rendered else { onError?(.encoder); return }
+            let bounds = CGRect(x: 0, y: 0, width: output.width, height: output.height)
+            let scale = min(bounds.width / image.extent.width, bounds.height / image.extent.height)
+            let normalized = image.transformed(by: CGAffineTransform(translationX: -image.extent.minX, y: -image.extent.minY)).transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+            let centered = normalized.transformed(by: CGAffineTransform(translationX: (bounds.width - normalized.extent.width) / 2, y: (bounds.height - normalized.extent.height) / 2))
+            context.render(centered.composited(over: CIImage(color: .black).cropped(to: bounds)), to: rendered, bounds: bounds, colorSpace: CGColorSpaceCreateDeviceRGB())
+            pixel = rendered
+        }
         lastVideo = time
-        let properties: [CFString: Any]? = needKey ? [kVTEncodeFrameOptionKey_ForceKeyFrame: true] : nil
-        needKey = false
+        lock.lock(); let key = needKey; needKey = false; lock.unlock()
+        let properties: [CFString: Any]? = key ? [kVTEncodeFrameOptionKey_ForceKeyFrame: true] : nil
         let status = VTCompressionSessionEncodeFrame(session, imageBuffer: pixel, presentationTimeStamp: time, duration: .invalid, frameProperties: properties as CFDictionary?, infoFlagsOut: nil) { [weak self] status, _, encoded in
-            guard let self, !self.cancelled else { return }
+            guard let self, !self.isCancelled else { return }
             guard status == noErr, let encoded, CMSampleBufferDataIsReady(encoded) else { NPLog.record("frames.encode", ["status": Int(status)]); self.onError?(.encoder); return }
             self.emit(encoded)
         }
@@ -101,14 +127,17 @@ final class NPFrameEncoder {
     private func emit(_ encoded: CMSampleBuffer) {
         let attachments = CMSampleBufferGetSampleAttachmentsArray(encoded, createIfNecessary: false) as? [[CFString: Any]]
         let key = !((attachments?.first?[kCMSampleAttachmentKey_NotSync] as? Bool) ?? false)
-        if key, let format = CMSampleBufferGetFormatDescription(encoded), let avcC = Self.avcC(format), avcC != configuration {
-            configuration = avcC
-            var packet = Data([3])
-            packet.append(contentsOf: Self.bigEndian(UInt16(output.width))); packet.append(contentsOf: Self.bigEndian(UInt16(output.height)))
-            packet.append(contentsOf: Self.bigEndian(UInt32(48000))); packet.append(2); packet.append(avcC)
-            onPacket?(packet)
-        }
-        guard configuration != nil, let block = CMSampleBufferGetDataBuffer(encoded) else { return }
+        var configured = false
+        if key, let format = CMSampleBufferGetFormatDescription(encoded), let avcC = Self.avcC(format) {
+            lock.lock(); let changed = avcC != configuration; if changed { configuration = avcC }; configured = true; lock.unlock()
+            if changed {
+                var packet = Data([3])
+                packet.append(contentsOf: Self.bigEndian(UInt16(output.width))); packet.append(contentsOf: Self.bigEndian(UInt16(output.height)))
+                packet.append(contentsOf: Self.bigEndian(UInt32(48000))); packet.append(2); packet.append(avcC)
+                onPacket?(packet)
+            }
+        } else { lock.lock(); configured = configuration != nil; lock.unlock() }
+        guard configured, let block = CMSampleBufferGetDataBuffer(encoded) else { return }
         var length = 0, pointer: UnsafeMutablePointer<CChar>?
         guard CMBlockBufferGetDataPointer(block, atOffset: 0, lengthAtOffsetOut: nil, totalLengthOut: &length, dataPointerOut: &pointer) == noErr, let pointer, length > 0 else { return }
         let pts = CMSampleBufferGetPresentationTimeStamp(encoded)
@@ -137,12 +166,17 @@ final class NPFrameEncoder {
     }
 
     // ReplayKit app audio (any PCM layout) -> 48 kHz stereo s16 interleaved.
+    // Sound waits only for the configuration packet (the receiver drops PCM it
+    // cannot place); it never waits behind a picture.
     private func appendAudio(_ sample: CMSampleBuffer, time: CMTime) {
-        guard let format = CMSampleBufferGetFormatDescription(sample), configuration != nil else { return }
+        lock.lock(); let configured = configuration != nil; lock.unlock()
+        guard configured, let format = CMSampleBufferGetFormatDescription(sample) else { return }
         let input = AVAudioFormat(cmAudioFormatDescription: format)
         if converter == nil || converterInput != input {
             guard let created = AVAudioConverter(from: input, to: pcmFormat) else { return }
+            created.sampleRateConverterQuality = .max
             converter = created; converterInput = input; audioClock = nil
+            NPLog.record("audio.format", ["sampleRate": input.sampleRate, "channels": Int(input.channelCount), "interleaved": input.isInterleaved, "float": input.commonFormat == .pcmFormatFloat32])
         }
         guard let converter else { return }
         let frames = CMSampleBufferGetNumSamples(sample)
@@ -160,7 +194,10 @@ final class NPFrameEncoder {
         guard status != .error, converted.frameLength > 0, let bytes = converted.int16ChannelData?.pointee else { return }
         let micro = Int64(CMTimeGetSeconds(time) * 1_000_000)
         // Resampling changes frame counts: time stamps come from a frame counter anchored on the capture clock, re-anchored on a > 50 ms gap.
-        if let clock = audioClock, abs(micro - (clock.origin + clock.frames * 1_000_000 / 48000)) > 50_000 { audioClock = nil }
+        if let clock = audioClock, abs(micro - (clock.origin + clock.frames * 1_000_000 / 48000)) > 50_000 {
+            audioClock = nil; reanchors += 1
+            if reanchors % 20 == 1 { NPLog.record("audio.reanchor", ["count": reanchors]) }
+        }
         if audioClock == nil { audioClock = (origin: micro, frames: 0) }
         guard var clock = audioClock else { return }
         let pts = clock.origin + clock.frames * 1_000_000 / 48000
@@ -168,11 +205,13 @@ final class NPFrameEncoder {
         var packet = Data(capacity: 9 + Int(converted.frameLength) * 4); packet.append(5)
         packet.append(contentsOf: Self.bigEndian(UInt64(max(0, pts))))
         packet.append(UnsafeBufferPointer(start: UnsafeRawPointer(bytes).assumingMemoryBound(to: UInt8.self), count: Int(converted.frameLength) * 4))
+        audioPackets += 1
         onPacket?(packet)
     }
 
     func cancel() {
-        cancelled = true; onPacket = nil; onError = nil
+        lock.lock(); cancelled = true; lock.unlock()
+        onPacket = nil; onError = nil
         if let session { VTCompressionSessionInvalidate(session) }
         session = nil
     }

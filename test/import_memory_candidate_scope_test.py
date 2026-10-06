@@ -12,7 +12,7 @@ BASE = '3ccde925351b3e59985ba466e013e87a857d6ad0'
 MANIFEST_PATH = 'native/import-memory-candidate.json'
 manifest = json.loads((ROOT / MANIFEST_PATH).read_text())
 assert manifest['baseline'] == BASE
-assert manifest['target_build'] == 409
+assert manifest['target_build'] == 410
 assert manifest['swap_research']['branch'] == 'swap'
 assert manifest['swap_research']['scope'] == 'RPCS3 only'
 # Build409: relay owner 1 serves identifiable host allocations of the same
@@ -429,6 +429,8 @@ PRODUCTION_FILES |= {
     'tools/neoplay-receiver/package-lock.json',
     'tools/neoplay-receiver/package.json',
     'tools/neoplay-receiver/player.mjs',
+    'tools/neoplay-receiver/audio-ring.mjs',
+    'tools/neoplay-receiver/audio-worklet.mjs',
     'tools/neoplay-receiver/protocol.mjs',
     'tools/neoplay-receiver/server.mjs',
 }
@@ -436,12 +438,14 @@ SUPPORT_FILES |= {
     'build-utils/neoplay/collect_fixtures.py',
     'docs/neoplay/APPLE_TV_AND_CONTROLLER_BATTERY.md',
     'docs/neoplay/BUILD397.md',
+    'docs/neoplay/BUILD410.md',
     'docs/neoplay/README.md',
     'docs/neoplay/companion-validation-2026-10-02.json',
     'docs/neoplay/validation-2026-10-02.json',
     'test/neoplay/companion_tests.swift',
     'test/neoplay/encoded_media_tests.swift',
     'test/neoplay/frame_encoder_tests.swift',
+    'test/neoplay/stream_policy_tests.swift',
     'test/neoplay/native_tests.swift',
     'test/neoplay_build397_integration_test.py',
     'test/neoplay_companion_contract_test.py',
@@ -453,6 +457,9 @@ SUPPORT_FILES |= {
     'test/neoplay_locale_test.dart',
     'tools/neoplay-receiver/playback-smoke.mjs',
     'tools/neoplay-receiver/test/receiver.test.mjs',
+    'tools/neoplay-receiver/test/audio-ring.test.mjs',
+    'tools/neoplay-receiver/test/packets.mjs',
+    'tools/neoplay-receiver/test/protocol.test.mjs',
 }
 
 # Maintainer-authorized integration of swap and armsx2-26 into experimental.
@@ -496,8 +503,8 @@ PRODUCTION_FILES |= {path for path in ARMSX2_INTEGRATION_FILES
                      if not path.startswith(('test/', 'docs/'))}
 SUPPORT_FILES |= {path for path in ARMSX2_INTEGRATION_FILES
                   if path.startswith(('test/', 'docs/'))}
-# Build409 candidate lines of the IPA workflow: the build number, the required
-# previous packaged build (401, run 37135708903), its artifact name and the
+# Build410 candidate lines of the IPA workflow: the build number, the required
+# previous packaged build (409, run 37516862241 on e5c3dcef), its artifact name and the
 # retention rule of that artifact. Every other byte of that file stays the
 # reviewed ARMSX2 postimage; each pair must apply exactly once so an unrelated
 # edit still fails.
@@ -507,47 +514,47 @@ SUPPORT_FILES |= {path for path in ARMSX2_INTEGRATION_FILES
 # still blocks packaging. The Build401 artifact expired on 6 October 2026.
 IPA_PREVIOUS_ARTIFACT_RETENTION_BLOCK = (
     "          if any(a['name'] == expected and not a['expired'] for a in artifacts):\n"
-    "              print('Build401 completed successfully; its IPA artifact is preserved', flush=True)\n"
+    "              print('Build409 completed successfully; its IPA artifact is preserved', flush=True)\n"
     '          else:\n'
     '              # GitHub retains the private IPA artifact for 3 days (retention-days of\n'
     '              # the build job). Past that the run record above still proves the\n'
-    '              # build and Build409 cancels nothing of it; an absence before the\n'
+    '              # build and Build410 cancels nothing of it; an absence before the\n'
     '              # retention elapsed is unexplained and blocks packaging.\n'
     "              finished = datetime.strptime(run['updated_at'], '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc)\n"
     '              retained_until = finished + timedelta(days=3)\n'
-    "              assert datetime.now(timezone.utc) >= retained_until, 'Build401 IPA artifact is absent before its 3-day retention elapsed'\n"
-    "              print('Build401 completed successfully; its IPA artifact expired by retention on ' + retained_until.isoformat(), flush=True)\n"
+    "              assert datetime.now(timezone.utc) >= retained_until, 'Build409 IPA artifact is absent before its 3-day retention elapsed'\n"
+    "              print('Build409 completed successfully; its IPA artifact expired by retention on ' + retained_until.isoformat(), flush=True)\n"
 )
-IPA_WORKFLOW_BUILD409_LINES = (
+IPA_WORKFLOW_BUILD410_LINES = (
     ('name: NeoStation NeoSwap + NeoPlay private • Build 401\n',
-     'name: NeoStation NeoSwap + NeoPlay private • Build 409\n'),
+     'name: NeoStation NeoSwap + NeoPlay private • Build 410\n'),
     ('run-name: NeoStation NeoSwap + NeoPlay private • Build 401 • ${{ github.sha }}\n',
-     'run-name: NeoStation NeoSwap + NeoPlay private • Build 409 • ${{ github.sha }}\n'),
-    ("        default: '401'\n", "        default: '409'\n"),
-    ('  group: neostation-neoswap-neoplay-build401\n', '  group: neostation-neoswap-neoplay-build409\n'),
+     'run-name: NeoStation NeoSwap + NeoPlay private • Build 410 • ${{ github.sha }}\n'),
+    ("        default: '401'\n", "        default: '410'\n"),
+    ('  group: neostation-neoswap-neoplay-build401\n', '  group: neostation-neoswap-neoplay-build410\n'),
     ('      - name: Require completed Build 399 without cancelling its run\n',
-     '      - name: Require completed Build 401 without cancelling its run\n'),
-    ('          run_id = 37124491800\n', '          run_id = 37135708903\n'),
+     '      - name: Require completed Build 409 without cancelling its run\n'),
+    ('          run_id = 37124491800\n', '          run_id = 37516862241\n'),
     ("          expected_sha = '3be1b3a528345f25870fde25913bc7f4713d2255'\n",
-     "          expected_sha = '905461854998c65e1b884cabfedd7b46060c701b'\n"),
+     "          expected_sha = 'e5c3dcef358fdfe46480ae1dcf6e6c1a978a6b6f'\n"),
     ("'Build399 did not succeed; inspect it before packaging Build401'",
-     "'Build401 did not succeed; inspect it before packaging Build409'"),
+     "'Build409 did not succeed; inspect it before packaging Build410'"),
     ("raise SystemExit('Timed out waiting for Build399; no build was cancelled')",
-     "raise SystemExit('Timed out waiting for Build401; no build was cancelled')"),
+     "raise SystemExit('Timed out waiting for Build409; no build was cancelled')"),
     ("print('Build399 is still running; Build401 packaging remains gated', flush=True)",
-     "print('Build401 is still running; Build409 packaging remains gated', flush=True)"),
+     "print('Build409 is still running; Build410 packaging remains gated', flush=True)"),
     ("expected = 'NeoStation-NeoSwap-NeoPlay-Build-399-' + expected_sha",
-     "expected = 'NeoStation-NeoSwap-NeoPlay-Build-401-' + expected_sha"),
+     "expected = 'NeoStation-NeoSwap-NeoPlay-Build-409-' + expected_sha"),
     ('          import json, subprocess, time\n',
      '          import json, subprocess, time\n          from datetime import datetime, timedelta, timezone\n'),
     ("          assert any(a['name'] == expected and not a['expired'] for a in artifacts), 'Build399 IPA artifact is absent'\n"
      "          print('Build399 completed successfully; its IPA artifact is preserved', flush=True)\n",
      IPA_PREVIOUS_ARTIFACT_RETENTION_BLOCK),
-    ('    name: Neostation iOS 0.0.2 private IPA (401)\n', '    name: Neostation iOS 0.0.2 private IPA (409)\n'),
+    ('    name: Neostation iOS 0.0.2 private IPA (401)\n', '    name: Neostation iOS 0.0.2 private IPA (410)\n'),
     ("      BUILD_NUMBER: ${{ inputs.build_number || '401' }}\n",
-     "      BUILD_NUMBER: ${{ inputs.build_number || '409' }}\n"),
+     "      BUILD_NUMBER: ${{ inputs.build_number || '410' }}\n"),
     ('      ARTIFACT_NAME: NeoStation-NeoSwap-NeoPlay-Build-401-${{ github.sha }}\n',
-     '      ARTIFACT_NAME: NeoStation-NeoSwap-NeoPlay-Build-409-${{ github.sha }}\n'),
+     '      ARTIFACT_NAME: NeoStation-NeoSwap-NeoPlay-Build-410-${{ github.sha }}\n'),
     # The Build409 Core (run 37491042733 on 1a307a0) replaces the Build401 pin.
     ('      RPCS3_CORE_HOST_SHA: 7bcc52854d6f5bd9c4bb67acdff676f74eee8318\n',
      '      RPCS3_CORE_HOST_SHA: 1a307a0f7a353c48496c438d9b8ac7c8260600f7\n'),
@@ -563,12 +570,14 @@ IPA_WORKFLOW_BUILD409_LINES = (
     ('          artifact-ids: 10932827839\n', '          artifact-ids: 11317253121\n'),
     ('          artifact-ids: 10932119768\n', '          artifact-ids: 11318055730\n'),
     ('          artifact-ids: 10933147219\n', '          artifact-ids: 11318566834\n'),
+    ('          cp docs/neoplay/BUILD397.md build/private-test/Notes-NeoPlay-Build397.md\n',
+     '          cp docs/neoplay/BUILD410.md build/private-test/Notes-NeoPlay-Build410.md\n'),
 )
 for path in ARMSX2_INTEGRATION_FILES:
     reviewed = subprocess.check_output(['git', 'show', ARMSX2_INTEGRATION_SHA + ':' + path], cwd=ROOT)
     if path == '.github/workflows/neoswap-ipa.yml':
         text = reviewed.decode('utf-8')
-        for old, new in IPA_WORKFLOW_BUILD409_LINES:
+        for old, new in IPA_WORKFLOW_BUILD410_LINES:
             assert text.count(old) == 1, 'Reviewed IPA workflow line expected once: ' + old
             text = text.replace(old, new, 1)
         reviewed = text.encode('utf-8')

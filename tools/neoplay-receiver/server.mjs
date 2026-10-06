@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { hostname } from 'node:os';
 import { Bonjour } from 'bonjour-service';
 import { WebSocketServer, WebSocket } from 'ws';
-import { VERSION, MAX_PACKET, MAX_BUFFERED, displayLimits, validatePacket } from './protocol.mjs';
+import { VERSION, MAX_PACKET, MAX_BUFFERED, displayLimits, validatePacket, isInitialization } from './protocol.mjs';
 const local = address => ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(address);
 const same = (a, b) => { if (typeof a !== 'string' || typeof b !== 'string') return false; const x=Buffer.from(a), y=Buffer.from(b); return x.length === y.length && timingSafeEqual(x,y); };
 const token = () => randomBytes(24).toString('hex');
@@ -40,11 +40,11 @@ export async function createReceiver({port = 17642, host = '0.0.0.0', advertise 
         return json(res, 200, {v:VERSION, token:grant.token, ...limits});
       }
       if (!local(req.socket.remoteAddress) || !['localhost','127.0.0.1','[::1]'].some(h => req.headers.host === `${h}:${server.address().port}`)) return json(res, 403, {error:'local_ui_only'});
-      const assets = {'/':'index.html', '/player.mjs':'player.mjs', '/protocol.mjs':'protocol.mjs'};
+      const assets = {'/':'index.html', '/player.mjs':'player.mjs', '/protocol.mjs':'protocol.mjs', '/audio-ring.mjs':'audio-ring.mjs', '/audio-worklet.mjs':'audio-worklet.mjs'};
       if (req.method !== 'GET' || !assets[url.pathname]) return json(res, 404, {error:'not_found'});
       let data = await readFile(new URL(assets[url.pathname], import.meta.url), 'utf8');
       if (url.pathname === '/') data = data.replace('__VIEWER_TOKEN__', viewerToken);
-      res.writeHead(200, {'Content-Type':url.pathname === '/' ? 'text/html; charset=utf-8':'text/javascript', 'Cache-Control':'no-store', 'X-Content-Type-Options':'nosniff', 'Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'self' ws://127.0.0.1:* ws://localhost:*; media-src blob:; frame-ancestors 'none'"}); res.end(data);
+      res.writeHead(200, {'Content-Type':url.pathname === '/' ? 'text/html; charset=utf-8':'text/javascript', 'Cache-Control':'no-store', 'X-Content-Type-Options':'nosniff', 'Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'self' ws://127.0.0.1:* ws://localhost:*; worker-src 'self'; media-src blob:; frame-ancestors 'none'"}); res.end(data);
     } catch { if (!res.headersSent) json(res, 500, {error:'request_failed'}); else res.end(); }
   });
   server.requestTimeout = 10000; server.headersTimeout = 10000;
@@ -74,7 +74,7 @@ export async function createReceiver({port = 17642, host = '0.0.0.0', advertise 
           try {
             if (!binary) throw new Error('Binary media required');
             const kind = validatePacket(data);
-            if (kind === 1) init = data;
+            if (isInitialization(kind)) init = data;
             if (!init || !viewer || viewer.bufferedAmount > MAX_BUFFERED) throw new Error('Receiver backpressure');
             viewer.send(data, {binary:true});
           } catch { ws.close(1008, 'media_or_backpressure'); }

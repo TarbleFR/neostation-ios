@@ -104,12 +104,13 @@ jobs:
         with:
           name: NeoPlay-encoded-fixtures-${{ github.sha }}
           path: build/neoplay-fixtures
-      - name: Decode real iOS-encoded picture and sound in Windows Edge
+      - name: Decode real iOS-encoded picture and sound in Windows Edge (segments and frames)
         working-directory: tools/neoplay-receiver
         run: |
           npm ci --ignore-scripts
           npm install --no-save --package-lock=false --ignore-scripts playwright@1.63.0
           node playback-smoke.mjs ../../build/neoplay-fixtures/windows.json
+          node playback-smoke.mjs ../../build/neoplay-fixtures/frames.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:

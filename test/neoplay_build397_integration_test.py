@@ -26,10 +26,21 @@ FRAMES_CHANGED_FILES = frozenset({
 # byte-identical. Only the audited discovery retry/error-lifecycle delta below
 # replaces the feature revision's postimage; arbitrary further edits still fail.
 REVIEWED_NEOPLAY_DISCOVERY_POSTIMAGES = {
-    # NPController also carries the v2 negotiation (frames flag, packet route).
-    'packages/neoplay_bridge/ios/Classes/NPController.swift': 'fa57684a8741ef392611a191a7a505b8a28b3db7b3925f4e70ae0ca94432372a',
     'packages/neoplay_bridge/ios/Classes/NPDiscovery.swift': 'f874fb82b909f7344e00a6ec0f02c446613e20b0fb17b990e015bb124f1eaa19',
     'packages/neoplay_bridge/ios/Classes/NPGoogleCast.swift': '20cb1c77db74c2d6456d74025502ae766abad278b7b14e8962a29b2a91f3b846',
+}
+# Build410 (maintainer request of 6 October 2026: sound without crackle,
+# native 60 fps picture, link adaptation): the stream revision replaces six
+# files of the v2 revision; their exact postimages are pinned here and every
+# other bridge file stays byte-identical to the v2 revision. Regenerate with
+# the reviewed sources, never by hand.
+BUILD410_STREAM_POSTIMAGES = {
+    'packages/neoplay_bridge/ios/Classes/NPCapture.swift': '70a89bb3c17342fb69fe6384b6d52502d6b954fd79794f4aba8d657db438bd90',
+    'packages/neoplay_bridge/ios/Classes/NPController.swift': 'b42e222c14f66bc84a4e6d131f73f0d85def6a793e96e1ed1a9a4df11d083ea3',
+    'packages/neoplay_bridge/ios/Classes/NPFrameEncoder.swift': 'd626aa8d1ce14c1c26a66bdf6f6763bbfa23fea8968b40f0752612cf2663c64d',
+    'packages/neoplay_bridge/ios/Classes/NPMuxer.swift': '8f7b8e3743b35abc2f2c6c0433f2091899a1889ec23c8c42bb36fbd8bca5c13c',
+    'packages/neoplay_bridge/ios/Classes/NPPolicy.swift': 'd7c15740f20af31a2ab3e6f0220eeb2165534b3afc97ee799064f322b83b6200',
+    'packages/neoplay_bridge/ios/Classes/NPWindowsTransport.swift': '3c5227066028ca1788727e8f26bc63fdd973bc9aec511a83a257eb47777662bd',
 }
 REVIEWED_RPCS3_HOST_POSTIMAGES = {
     # Build409 postimage: relay-or-donor CPU buffer admission for every title
@@ -191,15 +202,16 @@ class Build398Integration(unittest.TestCase):
         self.assertIn('version: 0.0.2+399', pubspec)
     def test_full_ipa_requires_previous_build_and_both_exact_evidence_suites(self):
         text = (ROOT/'.github/workflows/neoswap-ipa.yml').read_text()
-        self.assertIn('neostation-neoswap-neoplay-build409', text)
+        self.assertIn('neostation-neoswap-neoplay-build410', text)
         self.assertNotIn('group: neostation-neoswap-private\n', text)
-        self.assertIn('run_id = 37135708903', text)
+        self.assertIn('run_id = 37516862241', text)
         self.assertIn("run['conclusion'] == 'success'", text)
-        self.assertIn('905461854998c65e1b884cabfedd7b46060c701b', text)
-        self.assertIn("expected = 'NeoStation-NeoSwap-NeoPlay-Build-401-' + expected_sha", text)
+        self.assertIn('e5c3dcef358fdfe46480ae1dcf6e6c1a978a6b6f', text)
+        self.assertIn("expected = 'NeoStation-NeoSwap-NeoPlay-Build-409-' + expected_sha", text)
         self.assertIn("'neoplay-check.yml',", text)
         self.assertIn('head_sha={sha}', text)
-        self.assertLess(text.index('Require completed Build 401'), text.index('Wait for exact-SHA validation workflows'))
+        self.assertLess(text.index('Require completed Build 409'), text.index('Wait for exact-SHA validation workflows'))
+        self.assertIn('cp docs/neoplay/BUILD410.md build/private-test/Notes-NeoPlay-Build410.md', text)
         self.assertIn('needs: wait-evidence', text)
         self.assertIn("xcode-version: '26.3'", text)
         self.assertLess(text.index('python3 build-utils/configure_neoplay_ios.py'), text.index('pod install --project-directory=ios'))
@@ -218,9 +230,14 @@ class Build398Integration(unittest.TestCase):
                         if path.is_file() and not any(part.startswith('.') for part in path.relative_to(ROOT).parts)}
         self.assertEqual(actual_files, set(files), 'No unreviewed native bridge files may be added or removed')
         self.assertTrue(set(REVIEWED_NEOPLAY_DISCOVERY_POSTIMAGES).issubset(files))
+        self.assertTrue(set(BUILD410_STREAM_POSTIMAGES).issubset(files))
         for file in files:
             actual = (ROOT/file).read_bytes()
-            # Every bridge file is byte-identical to the reviewed v2 revision.
+            if file in BUILD410_STREAM_POSTIMAGES:
+                # The Build410 stream revision: exact reviewed postimage.
+                self.assertEqual(hashlib.sha256(actual).hexdigest(), BUILD410_STREAM_POSTIMAGES[file], file)
+                continue
+            # Every other bridge file is byte-identical to the reviewed v2 revision.
             self.assertEqual(actual, original(file, FRAMES), file)
             if file in REVIEWED_NEOPLAY_DISCOVERY_POSTIMAGES:
                 self.assertEqual(hashlib.sha256(actual).hexdigest(), REVIEWED_NEOPLAY_DISCOVERY_POSTIMAGES[file], file)
@@ -238,7 +255,21 @@ class Build398Integration(unittest.TestCase):
         self.assertIn('final class NPFrameEncoder', encoder)
         self.assertIn('kVTCompressionPropertyKey_AllowFrameReordering: false', encoder)
         self.assertNotIn('NSLocalizedString', encoder)
+        self.assertIn('func requestKeyFrame()', encoder)
+        self.assertIn('created.sampleRateConverterQuality = .max', encoder)
+        capture = (ROOT / 'packages/neoplay_bridge/ios/Classes/NPCapture.swift').read_text()
+        self.assertIn('DispatchQueue(label: "neoplay.audio", qos: .userInteractive)', capture)
+        self.assertIn('audioSlots.wait(timeout: .now()) == .success else { self.audioDropped += 1', capture)
+        policy = (ROOT / 'packages/neoplay_bridge/ios/Classes/NPPolicy.swift').read_text()
+        self.assertIn('struct NPLinkAdapter', policy)
+        self.assertIn('static let nativeCap = NPSize(width: 7680, height: 4320)', policy)
+        transport = (ROOT / 'packages/neoplay_bridge/ios/Classes/NPWindowsTransport.swift').read_text()
+        self.assertIn('Self.size(object, "maxWidth", "maxHeight", fallback: NPPolicy.legacyCap)', transport)
+        self.assertIn('if kind == 4 || (kind == 5 && audioQueued >= Self.maxQueuedAudio)', transport)
+        for name, needle in (('protocol.mjs', "frames ? 7680 : 1920"), ('player.mjs', "new AudioWorkletNode(audio, 'neoplay-audio'"), ('audio-ring.mjs', 'class AudioRing'), ('server.mjs', 'isInitialization(kind)')):
+            self.assertIn(needle, (ROOT / 'tools/neoplay-receiver' / name).read_text(), name)
         workflow = (ROOT / '.github/workflows/neoplay-check.yml').read_text()
+        self.assertIn('node playback-smoke.mjs ../../build/neoplay-fixtures/frames.json', workflow)
         self.assertIn('python3 test/neoplay_pod_graph_test.py', workflow)
         self.assertIn('build/neoplay-native/pod-graph.json', workflow)
     def test_discovery_restart_does_not_disconnect_or_start_a_cast_session(self):
@@ -254,7 +285,9 @@ class Build398Integration(unittest.TestCase):
         self.assertIn('failure = nil', request)
     def test_candidate_identity_remains_honest(self):
         data = json.loads((ROOT/'native/import-memory-candidate.json').read_text())
-        self.assertEqual(data['target_build'], 409)
+        self.assertEqual(data['target_build'], 410)
+        self.assertEqual(data['neoplay_integration']['previous_build_run_id'], 37516862241)
+        self.assertTrue(any(entry.startswith('Build410:') for entry in data['scope']))
         self.assertEqual(data['neoplay_integration']['frames_protocol_source'], FRAMES)
         self.assertEqual(data['neoplay_integration']['preserved_neoswap_base'], BASE)
         self.assertEqual(data['neoplay_integration']['source'], FEATURE)

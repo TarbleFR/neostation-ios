@@ -54,3 +54,62 @@ final class NeoPlayFrameEncoderTests: XCTestCase {
         try JSONEncoder().encode(fixture).write(to: directory.appendingPathComponent("frames.json"))
     }
 }
+
+// Build410: sound and pictures reach the encoder from different queues; the
+// PCM timeline stays contiguous, every packet is well-formed, a requested key
+// picture arrives, and a native-size cap encodes the capture size untouched.
+final class NeoPlayFrameEncoderConcurrencyTests: XCTestCase {
+    func testAudioFromItsOwnQueueStaysContiguousWhilePicturesEncode() throws {
+        let encoder = try NPFrameEncoder(source: NPSize(width: 640, height: 480), display: NPSize(width: 1920, height: 1080), cap: NPPolicy.cap(tier: .native, receiverMax: NPPolicy.nativeCap))
+        XCTAssertEqual(encoder.output, NPSize(width: 640, height: 480))
+        let lock = NSLock(); var packets: [Data] = []; var failure: NPError?
+        encoder.onError = { error in lock.lock(); failure = error; lock.unlock() }
+        encoder.onPacket = { packet in lock.lock(); packets.append(packet); lock.unlock() }
+        let helper = NeoPlayEncodedMediaTests()
+        let video = DispatchQueue(label: "test.capture"), audio = DispatchQueue(label: "test.audio")
+        let group = DispatchGroup()
+        group.enter(); video.async {
+            for frame in 0..<120 {
+                let time = CMTime(value: Int64(frame + 300), timescale: 30)
+                if let sample = try? helper.makeVideo(frame: frame, time: time) { encoder.append(sample, video: true) }
+                if frame == 60 { encoder.requestKeyFrame() }
+                Thread.sleep(forTimeInterval: 1.0 / 30.0)
+            }
+            group.leave()
+        }
+        group.enter(); audio.async {
+            Thread.sleep(forTimeInterval: 0.2) // the anchor is the first picture; the configuration follows the first key picture
+            for frame in 0..<120 {
+                let time = CMTime(value: Int64(frame + 306), timescale: 30)
+                if let sample = try? helper.makeAudio(frame: frame, time: time) { encoder.append(sample, video: false) }
+                Thread.sleep(forTimeInterval: 1.0 / 30.0)
+            }
+            group.leave()
+        }
+        XCTAssertEqual(group.wait(timeout: .now() + 30), .success)
+        Thread.sleep(forTimeInterval: 0.5)
+        encoder.cancel()
+        lock.lock(); let output = packets; let error = failure; lock.unlock()
+        XCTAssertNil(error)
+        let pictures = output.filter { $0[0] == 4 }, sound = output.filter { $0[0] == 5 }
+        XCTAssertGreaterThanOrEqual(pictures.count, 100); XCTAssertGreaterThanOrEqual(sound.count, 90)
+        XCTAssertGreaterThanOrEqual(pictures.filter { $0[9] == 1 }.count, 2, "initial key picture and the requested one")
+        // PCM packets tile the timeline: each starts where the previous one ended (48 kHz frame counter).
+        var expected: UInt64?
+        for packet in sound {
+            let pts = packet.subdata(in: 1..<9).reduce(UInt64(0)) { $0 << 8 | UInt64($1) }
+            let frames = UInt64((packet.count - 9) / 4)
+            if let expected { XCTAssertLessThanOrEqual(pts > expected ? pts - expected : expected - pts, 25, "contiguous PCM timeline") }
+            expected = pts + frames * 1_000_000 / 48000
+        }
+        XCTAssertEqual(encoder.reanchors, 0)
+        XCTAssertEqual(encoder.audioPackets, sound.count)
+    }
+    func testPassthroughEncodesNativeSizedUprightBuffersWithoutRendering() throws {
+        let encoder = try NPFrameEncoder(source: NPSize(width: 640, height: 480), display: NPSize(width: 640, height: 480), cap: NPPolicy.nativeCap)
+        let helper = NeoPlayEncodedMediaTests()
+        for frame in 0..<10 { encoder.append(try helper.makeVideo(frame: frame, time: CMTime(value: Int64(frame + 300), timescale: 30)), video: true); Thread.sleep(forTimeInterval: 1.0 / 30.0) }
+        Thread.sleep(forTimeInterval: 0.3); encoder.cancel()
+        XCTAssertEqual(encoder.passthrough, 10)
+    }
+}
