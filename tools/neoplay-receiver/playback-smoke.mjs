@@ -19,7 +19,8 @@ try {
   const page = await browser.newPage({viewport:{width:1920,height:1080}});
   const failures = [];
   page.on('pageerror', error => failures.push(error.message));
-  page.on('console', message => { if (message.type() === 'error') failures.push(`console: ${message.text()}`); });
+  page.on('console', message => { if (message.type() === 'error' && !message.text().startsWith('Failed to load resource')) failures.push(`console: ${message.text()}`); });
+  page.on('response', response => { if (response.status() >= 400) failures.push(`${response.status()} ${response.url()}`); }); // the page must never request something the relay does not serve
   const status = () => page.evaluate(() => `${document.querySelector('#status').textContent} | error: ${window.neoplayDebug?.error ?? null}`).catch(() => null);
   await page.goto(`http://127.0.0.1:${receiver.port}`);
   await page.click('#ready');

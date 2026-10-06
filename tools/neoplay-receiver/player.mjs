@@ -200,7 +200,10 @@ document.querySelector('#ready').onclick = () => {
         if (message.type === 'ended') closeMedia(); return;
       }
       const packet = new Uint8Array(event.data);
-      if (packet[0] === KIND.INIT || packet[0] === KIND.CONFIG) { closeMedia(); engine = packet[0] === KIND.CONFIG ? createFramesEngine() : createSegmentsEngine(); }
+      // A new fMP4 initialization restarts MediaSource. A later frames configuration
+      // (a link tier change) reconfigures the running frames engine in place: its
+      // sound and clock continue; only a protocol change builds a new engine.
+      if (packet[0] === KIND.INIT || (packet[0] === KIND.CONFIG && engine?.mode !== 'frames')) { closeMedia(); engine = packet[0] === KIND.CONFIG ? createFramesEngine() : createSegmentsEngine(); }
       if (!engine) return;
       const current = engine;
       chain = chain.then(() => current.receive(packet)).catch(error => { fail(error); socket?.close(); closeMedia(); });
