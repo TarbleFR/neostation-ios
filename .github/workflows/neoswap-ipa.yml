@@ -50,6 +50,7 @@ jobs:
           set -euo pipefail
           python3 - <<'PREVIOUS'
           import json, subprocess, time
+          from datetime import datetime, timedelta, timezone
           repo = 'TarbleFR/neostation-ios'
           run_id = 37135708903
           expected_sha = '905461854998c65e1b884cabfedd7b46060c701b'
@@ -66,8 +67,17 @@ jobs:
               time.sleep(30)
           artifacts = json.loads(subprocess.check_output(['gh','api',f'repos/{repo}/actions/runs/{run_id}/artifacts?per_page=100']))['artifacts']
           expected = 'NeoStation-NeoSwap-NeoPlay-Build-401-' + expected_sha
-          assert any(a['name'] == expected and not a['expired'] for a in artifacts), 'Build401 IPA artifact is absent'
-          print('Build401 completed successfully; its IPA artifact is preserved', flush=True)
+          if any(a['name'] == expected and not a['expired'] for a in artifacts):
+              print('Build401 completed successfully; its IPA artifact is preserved', flush=True)
+          else:
+              # GitHub retains the private IPA artifact for 3 days (retention-days of
+              # the build job). Past that the run record above still proves the
+              # build and Build409 cancels nothing of it; an absence before the
+              # retention elapsed is unexplained and blocks packaging.
+              finished = datetime.strptime(run['updated_at'], '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc)
+              retained_until = finished + timedelta(days=3)
+              assert datetime.now(timezone.utc) >= retained_until, 'Build401 IPA artifact is absent before its 3-day retention elapsed'
+              print('Build401 completed successfully; its IPA artifact expired by retention on ' + retained_until.isoformat(), flush=True)
           PREVIOUS
 
       - name: Wait for exact-SHA validation workflows

@@ -495,9 +495,27 @@ PRODUCTION_FILES |= {path for path in ARMSX2_INTEGRATION_FILES
 SUPPORT_FILES |= {path for path in ARMSX2_INTEGRATION_FILES
                   if path.startswith(('test/', 'docs/'))}
 # Build409 candidate lines of the IPA workflow: the build number, the required
-# previous packaged build (401, run 37135708903) and its artifact name. Every
-# other byte of that file stays the reviewed ARMSX2 postimage; each pair must
-# apply exactly once so an unrelated edit still fails.
+# previous packaged build (401, run 37135708903), its artifact name and the
+# retention rule of that artifact. Every other byte of that file stays the
+# reviewed ARMSX2 postimage; each pair must apply exactly once so an unrelated
+# edit still fails.
+# The previous IPA artifact is retained by GitHub for 3 days (retention-days of
+# the build job). The gate still requires the successful run and lets the
+# artifact be absent only once that retention has elapsed; an earlier absence
+# still blocks packaging. The Build401 artifact expired on 6 October 2026.
+IPA_PREVIOUS_ARTIFACT_RETENTION_BLOCK = (
+    "          if any(a['name'] == expected and not a['expired'] for a in artifacts):\n"
+    "              print('Build401 completed successfully; its IPA artifact is preserved', flush=True)\n"
+    '          else:\n'
+    '              # GitHub retains the private IPA artifact for 3 days (retention-days of\n'
+    '              # the build job). Past that the run record above still proves the\n'
+    '              # build and Build409 cancels nothing of it; an absence before the\n'
+    '              # retention elapsed is unexplained and blocks packaging.\n'
+    "              finished = datetime.strptime(run['updated_at'], '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc)\n"
+    '              retained_until = finished + timedelta(days=3)\n'
+    "              assert datetime.now(timezone.utc) >= retained_until, 'Build401 IPA artifact is absent before its 3-day retention elapsed'\n"
+    "              print('Build401 completed successfully; its IPA artifact expired by retention on ' + retained_until.isoformat(), flush=True)\n"
+)
 IPA_WORKFLOW_BUILD409_LINES = (
     ('name: NeoStation NeoSwap + NeoPlay private • Build 401\n',
      'name: NeoStation NeoSwap + NeoPlay private • Build 409\n'),
@@ -518,9 +536,11 @@ IPA_WORKFLOW_BUILD409_LINES = (
      "print('Build401 is still running; Build409 packaging remains gated', flush=True)"),
     ("expected = 'NeoStation-NeoSwap-NeoPlay-Build-399-' + expected_sha",
      "expected = 'NeoStation-NeoSwap-NeoPlay-Build-401-' + expected_sha"),
-    ("'Build399 IPA artifact is absent'", "'Build401 IPA artifact is absent'"),
-    ("print('Build399 completed successfully; its IPA artifact is preserved', flush=True)",
-     "print('Build401 completed successfully; its IPA artifact is preserved', flush=True)"),
+    ('          import json, subprocess, time\n',
+     '          import json, subprocess, time\n          from datetime import datetime, timedelta, timezone\n'),
+    ("          assert any(a['name'] == expected and not a['expired'] for a in artifacts), 'Build399 IPA artifact is absent'\n"
+     "          print('Build399 completed successfully; its IPA artifact is preserved', flush=True)\n",
+     IPA_PREVIOUS_ARTIFACT_RETENTION_BLOCK),
     ('    name: Neostation iOS 0.0.2 private IPA (401)\n', '    name: Neostation iOS 0.0.2 private IPA (409)\n'),
     ("      BUILD_NUMBER: ${{ inputs.build_number || '401' }}\n",
      "      BUILD_NUMBER: ${{ inputs.build_number || '409' }}\n"),

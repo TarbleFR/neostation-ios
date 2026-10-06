@@ -264,6 +264,13 @@ candidat), puis commit `[neoswap-ipa] [rpcs3-host-integration]`.
 - **Non-régression.** Le harnais Simulateur échantillonne les diagnostics toutes les millisecondes pendant le retrait et échoue à l'étape `production_manager_diagnostics_ready_without_capacity` dès qu'un échantillon est incohérent ; il exporte `productionManagerDiagnosticsCoherent` et `productionManagerIdleSamples`, exigés par `validate_evidence` et présents dans les fixtures des tests Linux.
 - **Limite.** Le harnais ne force pas l'entrelacement, il le couvre statistiquement. La preuve de la correction est l'analyse des verrous ci-dessus et la relecture du code, pas un passage CI vert.
 
+### 4.5 Porte « build précédent » de l'IPA : expiration de l'artefact Build 401
+
+- **Symptôme.** Le premier run IPA 409 (run 37512856086 sur `e8ba5b8d`) a échoué en quelques secondes dans le job Linux « Wait for exact candidate evidence » : `Build401 IPA artifact is absent`. Aucun build n'a été lancé ni annulé.
+- **Cause établie.** L'artefact IPA de la Build 401 (run 37135708903, 3 octobre 2026 16:37 UTC) est publié avec `retention-days: 3` ; GitHub l'a retiré le 6 octobre à 16:37 UTC, deux heures avant ce run. Seul l'artefact `-diagnostics` (7 jours) subsiste. La porte exigeait la présence de l'artefact, condition devenue impossible à satisfaire, sans lien avec les fichiers NeoPlay.
+- **Contrat remplacé.** La porte exige toujours que le run 401 soit terminé avec succès sur sa tête attendue ; l'artefact est accepté absent seulement si les trois jours de rétention se sont écoulés depuis la fin du run (`updated_at` + 3 jours), sinon l'absence reste bloquante. Les paires de lignes du test candidat (`IPA_WORKFLOW_BUILD409_LINES`) verrouillent ce bloc contre la révision ARMSX2 relue.
+- **Conséquence pour la 409.** L'IPA 409 est elle aussi retenue 3 jours ; son SHA-256 est inscrit dans le journal du workflow et dans l'artefact de diagnostics (7 jours).
+
 ## 5. Protocole de validation sur iPhone 16 Pro Max (God of War III)
 
 À chaque palier, même appareil, même version du jeu, mêmes réglages, mêmes
