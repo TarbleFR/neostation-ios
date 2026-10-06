@@ -37,7 +37,7 @@ REVIEWED_NEOPLAY_DISCOVERY_POSTIMAGES = {
 BUILD410_STREAM_POSTIMAGES = {
     'packages/neoplay_bridge/ios/Classes/NPCapture.swift': 'e4bd1abeeb0be3a85f97f27692cacdf5bf22ed2c1d679878404afeba0d266770',
     'packages/neoplay_bridge/ios/Classes/NPController.swift': '29fd025c399f594076c970ec39c67e25c8e8fb3e5a12bdbea135270981f1f812',
-    'packages/neoplay_bridge/ios/Classes/NPFrameEncoder.swift': 'd5ed9345892a89ded6c78244b2a4e815600eaaf1a318df196e6657ef69ee6bb7',
+    'packages/neoplay_bridge/ios/Classes/NPFrameEncoder.swift': '8581877d5441b9a3b83c4ec75236a84d6d331ca258dd98955ff1ef3bdd797c15',
     'packages/neoplay_bridge/ios/Classes/NPMuxer.swift': 'a0f9e95eba35c257f919b7ac9fa7630ff8fda0d2262eb1bb118dcfbc8119d8eb',
     'packages/neoplay_bridge/ios/Classes/NPPolicy.swift': 'd7c15740f20af31a2ab3e6f0220eeb2165534b3afc97ee799064f322b83b6200',
     'packages/neoplay_bridge/ios/Classes/NPWindowsTransport.swift': '49459ae9a7ec85b4a2fee0ff607f56214a28c02a78ede247e5f730e5a7298fd4',

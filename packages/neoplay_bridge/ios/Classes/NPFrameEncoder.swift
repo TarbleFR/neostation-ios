@@ -225,7 +225,12 @@ final class NPFrameEncoder {
 
     // Called on the capture's audio queue (behind any in-flight sound append);
     // pictures stop earlier because the capture dropped its reference first.
+    // Pictures still inside VideoToolbox are emitted before the session goes
+    // (a software encoder keeps several in flight; invalidating discards them):
+    // the harness sees every submitted picture, and a retired encoder's tail
+    // never reaches the link because the capture no longer owns it.
     func cancel() {
+        if let session { VTCompressionSessionCompleteFrames(session, untilPresentationTimeStamp: .invalid) }
         lock.lock(); cancelled = true; onPacket = nil; onError = nil; lock.unlock()
         if let session { VTCompressionSessionInvalidate(session) }
         session = nil

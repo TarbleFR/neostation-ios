@@ -48,9 +48,13 @@ final class NeoPlayFrameEncoderTests: XCTestCase {
         XCTAssertEqual(Int(second[1]) << 8 | Int(second[2]), 320); XCTAssertEqual(Int(second[3]) << 8 | Int(second[4]), 240)
         XCTAssertEqual(config[9], 2); XCTAssertEqual(config[10], 1, "avcC version")
         let video = output.filter { $0[0] == 4 }, audio = output.filter { $0[0] == 5 }
-        XCTAssertGreaterThanOrEqual(video.count, 195); XCTAssertGreaterThanOrEqual(audio.count, 150)
-        XCTAssertEqual(video.first?[9], 1, "first picture is a key picture")
         let pts = video.map { $0.subdata(in: 1..<9).reduce(UInt64(0)) { $0 << 8 | UInt64($1) } }
+        let indexes = pts.map { Int(($0 * 30 + 500_000) / 1_000_000) }
+        print("NEOPLAY_FRAMES first=\(indexes.first ?? -1) last=\(indexes.last ?? -1) missing=\((0..<210).filter { !indexes.contains($0) })")
+        // Every submitted picture comes out: cancel() flushes the pictures VideoToolbox still holds before invalidating the session.
+        XCTAssertGreaterThanOrEqual(video.count, 206, "pictures in flight are flushed, not discarded, when an encoder is retired")
+        XCTAssertGreaterThanOrEqual(audio.count, 150) // sound before each encoder's first picture (its configuration) is dropped by design
+        XCTAssertEqual(video.first?[9], 1, "first picture is a key picture")
         XCTAssertEqual(pts, pts.sorted(), "one timeline across both encoders"); XCTAssertEqual(Set(pts).count, pts.count)
         XCTAssertGreaterThan(pts.last ?? 0, 6_500_000)
         let audioPts = audio.map { $0.subdata(in: 1..<9).reduce(UInt64(0)) { $0 << 8 | UInt64($1) } }
