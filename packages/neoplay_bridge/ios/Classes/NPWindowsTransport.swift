@@ -12,6 +12,8 @@ final class NPWindowsTransport {
     var onDisplay: ((NPSize) -> Void)?
     var onError: ((NPError) -> Void)?
     var onPlayback: (() -> Void)?
+    private(set) var framesSupported = false // the receiver accepts the v2 frame protocol
+    private var dropped = 0
     init() {
         let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = 8; config.timeoutIntervalForResource = 3600
@@ -46,6 +48,7 @@ final class NPWindowsTransport {
                       let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { self.onError?(.network); return }
                 if object["type"] as? String == "ready", object["v"] as? Int == 1 {
                     let width = min(7680, max(2, object["width"] as? Int ?? 1280)), height = min(4320, max(2, object["height"] as? Int ?? 720))
+                    self.framesSupported = object["frames"] as? Bool == true
                     self.onReady?(NPSize(width: width, height: height)); self.onReady = nil
                 }
                 if object["type"] as? String == "display" {
@@ -62,6 +65,17 @@ final class NPWindowsTransport {
             guard !stopped else { return }
             guard data.count + 1 <= NPPolicy.maxPacket, bytes + data.count + 1 <= NPPolicy.maxQueuedBytes, packets.count < 16 else { onError?(.backpressure); return }
             var packet = Data([initial ? 1 : 2]); packet.append(data); packets.append(packet); bytes += packet.count; pump()
+        }
+    }
+    // v2 frame protocol: the packet is already typed (first byte = kind). If the
+    // link falls behind, pictures and sound are shed rather than queued: the
+    // receiver resumes at the next key picture. Configuration is never shed.
+    func sendPacket(_ packet: Data) {
+        queue.async { [self] in
+            guard !stopped, let kind = packet.first else { return }
+            guard packet.count <= NPPolicy.maxPacket, bytes + packet.count <= NPPolicy.maxQueuedBytes else { onError?(.backpressure); return }
+            if packets.count >= 16 && (kind == 4 || kind == 5) { dropped += 1; if dropped % 60 == 1 { NPLog.record("frames.shed", ["dropped": dropped]) }; return }
+            packets.append(packet); bytes += packet.count; pump()
         }
     }
     private func pump() {
