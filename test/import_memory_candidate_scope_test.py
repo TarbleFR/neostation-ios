@@ -550,6 +550,17 @@ IPA_WORKFLOW_BUILD409_LINES = (
     ('      RPCS3_CORE_HOST_SHA: 7bcc52854d6f5bd9c4bb67acdff676f74eee8318\n',
      '      RPCS3_CORE_HOST_SHA: 1a307a0f7a353c48496c438d9b8ac7c8260600f7\n'),
     ("      RPCS3_CORE_RUN_ID: '37120654954'\n", "      RPCS3_CORE_RUN_ID: '37491042733'\n"),
+    # KartPad evidence pins: the attempt 2 artifacts of 27 September 2026 no
+    # longer exist on their runs (re-run attempt 3 of 4 October 2026, same head
+    # d3e558fa / 3934ac9d); the content checks that follow each download are
+    # unchanged, so a different evidence still fails the gate.
+    ('          # Pin successful attempt 2; attempt 1 never launched the simulator app.\n',
+     '          # Pin successful attempt 3 of 4 October 2026 (same head d3e558fa): the\n'
+     '          # attempt 2 artifact pinned until Build 408 no longer exists on the run.\n'
+     '          # These probe artifacts are retained 7 days (next expiry 11 October 2026).\n'),
+    ('          artifact-ids: 10932827839\n', '          artifact-ids: 11317253121\n'),
+    ('          artifact-ids: 10932119768\n', '          artifact-ids: 11318055730\n'),
+    ('          artifact-ids: 10933147219\n', '          artifact-ids: 11318566834\n'),
 )
 for path in ARMSX2_INTEGRATION_FILES:
     reviewed = subprocess.check_output(['git', 'show', ARMSX2_INTEGRATION_SHA + ':' + path], cwd=ROOT)

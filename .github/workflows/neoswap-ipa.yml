@@ -314,8 +314,10 @@ jobs:
       - name: Download validated native session and CoreAudio evidence
         uses: actions/download-artifact@v4
         with:
-          # Pin successful attempt 2; attempt 1 never launched the simulator app.
-          artifact-ids: 10932827839
+          # Pin successful attempt 3 of 4 October 2026 (same head d3e558fa): the
+          # attempt 2 artifact pinned until Build 408 no longer exists on the run.
+          # These probe artifacts are retained 7 days (next expiry 11 October 2026).
+          artifact-ids: 11317253121
           merge-multiple: true
           run-id: 36322565781
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -353,7 +355,7 @@ jobs:
       - name: Download exact iOS 18 Flutter guest-stack evidence
         uses: actions/download-artifact@v4
         with:
-          artifact-ids: 10932119768
+          artifact-ids: 11318055730
           merge-multiple: true
           run-id: 36322395458
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -362,7 +364,7 @@ jobs:
       - name: Download exact iOS 27 Flutter guest-stack evidence
         uses: actions/download-artifact@v4
         with:
-          artifact-ids: 10933147219
+          artifact-ids: 11318566834
           merge-multiple: true
           run-id: 36322395458
           github-token: ${{ secrets.GITHUB_TOKEN }}

@@ -271,6 +271,13 @@ candidat), puis commit `[neoswap-ipa] [rpcs3-host-integration]`.
 - **Contrat remplacé.** La porte exige toujours que le run 401 soit terminé avec succès sur sa tête attendue ; l'artefact est accepté absent seulement si les trois jours de rétention se sont écoulés depuis la fin du run (`updated_at` + 3 jours), sinon l'absence reste bloquante. Les paires de lignes du test candidat (`IPA_WORKFLOW_BUILD409_LINES`) verrouillent ce bloc contre la révision ARMSX2 relue.
 - **Conséquence pour la 409.** L'IPA 409 est elle aussi retenue 3 jours ; son SHA-256 est inscrit dans le journal du workflow et dans l'artefact de diagnostics (7 jours).
 
+### 4.6 Épingles d'évidence KartPad : artefacts d'« attempt 2 » disparus
+
+- **Symptôme.** Le deuxième run IPA 409 (run 37513348938 sur `dfca3743`) a passé les neuf validations sur le SHA exact (dont `neoplay-check`) puis a échoué à l'étape « Download validated native session and CoreAudio evidence » : `None of the provided artifact IDs were found`. Aucun build n'a commencé.
+- **Cause établie.** Le workflow épingle trois artefacts par identifiant : la sonde UIKit KartPad (run 36322565781, artefact 10932827839, attempt 2 du 27 septembre) et les deux sondes Flutter iOS 18 / iOS 27 (run 36322395458, artefacts 10932119768 et 10933147219). Ces runs ont été relancés le 4 octobre 2026 (attempt 3, même tête `d3e558fa`, succès) ; leurs runs ne portent plus que les artefacts de cette tentative (11317253121, 11318055730, 11318566834), les précédents n'existant plus.
+- **Correction.** Les trois identifiants sont remplacés par ceux de l'attempt 3 ; les vérifications de contenu qui suivent chaque téléchargement (SHA source `d3e558fa`, identité donneur `3934ac9d`, empreinte du runtime, rapport de sonde) sont inchangées, donc une évidence différente échoue toujours. Paires verrouillées dans le test candidat.
+- **Échéances à connaître.** Ces sondes sont retenues 7 jours : expiration le 11 octobre 2026 ; l'artefact IPA Build 350 (run 36323843067, artefact 10932894067, utilisé comme donneur natif) et le KartPadCore (run 36322395443, artefact 10932614137) expirent aussi le 11 octobre ; le Dusklight Core le 14, l'ARMSX2 Core le 18, le RPCS3 Core le 5 novembre. Sans relance et ré-épinglage, aucune IPA ne pourra plus être produite après ces dates ; conserver une copie locale de l'IPA Build 350 (référence de travail) est recommandé.
+
 ## 5. Protocole de validation sur iPhone 16 Pro Max (God of War III)
 
 À chaque palier, même appareil, même version du jeu, mêmes réglages, mêmes
