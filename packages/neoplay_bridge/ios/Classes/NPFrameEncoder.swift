@@ -138,7 +138,8 @@ final class NPFrameEncoder {
 
     // ReplayKit app audio (any PCM layout) -> 48 kHz stereo s16 interleaved.
     private func appendAudio(_ sample: CMSampleBuffer, time: CMTime) {
-        guard let format = CMSampleBufferGetFormatDescription(sample), let input = AVAudioFormat(cmAudioFormatDescription: format), configuration != nil else { return }
+        guard let format = CMSampleBufferGetFormatDescription(sample), configuration != nil else { return }
+        let input = AVAudioFormat(cmAudioFormatDescription: format)
         if converter == nil || converterInput != input {
             guard let created = AVAudioConverter(from: input, to: pcmFormat) else { return }
             converter = created; converterInput = input; audioClock = nil
