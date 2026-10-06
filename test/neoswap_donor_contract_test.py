@@ -261,6 +261,7 @@ class DonorContractTests(unittest.TestCase):
         self.assertIn('if (NeoSwapExperimentProfile().configured) return 32*kMiB;', reserve)
         self.assertIn('return _budgetDecisionCount ? _budgetDecision.donor_reserve_bytes : kDonationReserveBytes;', reserve)
         self.assertIn('if (!_budgetDecision.donor_growth_admitted) {', plugin)
+        self.assertIn('if (available > _budgetDecision.donor_room_bytes) available = _budgetDecision.donor_room_bytes;', plugin)
         self.assertIn('@"stage":@"global_budget_refused_growth"', plugin)
         self.assertIn('bytes > neostation::donation::max_chunk_bytes', ipc)
         self.assertIn('maximum > neostation::donation::max_chunk_bytes', handler)

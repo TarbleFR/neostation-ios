@@ -61,8 +61,32 @@ int main() {
     assert(d.growth_room_bytes == grow.system_usable_bytes - reserve);
     assert(d.host_loan_quota_bytes == grow.relay_host_live_bytes + d.growth_room_bytes);
     assert(d.donor_floor_bytes == 0 && d.donor_reserve_bytes == relay_donor_reserve_bytes);
-    assert(d.donor_growth_admitted && !d.storage_shrink_requested);
+    // The relay ceiling took the whole measured room: nothing is left for donors
+    // in the same sample, so the room is never granted twice.
+    assert(d.host_loan_quota_bytes - grow.relay_host_live_bytes == d.growth_room_bytes);
+    assert(d.donor_room_bytes == 0 && !d.donor_growth_admitted && !d.storage_shrink_requested);
     assert(std::strcmp(d.reason, "measured_room_available") == 0);
+
+    // When the relay capacity caps the ceiling, donors receive the remainder of
+    // the room: relay growth plus donor room equals the measured room exactly.
+    Inputs capped = device_inputs();
+    capped.relay_capacity_bytes = guest_reserve_floor_bytes + capped.relay_host_live_bytes + 10 * MiB;
+    d = decide(capped, {});
+    assert(d.state == State::growing && d.host_loans_admitted);
+    assert(d.host_loan_quota_bytes == capped.relay_host_live_bytes + 10 * MiB);
+    assert(d.donor_room_bytes == d.growth_room_bytes - 10 * MiB && d.donor_growth_admitted);
+    assert((d.host_loan_quota_bytes - capped.relay_host_live_bytes) + d.donor_room_bytes == d.growth_room_bytes);
+
+    // The process jetsam headroom cannot throttle relay or donor pages, but
+    // below the reserve it asks the storage tier to archive cold data early.
+    // A missing process sample changes nothing: the system sample decides.
+    Inputs jetsam = device_inputs();
+    jetsam.host_available_bytes = reserve - MiB;
+    d = decide(jetsam, {});
+    assert(d.state == State::growing && d.host_loans_admitted && d.storage_shrink_requested);
+    jetsam.host_available_valid = false;
+    d = decide(jetsam, {});
+    assert(d.state == State::growing && !d.storage_shrink_requested);
 
     // The quota never exceeds the relay capacity left after the guest reserve.
     Inputs huge = device_inputs();
@@ -167,7 +191,8 @@ int main() {
     Decision growing = decide(device_inputs(), {});
     assert(growing.state == State::growing);
     Decision stays = decide(edge, growing);
-    assert(stays.state == State::growing && stays.host_loans_admitted && stays.donor_growth_admitted);
+    assert(stays.state == State::growing && stays.host_loans_admitted);
+    assert(stays.donor_room_bytes == 0 && !stays.donor_growth_admitted); // the relay ceiling took the room
     edge.system_usable_bytes = reserve + growth_hold_quantum_bytes + MiB; // 33 MiB: still growing
     stays = decide(edge, stays);
     assert(stays.state == State::growing && stays.host_loans_admitted);

@@ -330,6 +330,9 @@ static NSDictionary* NeoSwapEffectivePermissions() {
     // phys_footprint includes uncompressed-page equivalents of compressed
     // memory. It is a diagnostic ledger, not free physical RAM to subtract.
     uint64_t available = sampled ? system.usable_bytes : 0;
+    // The controller granted part of the measured room to relay host loans in
+    // this sample; donors may only take what is left of that room.
+    if (available > _budgetDecision.donor_room_bytes) available = _budgetDecision.donor_room_bytes;
     // Reserve outstanding requests too: their pages may not yet appear in
     // the kernel sample. Never grant the same headroom to concurrent helpers.
     available = neostation::donation::pending_headroom_budget(available,

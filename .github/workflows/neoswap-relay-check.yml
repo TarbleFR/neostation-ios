@@ -73,6 +73,8 @@ jobs:
               'packages/neo_swap/ios/Classes/NeoSwapRelayService.h',
               'packages/neo_swap/ios/Classes/NeoSwapRelayService.mm',
               'packages/neo_swap/ios/Classes/NeoSwapExperiment.h',
+              'packages/neo_swap/ios/Classes/NeoSwap.cpp','packages/neo_swap/ios/Classes/NeoSwap.h',
+              'packages/neo_swap/ios/Classes/NeoSwapHost.h',
               'build-utils/configure_neoswap_relay.py','build-utils/embed_rpcs3_host_entitlements.py',
               'test/relay_backend_test.cpp','test/neoswap_relay_extension_test.py',
               'test/neoswap_relay_simulator_test.py','test/neoswap_donor_simulator_test.py',

@@ -34,6 +34,10 @@ struct Inputs {
     bool session_active = false;
     std::uint64_t physical_bytes = 0;
     // TASK_VM_INFO.phys_footprint of the host and os_proc_available_memory().
+    // Process ledger. phys_footprint is exported for display and ratios only:
+    // relay and donor pages live outside it. os_proc_available_memory is the
+    // process jetsam headroom; below the operational reserve it requests the
+    // storage tier to archive cold data, which does reduce the footprint.
     std::uint64_t host_footprint_bytes = 0;
     bool host_footprint_valid = false;
     std::uint64_t host_available_bytes = 0;
@@ -73,6 +77,9 @@ struct Decision {
     // Donor manager policy: floor and reserve for adaptive_donation_target().
     std::uint64_t donor_floor_bytes = 0;
     std::uint64_t donor_reserve_bytes = 0;
+    // Measured room left for donor growth this sample after the relay host-loan
+    // ceiling took its share: one sample never grants the same room twice.
+    std::uint64_t donor_room_bytes = 0;
     bool donor_growth_admitted = false;
     // Storage tier: prefer archiving cold owned data while this is set.
     bool storage_shrink_requested = false;
@@ -161,7 +168,10 @@ constexpr Decision decide(const Inputs& in, const Decision& previous) noexcept {
         out.donor_floor_bytes = legacy_donor_floor_bytes;
         out.donor_reserve_bytes = legacy_donor_reserve_bytes;
     }
-    out.donor_growth_admitted = in.system_valid && out.growth_room_bytes >= admission_room;
+    const std::uint64_t relay_growth = out.host_loans_admitted && out.host_loan_quota_bytes > in.relay_host_live_bytes
+        ? out.host_loan_quota_bytes - in.relay_host_live_bytes : 0;
+    out.donor_room_bytes = out.growth_room_bytes > relay_growth ? out.growth_room_bytes - relay_growth : 0;
+    out.donor_growth_admitted = in.system_valid && out.donor_room_bytes >= admission_room;
     out.small_cpu_admitted = in.system_valid && in.system_usable_bytes >= small_cpu_minimum_room_bytes &&
         ((in.relay_ready && out.host_loans_admitted) || in.donors_available);
     const bool was_shrinking = previous.state == State::shrinking || previous.state == State::pressure;
@@ -173,6 +183,7 @@ constexpr Decision decide(const Inputs& in, const Decision& previous) noexcept {
         out.reason = "system_headroom_unknown";
         out.host_loans_admitted = false;
         out.donor_growth_admitted = false;
+        out.donor_room_bytes = 0;
         out.small_cpu_admitted = false;
         out.host_loan_quota_bytes = in.relay_host_live_bytes;
     } else if (below_reserve || (was_shrinking && !recovered)) {
@@ -181,6 +192,7 @@ constexpr Decision decide(const Inputs& in, const Decision& previous) noexcept {
         out.storage_shrink_requested = true;
         out.host_loans_admitted = false;
         out.donor_growth_admitted = false;
+        out.donor_room_bytes = 0;
         out.small_cpu_admitted = false;
         out.host_loan_quota_bytes = in.relay_host_live_bytes;
     } else if (!in.relay_ready) {
@@ -194,6 +206,12 @@ constexpr Decision decide(const Inputs& in, const Decision& previous) noexcept {
         out.reason = out.growth_room_bytes < admission_room ? "room_below_growth_quantum"
                                                             : "relay_host_capacity_exhausted";
     }
+    // The process's own jetsam headroom cannot throttle relay or donor pages,
+    // which are not charged to it, but it does ask the storage tier to archive
+    // cold data early. A missing process sample is not a reason to fail closed:
+    // the system sample above remains the authority.
+    if (in.host_available_valid && in.host_available_bytes < out.operational_reserve_bytes)
+        out.storage_shrink_requested = true;
     return out;
 }
 

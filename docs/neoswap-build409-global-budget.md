@@ -65,7 +65,12 @@ Politique pure (aucun appel noyau, aucune allocation), exécutée par
 (`donation::system_headroom`, pages libres + purgeables ou estimation
 `memorystatus`), niveau de pression noyau et dispatch, état thermique,
 capacité et occupation du relais (invité / hôte), état du pool donneur,
-octets en repli fichier et vidéo archivée vivante.
+octets en repli fichier et vidéo archivée vivante. Rôle du ledger du
+processus : `phys_footprint` n'est qu'exporté et affiché (les pages relais et
+donneurs n'y sont pas imputées) ; `os_proc_available_memory()` sous la
+réserve opérationnelle demande l'archivage anticipé au stockage, seule
+action qui réduit l'empreinte du processus. Une mesure processus absente ne
+ferme rien : l'échantillon système reste l'autorité.
 
 Sorties appliquées :
 
@@ -78,8 +83,9 @@ Sorties appliquées :
 | `host_loans_admitted` | nouveaux prêts admis seulement avec ≥ 64 Mio de marge mesurée |
 | `small_cpu_admitted` | buffers RSX 64 Kio–1 Mio admis si relais ou donneurs disponibles et ≥ 128 Mio de marge |
 | `donor_floor_bytes` / `donor_reserve_bytes` | 0 / 64 Mio quand le relais sert ; 512 / 128 Mio sinon (comportement précédent) |
-| `donor_growth_admitted` | croissance donneur refusée sans marge mesurée |
-| `storage_shrink_requested` | archivage vidéo anticipé sous la réserve ou sous pression |
+| `donor_room_bytes` | marge restant aux donneurs dans l'échantillon après la part accordée au plafond relais : `marge − (plafond − prêts hôte vivants)` ; une même marge n'est jamais accordée deux fois |
+| `donor_growth_admitted` | croissance donneur admise seulement si `donor_room_bytes` atteint le quantum (64 Mio, 32 Mio en `growing`) ; `nextDonationBudget` plafonne la demande par `donor_room_bytes` |
+| `storage_shrink_requested` | archivage vidéo anticipé sous la réserve système, sous pression, ou quand `os_proc_available_memory()` passe sous la réserve opérationnelle |
 | `mobilized_bytes` | relais invité + relais hôte + prêts donneurs : intervalles vivants hors empreinte hôte |
 
 États : `idle`, `warming` (relais absent, donneurs), `growing`, `holding`,
