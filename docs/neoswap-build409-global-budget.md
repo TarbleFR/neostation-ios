@@ -278,6 +278,19 @@ candidat), puis commit `[neoswap-ipa] [rpcs3-host-integration]`.
 - **Correction.** Les trois identifiants sont remplacés par ceux de l'attempt 3 ; les vérifications de contenu qui suivent chaque téléchargement (SHA source `d3e558fa`, identité donneur `3934ac9d`, empreinte du runtime, rapport de sonde) sont inchangées, donc une évidence différente échoue toujours. Paires verrouillées dans le test candidat.
 - **Échéances à connaître.** Ces sondes sont retenues 7 jours : expiration le 11 octobre 2026 ; l'artefact IPA Build 350 (run 36323843067, artefact 10932894067, utilisé comme donneur natif) et le KartPadCore (run 36322395443, artefact 10932614137) expirent aussi le 11 octobre ; le Dusklight Core le 14, l'ARMSX2 Core le 18, le RPCS3 Core le 5 novembre. Sans relance et ré-épinglage, aucune IPA ne pourra plus être produite après ces dates ; conserver une copie locale de l'IPA Build 350 (référence de travail) est recommandé.
 
+### 4.7 IPA privée Build 409 produite
+
+| Élément | Valeur |
+|---|---|
+| Commit de packaging | `e5c3dcef358fdfe46480ae1dcf6e6c1a978a6b6f` (`experimental`, contient les trois fichiers NeoPlay de `e8ba5b8d`) |
+| Workflow IPA | run 37516862241 (`neoswap-ipa.yml`), jobs « Wait for exact candidate evidence » et « Neostation iOS 0.0.2 private IPA (409) » réussis, 6 octobre 2026 19:09 à 19:41 UTC |
+| Artefact | `NeoStation-NeoSwap-NeoPlay-Build-409-e5c3dcef358fdfe46480ae1dcf6e6c1a978a6b6f` (id 11440610982), rétention jusqu'au 9 octobre 2026 19:41 UTC |
+| IPA | `NeoStation.ipa`, version 0.0.2, build 409, SHA-256 `d62a2f792e92060abae7d802c7d3fca6d073a95cf9873d10d989ac0b561e6b19` |
+| Core RPCS3 | run 37491042733 sur `1a307a0f7a353c48496c438d9b8ac7c8260600f7` |
+| Validations sur le SHA exact | neoswap-check, relay-check, donation-check, storage-prototype, vulkan-proof, vulkan-1gib-proof, research-check, dolphin-pacing, dolphin-motion, cheats-media, neoplay-check : toutes réussies sur `e5c3dcef` |
+
+Cette IPA est un candidat de test privé : aucune validation sur iPhone n'a encore eu lieu (section 5). Les échecs intermittents observés plus tôt dans la journée (research-check : délai `simctl launch` de 120 s ; preuve Vulkan 1 GiB : registre donneur absent après le GPU) n'ont pas touché ce SHA ; un durcissement borné et journalisé du lanceur Simulateur reste à proposer séparément.
+
 ## 5. Protocole de validation sur iPhone 16 Pro Max (God of War III)
 
 À chaque palier, même appareil, même version du jeu, mêmes réglages, mêmes
