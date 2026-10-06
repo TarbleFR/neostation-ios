@@ -202,6 +202,21 @@ int main() {
     std::this_thread::sleep_for(std::chrono::milliseconds(2100));
     assert(NeoSwap_RelayLoanMaintain(0, 0) == NEOSWAP_OK && !loans().cached_blocks);
     assert(loans().cache_flushes == 2 && relay().object_count == 2 && os.unmaps == 2);
+    // Parked intervals count against the quota like live ones, as the backend
+    // charges owner 1 for both; only an identical reuse is exempt.
+    {
+        const auto before = loans();
+        void* park = allocate(NEOSWAP_GPU_HOST_VISIBLE, 2 * MiB, 16384);
+        assert(park && api->release(park) == NEOSWAP_OK && loans().cached_blocks == 1);
+        const uint64_t charged = loans().live_bytes + loans().cached_bytes;
+        assert(NeoSwap_SetRelayHostLoanPolicy(charged + MiB, 1, 1) == NEOSWAP_OK);
+        assert(allocate_result(NEOSWAP_GPU_HOST_VISIBLE, 3 * MiB) == NEOSWAP_DISABLED);
+        assert(loans().quota_refusals == before.quota_refusals + 1 && loans().backend_refusals == before.backend_refusals);
+        void* same = allocate(NEOSWAP_GPU_HOST_VISIBLE, 2 * MiB, 16384);
+        assert(same == park && loans().reuse_hits == before.reuse_hits + 1 && !loans().cached_blocks);
+        assert(api->release(same) == NEOSWAP_OK && NeoSwap_SetRelayHostLoanPolicy(8 * MiB, 1, 1) == NEOSWAP_OK);
+        assert(NeoSwap_RelayLoanMaintain(UINT64_MAX / 2, 0) == NEOSWAP_OK && !loans().cached_blocks && relay().object_count == 2);
+    }
     // Lowering the quota below live refuses new loans but revokes nothing.
     assert(NeoSwap_SetRelayHostLoanPolicy(MiB, 1, 1) == NEOSWAP_OK);
     assert(allocate_result(NEOSWAP_CPU_DATA, MiB) == NEOSWAP_DISABLED);

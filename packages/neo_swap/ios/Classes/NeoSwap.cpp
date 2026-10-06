@@ -482,12 +482,6 @@ bool try_relay_loan(Broker& b, uint32_t owner, uint32_t kind, uint64_t rounded, 
         return false;
     }
     const uint64_t bytes = (rounded + relay_alignment - 1) & ~(relay_alignment - 1);
-    const uint64_t quota = r.quota_bytes.load(std::memory_order_acquire);
-    const uint64_t live = r.live_bytes.load(std::memory_order_relaxed);
-    if (live >= quota || bytes > quota - live) {
-        relay_refuse(b, kind, r.quota_refusals);
-        return false;
-    }
     if (!slot) {
         slot = find_slot(b, legacy_block_slots, max_blocks);
         if (!slot) {
@@ -507,6 +501,16 @@ bool try_relay_loan(Broker& b, uint32_t owner, uint32_t kind, uint64_t rounded, 
         cached = {};
         record_allocation(b, *slot, address, bytes, owner, kind, Backing::relay, -1, token, started, out);
         return true;
+    }
+    // A reuse hit above is already charged. A new interval is charged the way
+    // the backend charges owner 1: live intervals plus those still parked in
+    // the reuse cache, which remain mapped and owned until maintenance.
+    const uint64_t quota = r.quota_bytes.load(std::memory_order_acquire);
+    const uint64_t charged = r.live_bytes.load(std::memory_order_relaxed) +
+                             r.cached_bytes.load(std::memory_order_relaxed);
+    if (charged >= quota || bytes > quota - charged) {
+        relay_refuse(b, kind, r.quota_refusals);
+        return false;
     }
     uint64_t token = 0;
     int result = api->create(relay_host_loan_owner, bytes, &token);
@@ -1091,9 +1095,11 @@ extern "C" int NeoSwap_RelayLoanMaintain(uint64_t now_ms, int flush_all) {
     // Releases stamp cached intervals with the broker's monotonic clock; ages
     // are only meaningful against that same clock, so 0 selects it.
     if (!now_ms) now_ms = monotonic_ms();
+    // The caller decides when to drain (no session, shrinking, pressure); a
+    // closed admission gate alone keeps the bounded cache ageing normally so
+    // a holding sample does not hand room back and reopen the gate.
     auto& b = broker(); std::lock_guard guard(b.mutex);
-    return relay_loan_maintain_locked(b, now_ms, flush_all != 0 ||
-        !b.relay_loans.admitted.load(std::memory_order_acquire));
+    return relay_loan_maintain_locked(b, now_ms, flush_all != 0);
 #else
     (void)now_ms; (void)flush_all; return NEOSWAP_DISABLED;
 #endif

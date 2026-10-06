@@ -332,6 +332,11 @@ int main(int argc, char* argv[]) {
 
 
 def validate_evidence(report: dict) -> None:
+    if isinstance(report, dict) and report.get('passed') is False and isinstance(report.get('stage'), str):
+        # The harness recorded the exact production step that failed; name it
+        # before the schema check so the CI log carries the diagnosis.
+        raise RuntimeError('Actual relay Simulator failed at stage ' + report['stage'] + ': ' +
+                           json.dumps(report.get('diagnostics'), sort_keys=True, default=str)[:4000])
     if (not isinstance(report, dict) or type(report.get('schema')) is not int or report['schema'] != 1 or
             report.get('platform') != 'iOS18Simulator' or
             report.get('transport') != 'real-NSExtension-auxiliary-NSXPC'):

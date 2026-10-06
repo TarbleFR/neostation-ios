@@ -150,8 +150,10 @@ constexpr Decision decide(const Inputs& in, const Decision& previous) noexcept {
                                   out.host_loan_quota_bytes > in.relay_host_live_bytes;
     }
     // Donors are the fallback backing. While relay host loans are admitted the
-    // pool keeps only a small reserve above its live loans; idle prepared
-    // pages are retired instead of duplicating relay capacity.
+    // pool keeps only a small reserve above its live loans, so no further
+    // prepared pages are duplicated on top of relay capacity. Pages already
+    // prepared stay with the session: the pool trims only when the session
+    // ends (retireDonorsIfIdle); a lower floor stops growth, it reclaims nothing.
     if (in.relay_ready && out.host_loans_admitted) {
         out.donor_floor_bytes = 0;
         out.donor_reserve_bytes = relay_donor_reserve_bytes;

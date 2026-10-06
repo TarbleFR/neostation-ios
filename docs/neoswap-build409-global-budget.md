@@ -93,6 +93,11 @@ vivants conservés). Aucune sortie ne révoque un prêt vivant.
   invitée ne peut pas être consommée par les données hôte.
 - Ordre de service du courtier pour RPCS3 : prêt hôte relais (vue
   `vm_map` ANYWHERE 64 Kio) → prêt donneur → fichier (≥ 1 Mio uniquement).
+- Limite connue : un plancher donneur abaissé par le contrôleur arrête la
+  croissance du pool mais ne rend aucune page déjà préparée ; le pool n'est
+  vidé qu'à la fin de la session (`retireDonorsIfIdle`). Le retrait de
+  pages préparées en cours de session demanderait une API de réduction
+  du pool côté donneur, non livrée ici.
   Les refus relais retombent sur les chemins existants ; les images vidéo et
   les petits buffers n'utilisent jamais de fichier.
 - Cache de réemploi borné : 32 entrées, 128 Mio, 2 s. Les âges sont mesurés sur l'horloge monotone du courtier, celle qui horodate les libérations (`NeoSwap_RelayLoanMaintain(0, …)`) ; le cache n'est vidé qu'en l'absence de session, en `shrinking` ou en `pressure`, jamais en `holding`. Une libération conserve
