@@ -248,7 +248,20 @@ class DonorContractTests(unittest.TestCase):
         self.assertIn('NSMutableIndexSet* donorPendingIndexes', plugin)
         self.assertIn('timeout:60', plugin)
         self.assertIn('@"donationTargetBytes":@(adaptiveTarget)', plugin)
-        self.assertIn('@"donationWarmFloorBytes":@(NeoSwapExperimentProfile().configured ? 16*kMiB : kDonationWarmFloorBytes)', plugin)
+        # Build409: the diagnostic reports the floor/reserve the global budget
+        # controller actually hands to adaptive_donation_target(). Before the
+        # first decision, and for research profiles, the fixed values remain.
+        self.assertIn('@"donationWarmFloorBytes":@([self donorFloorBytes])', plugin)
+        self.assertIn('@"donationReserveBytes":@([self donorReserveBytes])', plugin)
+        self.assertIn('[self donorFloorBytes], [self donorReserveBytes]', target)
+        floor = plugin.split('- (uint64_t)donorFloorBytes {', 1)[1].split('\n}', 1)[0]
+        self.assertIn('if (NeoSwapExperimentProfile().configured) return 16*kMiB;', floor)
+        self.assertIn('return _budgetDecisionCount ? _budgetDecision.donor_floor_bytes : kDonationWarmFloorBytes;', floor)
+        reserve = plugin.split('- (uint64_t)donorReserveBytes {', 1)[1].split('\n}', 1)[0]
+        self.assertIn('if (NeoSwapExperimentProfile().configured) return 32*kMiB;', reserve)
+        self.assertIn('return _budgetDecisionCount ? _budgetDecision.donor_reserve_bytes : kDonationReserveBytes;', reserve)
+        self.assertIn('if (!_budgetDecision.donor_growth_admitted) {', plugin)
+        self.assertIn('@"stage":@"global_budget_refused_growth"', plugin)
         self.assertIn('bytes > neostation::donation::max_chunk_bytes', ipc)
         self.assertIn('maximum > neostation::donation::max_chunk_bytes', handler)
         self.assertIn('processResidentBytes', header)
@@ -266,8 +279,14 @@ class DonorContractTests(unittest.TestCase):
         self.assertIn('kDonationPrimaryChunkBytes == neostation::donation::max_chunk_bytes', plugin)
         self.assertIn('systemCyanColor', overlay)
         self.assertIn('systemOrangeColor', overlay)
-        self.assertIn('NeoSwap_SetCPUBufferExperiment(NeoSwapExperimentProfile().donors() &&', bridge)
+        # Build409: sub-MiB RSX buffers are admitted for every title whenever
+        # relay host loans or donors exist; the global budget closes the gate
+        # under measured pressure. The title list only selects the Core profile.
+        self.assertIn('const BOOL cpuBuffersEnabled = NeoSwapExperimentProfile().relay() || NeoSwapExperimentProfile().donors();', bridge)
+        self.assertIn('NeoSwap_SetCPUBufferExperiment(cpuBuffersEnabled);', bridge)
+        self.assertNotIn('NeoSwap_SetCPUBufferExperiment(NeoSwapExperimentProfile().donors() &&', bridge)
         self.assertIn('NeoSwapCPUBufferTitle(titleId.UTF8String', bridge)
+        self.assertIn('high_footprint_profile=%d', bridge)
         self.assertIn('cpuBufferExperiment', plugin)
         self.assertIn('NeoSwap_SetCPUBufferPressure(self.cpuBufferPressureRaised', plugin)
         self.assertIn('DISPATCH_MEMORYPRESSURE_WARN | DISPATCH_MEMORYPRESSURE_CRITICAL', plugin)

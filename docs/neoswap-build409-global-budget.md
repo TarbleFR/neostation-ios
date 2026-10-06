@@ -190,11 +190,47 @@ workflow IPA.
 - `neoswap-ipa.yml` passe à Build 409 et exige le Build 401 packagé
   (run `37135708903`, commit `905461854998c65e1b884cabfedd7b46060c701b`).
 
-Étapes restant à réaliser avant l'IPA, voir le compte rendu de livraison :
-mise à jour du manifeste candidat `native/import-memory-candidate.json`, de la
-liste d'autorisation de `test/import_memory_candidate_scope_test.py`, de
-`test/neoplay_build397_integration_test.py` (empreinte du bridge après la
-fusion `swap` autorisée), puis épinglage du Core reconstruit.
+### 4.1 Résultats du premier passage CI (commit `1a307a0`)
+
+Verts : `neoswap-vulkan-proof`, `neoswap-donation-check` (ipc, kernel,
+stress), relay-check étapes backend/1 GiB/8 GiB/link arm64, Core étape
+« Validate startup contracts ». Le run Core `37491042733` a démarré la
+compilation.
+
+Rouges, tous dus à des contrats de texte source ou à des listes de fichiers
+figées, corrigés à la source dans le commit suivant :
+
+| Workflow | Cause | Correction (test du nouveau comportement) |
+|---|---|---|
+| `neoswap-check` étape donneurs | `neoswap_donor_contract_test.py` attendait `donationWarmFloorBytes` fixe et `SetCPUBufferExperiment(donors() && titre)` | assertions sur `donorFloorBytes`/`donorReserveBytes` (repli fixe avant décision, valeur du contrôleur ensuite), refus `global_budget_refused_growth`, admission `relay() \|\| donors()` |
+| `neoswap-storage-prototype` | `neoswap_shader_storage_host_test.py` comptait 4 gardes `NEOSWAP_SHADER_STORAGE` | 6 gardes, les deux nouvelles (lecture vidéo archivée, `SetBudgetShrink`) vérifiées sous garde |
+| `neoswap-research-check` | le harnais C++ extrait `adaptiveDonationTarget`, qui appelle désormais `[self donorFloorBytes]` | le harnais extrait aussi les deux accesseurs, exécute leurs corps de production et ajoute les cas budget (plancher 0 / réserve 64 Mio → 128 Mio ; pression → 0 ; profil research → 16/32 Mio) |
+| `neoswap-donation-check` simulateur | copie figée des en-têtes sans `NeoSwapBudget.h` | en-tête ajouté aux deux listes |
+| `neoswap-relay-check` simulateur | contrat « propriétaires 1–5 désactivés » | propriétaire 1 activé et exercé (prêt hôte réel écrit, split `guest`/`hostLoan`, refus de quota compté, libération à zéro), propriétaires 2–5 désactivés ; fixtures `relay_extension`/`evidence_lifecycle` complétées |
+| `neoplay-check`, `cheats-media-check`, `neoswap-check` scope | gates verrouillées par hachage (autorisées par le mainteneur le 6 octobre 2026) | voir 4.2 |
+
+### 4.2 Gates verrouillées mises à jour (autorisation explicite du mainteneur)
+
+- `test/import_memory_candidate_scope_test.py` : cible Build 409 ;
+  `NeoSwapBudget.h` en production, document et deux tests en support ; le
+  contrat de genre `(kind != CPU_DATA && kind != CPU_CACHE)` remplacé par
+  `!host_kind_supported(kind)` et les quatre genres ; `neoswap-ipa.yml`
+  comparé à la révision ARMSX2 `424a360` après seize remplacements de ligne
+  explicites (numéro de build, Build 401 requis, nom d'artefact), chacun
+  appliqué exactement une fois ; masque de propriétaires 3 ; bloc
+  `global_budget` du manifeste (genres, entrées mesurées, budgets fixes
+  remplacés, aucune validation appareil ni maximum mesuré).
+- `native/import-memory-candidate.json` : empreintes et modes régénérés pour
+  211 fichiers de production et 164 de support, trois postimages Core alignées
+  sur `canonical-source.json`, run Build 401 comme build précédent.
+- `test/neoplay_build397_integration_test.py` : empreinte du bridge après la
+  fusion `swap` et Build 409 ; ensembles approuvés séparés pour la fusion
+  `swap`, l'intégration ARMSX2 (octet pour octet sur `424a360`) et Build 409 ;
+  chaînes Build 409 / Build 401 / run `37135708903`.
+
+Reste avant l'IPA : succès du run Core, épinglage (`RPCS3_CORE_HOST_SHA`,
+`RPCS3_CORE_RUN_ID`, paire de remplacement supplémentaire dans le test
+candidat), puis commit `[neoswap-ipa] [rpcs3-host-integration]`.
 
 ## 5. Protocole de validation sur iPhone 16 Pro Max (God of War III)
 

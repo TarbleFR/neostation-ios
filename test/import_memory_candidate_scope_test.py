@@ -12,10 +12,13 @@ BASE = '3ccde925351b3e59985ba466e013e87a857d6ad0'
 MANIFEST_PATH = 'native/import-memory-candidate.json'
 manifest = json.loads((ROOT / MANIFEST_PATH).read_text())
 assert manifest['baseline'] == BASE
-assert manifest['target_build'] == 401
+assert manifest['target_build'] == 409
 assert manifest['swap_research']['branch'] == 'swap'
 assert manifest['swap_research']['scope'] == 'RPCS3 only'
-assert manifest['swap_research']['supported_owner_mask'] == 1
+# Build409: relay owner 1 serves identifiable host allocations of the same
+# RPCS3 process (owner 0 stays the guest). No other process or emulator core
+# gains an owner; the scope remains RPCS3 only.
+assert manifest['swap_research']['supported_owner_mask'] == 3
 assert manifest['swap_research']['production_synthetic_probes'] is False
 assert manifest['swap_research']['profiles'] == ['baseline', 'relay', 'integrated']
 assert manifest['swap_research']['physical_iPhone_validated'] is False
@@ -53,10 +56,29 @@ assert managed['required_evidence'] == [
     'executed macOS Swift ABI client',
     'materialized iPhone arm64 library linkage and iOS18 Swift typecheck',
 ]
+# Build409: one measured global budget replaces the fixed per-subsystem
+# ceilings; the relay serves identifiable RPCS3 host allocations as owner 1.
+# No memory figure, stability or gameplay result is claimed without a device.
+budget = manifest['global_budget']
+assert budget['relay_supported_owner_mask'] == 3 and budget['relay_host_loan_owner'] == 1
+assert budget['host_loan_kinds'] == {'cpu_data': 1, 'cpu_cache': 2, 'gpu_host_visible': 3, 'video_frame': 4}
+assert budget['allocator_abi'] == 1
+assert budget['fixed_budgets_replaced'] == [
+    'small CPU buffer admission', 'donor floor and reserve', 'relay host-loan quota', 'video memory need shrink',
+]
+assert budget['measured_inputs'] == [
+    'TASK_VM_INFO phys_footprint', 'os_proc_available_memory', 'system headroom', 'dispatch memory pressure',
+    'thermal state', 'relay capacity and owner split', 'donor pool', 'archived video pixels',
+]
+assert budget['physical_iPhone_validated'] is False
+assert budget['gameplay_validated'] is False
+assert budget['maximum_useful_memory_measured'] is False
 
 # Additions require a review of the requested production scope. Never derive
 # this whitelist from git status or from the hash manifest itself.
 PRODUCTION_FILES = {
+    # Build409: pure global budget policy applied by the plugin every sample.
+    'packages/neo_swap/ios/Classes/NeoSwapBudget.h',
     # RPCS3-only integrity harness shares its sole supported allocation owner.
     'packages/neo_swap/ios/Classes/NeoSwapCapacityProbe.h',
     'packages/neo_swap/ios/Classes/NeoSwapExperiment.h',
@@ -221,6 +243,10 @@ PRODUCTION_FILES = {
     'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm',
 }
 SUPPORT_FILES = {
+    # Build409: budget decision table, production broker + relay backend loans.
+    'docs/neoswap-build409-global-budget.md',
+    'test/neoswap_budget_test.cpp',
+    'test/neoswap_relay_loans_test.cpp',
     'docs/neoswap-swap-research.md',
     'tools/compare_neoswap_sessions.py',
     'test/neoswap_swap_research_test.cpp',
@@ -465,8 +491,47 @@ PRODUCTION_FILES |= {path for path in ARMSX2_INTEGRATION_FILES
                      if not path.startswith(('test/', 'docs/'))}
 SUPPORT_FILES |= {path for path in ARMSX2_INTEGRATION_FILES
                   if path.startswith(('test/', 'docs/'))}
+# Build409 candidate lines of the IPA workflow: the build number, the required
+# previous packaged build (401, run 37135708903) and its artifact name. Every
+# other byte of that file stays the reviewed ARMSX2 postimage; each pair must
+# apply exactly once so an unrelated edit still fails.
+IPA_WORKFLOW_BUILD409_LINES = (
+    ('name: NeoStation NeoSwap + NeoPlay private • Build 401\n',
+     'name: NeoStation NeoSwap + NeoPlay private • Build 409\n'),
+    ('run-name: NeoStation NeoSwap + NeoPlay private • Build 401 • ${{ github.sha }}\n',
+     'run-name: NeoStation NeoSwap + NeoPlay private • Build 409 • ${{ github.sha }}\n'),
+    ("        default: '401'\n", "        default: '409'\n"),
+    ('  group: neostation-neoswap-neoplay-build401\n', '  group: neostation-neoswap-neoplay-build409\n'),
+    ('      - name: Require completed Build 399 without cancelling its run\n',
+     '      - name: Require completed Build 401 without cancelling its run\n'),
+    ('          run_id = 37124491800\n', '          run_id = 37135708903\n'),
+    ("          expected_sha = '3be1b3a528345f25870fde25913bc7f4713d2255'\n",
+     "          expected_sha = '905461854998c65e1b884cabfedd7b46060c701b'\n"),
+    ("'Build399 did not succeed; inspect it before packaging Build401'",
+     "'Build401 did not succeed; inspect it before packaging Build409'"),
+    ("raise SystemExit('Timed out waiting for Build399; no build was cancelled')",
+     "raise SystemExit('Timed out waiting for Build401; no build was cancelled')"),
+    ("print('Build399 is still running; Build401 packaging remains gated', flush=True)",
+     "print('Build401 is still running; Build409 packaging remains gated', flush=True)"),
+    ("expected = 'NeoStation-NeoSwap-NeoPlay-Build-399-' + expected_sha",
+     "expected = 'NeoStation-NeoSwap-NeoPlay-Build-401-' + expected_sha"),
+    ("'Build399 IPA artifact is absent'", "'Build401 IPA artifact is absent'"),
+    ("print('Build399 completed successfully; its IPA artifact is preserved', flush=True)",
+     "print('Build401 completed successfully; its IPA artifact is preserved', flush=True)"),
+    ('    name: Neostation iOS 0.0.2 private IPA (401)\n', '    name: Neostation iOS 0.0.2 private IPA (409)\n'),
+    ("      BUILD_NUMBER: ${{ inputs.build_number || '401' }}\n",
+     "      BUILD_NUMBER: ${{ inputs.build_number || '409' }}\n"),
+    ('      ARTIFACT_NAME: NeoStation-NeoSwap-NeoPlay-Build-401-${{ github.sha }}\n',
+     '      ARTIFACT_NAME: NeoStation-NeoSwap-NeoPlay-Build-409-${{ github.sha }}\n'),
+)
 for path in ARMSX2_INTEGRATION_FILES:
     reviewed = subprocess.check_output(['git', 'show', ARMSX2_INTEGRATION_SHA + ':' + path], cwd=ROOT)
+    if path == '.github/workflows/neoswap-ipa.yml':
+        text = reviewed.decode('utf-8')
+        for old, new in IPA_WORKFLOW_BUILD409_LINES:
+            assert text.count(old) == 1, 'Reviewed IPA workflow line expected once: ' + old
+            text = text.replace(old, new, 1)
+        reviewed = text.encode('utf-8')
     assert (ROOT / path).read_bytes() == reviewed, 'Reviewed ARMSX2 integration changed: ' + path
 
 approved = set(manifest['files_sha256'])
@@ -599,7 +664,13 @@ assert 'contents: write' not in workflow and 'gh release create' not in workflow
 
 broker = (ROOT / 'packages/neo_swap/ios/Classes/NeoSwap.cpp').read_text()
 assert 'c->capacity_bytes > 8 * 1024 * MiB' in broker
-assert '(kind != NEOSWAP_CPU_DATA && kind != NEOSWAP_CPU_CACHE)' in broker
+# Build409: the former two-kind refusal became one predicate over the four
+# host kinds (RSX CPU data, RSX CPU cache, Vulkan host-visible, VDEC frame).
+# Any other kind is still refused before a backing is touched.
+assert '(kind != NEOSWAP_CPU_DATA && kind != NEOSWAP_CPU_CACHE)' not in broker
+assert '!host_kind_supported(kind)' in broker
+assert 'kind == NEOSWAP_HOST_KIND_CPU_DATA || kind == NEOSWAP_HOST_KIND_CPU_CACHE ||' in broker
+assert 'kind == NEOSWAP_HOST_KIND_GPU_HOST_VISIBLE || kind == NEOSWAP_HOST_KIND_VIDEO_FRAME;' in broker
 assert broker.count('struct Broker {') == 1
 assert '#ifdef NEOSWAP_TESTING' in broker
 

@@ -27,8 +27,12 @@ compiled=subprocess.run(command+['-D'+flag for flag in flags]+['-'],input=probe,
 assert compiled.returncode==0, 'Production CocoaPods defines break public ABI:\n'+compiled.stderr
 assert 'NEOSWAP_SHADER_STORAGE=1' in flags, 'Shader feature must remain compiled in'
 plugin=(ROOT/'packages/neo_swap/ios/Classes/NeoSwapPlugin.mm').read_text()
-assert plugin.count('#if defined(NEOSWAP_SHADER_STORAGE)')==4
+assert plugin.count('#if defined(NEOSWAP_SHADER_STORAGE)')==6
 assert re.search(r'#if defined\(NEOSWAP_SHADER_STORAGE\)\s+NSDictionary\* operations = NeoSwapStorage_DrainOperations\(\);',plugin), 'Operation handoff must remain feature guarded'
+# Build409: the global budget controller reads the archived video residency and
+# requests storage shrink only through the same feature guard.
+assert re.search(r'#if defined\(NEOSWAP_SHADER_STORAGE\)\s+id archived = \[NeoSwapStorage_Diagnostics\(\) valueForKeyPath:@"sourceArchive\.videoPixelLiveArchivedBytes"\];',plugin), 'Budget input must remain feature guarded'
+assert re.search(r'#if defined\(NEOSWAP_SHADER_STORAGE\)\s+NeoSwapStorage_SetBudgetShrink\(decision\.storage_shrink_requested\);',plugin), 'Budget shrink request must remain feature guarded'
 assert '#if defined(NEOSWAP_STORAGE)' not in plugin
 # Keep a negative compiler regression: the old flag really must fail, rather
 # than merely checking a renamed string or suppressing a warning.

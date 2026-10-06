@@ -19,7 +19,9 @@ REVIEWED_NEOPLAY_DISCOVERY_POSTIMAGES = {
     'packages/neoplay_bridge/ios/Classes/NPGoogleCast.swift': '20cb1c77db74c2d6456d74025502ae766abad278b7b14e8962a29b2a91f3b846',
 }
 REVIEWED_RPCS3_HOST_POSTIMAGES = {
-    'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm': '1fb5f31195a1085f612300f87d9ca693e49803f022589280b096ba13c3ba9039',
+    # Build409 postimage: relay-or-donor CPU buffer admission for every title
+    # on top of the authorized swap merge; menu callback and source binding below.
+    'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm': '60295414f6121337484df3b2cfc819a0d100c3bcff22bd9de16b1c0a0a1ca58d',
     'packages/rpcs3_internal_bridge/ios/Classes/RPCS3PerformanceSnapshot.h': 'badde59ea1202e288e48bd8c318d61fde82b764815a83484da37db075be69c79',
 }
 APPROVED_RPCS3_MENU_FILES = frozenset({
@@ -67,6 +69,39 @@ APPROVED_MANAGED_SWAP_FILES = frozenset({
     'packages/neo_swap/ios/Classes/ManagedSwapABI.h',
     'packages/neo_swap/ios/neo_swap.podspec',
 })
+# Maintainer-authorized integrations after Build401: the swap research branch
+# (merge e856bb2) and ARMSX2 2.6 (merge bae194b, pinned byte-for-byte to its
+# reviewed revision below and by the candidate scope test), then the Build409
+# global budget controller with relay host loans for identified RPCS3 consumers.
+APPROVED_SWAP_INTEGRATION_FILES = frozenset({
+    'native/neoswap-relay/Backend.h',
+    'packages/neo_swap/ios/Classes/NeoSwap.cpp',
+    'packages/neo_swap/ios/Classes/NeoSwapCapacityProbe.h',
+    'packages/neo_swap/ios/Classes/NeoSwapExperiment.h',
+    'packages/neo_swap/ios/Classes/NeoSwapRelayService.mm',
+})
+ARMSX2_INTEGRATION_SHA = '424a360348ae1178feed330da1af8c45909ed675'
+APPROVED_ARMSX2_INTEGRATION_FILES = frozenset({
+    '.github/workflows/ios-ci.yml',
+    'packages/armsx2_internal_bridge/core/ARMSX2Core.mm',
+    'packages/armsx2_internal_bridge/core/ARMSX2GraphicsAssets.inc',
+    'packages/armsx2_internal_bridge/core/ARMSX2ShaderLibrary.h',
+    'packages/armsx2_internal_bridge/core/target.cmake',
+    'packages/armsx2_internal_bridge/ios/Classes/ARMSX2CoreABI.h',
+    'packages/armsx2_internal_bridge/ios/Classes/ARMSX2InGameLocalization.mm',
+    'packages/armsx2_internal_bridge/ios/Classes/Armsx2InternalBridgePlugin.mm',
+    'packages/armsx2_internal_bridge/ios/Classes/Armsx2SessionMenu.mm',
+})
+APPROVED_BUILD409_FILES = frozenset({
+    'native/neoswap-relay/Backend.cpp',
+    'native/neoswap/NeoSwapClient.h',
+    'packages/neo_swap/ios/Classes/NeoSwapBudget.h',
+    'packages/neo_swap/ios/Classes/NeoSwapHost.h',
+    'packages/neo_swap/ios/Classes/NeoSwapRelayService.h',
+    'packages/rpcs3_internal_bridge/ios/Classes/NeoSwapUsagePolicy.h',
+    'packages/rpcs3_internal_bridge/ios/Classes/RPCS3InGameLocalization.mm',
+    'packages/rpcs3_internal_bridge/ios/Classes/RPCS3PerformanceOverlay.mm',
+})
 def original(path, revision=BASE):
     return subprocess.check_output(['git', 'show', revision + ':' + path], cwd=ROOT)
 
@@ -74,8 +109,11 @@ class Build398Integration(unittest.TestCase):
     def test_unrelated_runtime_preserved_except_approved_menu_and_managed_swap(self):
         protected = ['native', 'packages/neo_swap', 'packages/dolphin_internal_bridge', 'packages/armsx2_internal_bridge', 'packages/rpcs3_internal_bridge', 'packages/dusklight_internal_bridge', 'packages/kartpad_internal_bridge', 'packages/stikjit_bridge', 'lib/services', 'build-utils/rpcs3', '.github/workflows/ios-ci.yml', ':(exclude)native/import-memory-candidate.json']
         changed = set(subprocess.check_output(['git', 'diff', '--name-only', BASE, '--', *protected], cwd=ROOT).decode().splitlines())
-        self.assertEqual(changed - APPROVED_RPCS3_MENU_FILES - APPROVED_MANAGED_SWAP_FILES, set(),
-                         'Only the explicitly reviewed menu and owned CPU swap module may differ from Build396')
+        self.assertEqual(changed - APPROVED_RPCS3_MENU_FILES - APPROVED_MANAGED_SWAP_FILES
+                         - APPROVED_SWAP_INTEGRATION_FILES - APPROVED_ARMSX2_INTEGRATION_FILES - APPROVED_BUILD409_FILES, set(),
+                         'Only the explicitly reviewed menu, owned CPU swap module, authorized swap/ARMSX2 integrations and Build409 budget files may differ from Build396')
+        for path in sorted(APPROVED_ARMSX2_INTEGRATION_FILES):
+            self.assertEqual((ROOT / path).read_bytes(), original(path, ARMSX2_INTEGRATION_SHA), path)
         for path in ('native/neoswap-storage/Store.h', 'native/neoswap-storage/Store.cpp',
                      'native/neoswap-storage/StorageABI.h', 'native/neoswap-storage/Client.h',
                      'native/neoswap-storage/ShaderCache.h', 'native/neoswap-storage/ShaderCache.cpp'):
@@ -132,15 +170,15 @@ class Build398Integration(unittest.TestCase):
         self.assertIn('version: 0.0.2+399', pubspec)
     def test_full_ipa_requires_previous_build_and_both_exact_evidence_suites(self):
         text = (ROOT/'.github/workflows/neoswap-ipa.yml').read_text()
-        self.assertIn('neostation-neoswap-neoplay-build401', text)
+        self.assertIn('neostation-neoswap-neoplay-build409', text)
         self.assertNotIn('group: neostation-neoswap-private\n', text)
-        self.assertIn('run_id = 37124491800', text)
+        self.assertIn('run_id = 37135708903', text)
         self.assertIn("run['conclusion'] == 'success'", text)
-        self.assertIn('3be1b3a528345f25870fde25913bc7f4713d2255', text)
-        self.assertIn("expected = 'NeoStation-NeoSwap-NeoPlay-Build-399-' + expected_sha", text)
+        self.assertIn('905461854998c65e1b884cabfedd7b46060c701b', text)
+        self.assertIn("expected = 'NeoStation-NeoSwap-NeoPlay-Build-401-' + expected_sha", text)
         self.assertIn("'neoplay-check.yml',", text)
         self.assertIn('head_sha={sha}', text)
-        self.assertLess(text.index('Require completed Build 399'), text.index('Wait for exact-SHA validation workflows'))
+        self.assertLess(text.index('Require completed Build 401'), text.index('Wait for exact-SHA validation workflows'))
         self.assertIn('needs: wait-evidence', text)
         self.assertIn("xcode-version: '26.3'", text)
         self.assertLess(text.index('python3 build-utils/configure_neoplay_ios.py'), text.index('pod install --project-directory=ios'))
@@ -185,7 +223,7 @@ class Build398Integration(unittest.TestCase):
         self.assertIn('failure = nil', request)
     def test_candidate_identity_remains_honest(self):
         data = json.loads((ROOT/'native/import-memory-candidate.json').read_text())
-        self.assertEqual(data['target_build'], 401)
+        self.assertEqual(data['target_build'], 409)
         self.assertEqual(data['neoplay_integration']['preserved_neoswap_base'], BASE)
         self.assertEqual(data['neoplay_integration']['source'], FEATURE)
         self.assertFalse(data['neoplay_integration']['physical_device_validation'])

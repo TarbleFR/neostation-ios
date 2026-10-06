@@ -232,8 +232,41 @@ bool isReadOnly(void* address) {
         !api || api->enabled(0) != 1) {
       fail(@"production_manager_prepare_capability_and_enable_rpcs3", diagnostics); return;
     }
-    for (uint32_t owner = 1; owner < 6; ++owner) if (api->enabled(owner)) {
+    // Build409: owner 1 serves host loans of the same RPCS3 process and is the
+    // only other enabled owner; emulator owners 2-5 stay disabled.
+    if (api->enabled(1) != 1 || ![diagnostics[@"hostLoanOwnerEnabled"] isEqual:@YES]) {
+      fail(@"production_manager_host_loan_owner_enabled", diagnostics); return;
+    }
+    for (uint32_t owner = 2; owner < 6; ++owner) if (api->enabled(owner)) {
       fail(@"production_manager_initial_owner_scope", diagnostics); return;
+    }
+    // A real host loan through the production manager: written, counted on
+    // owner 1 only, bounded by the budget quota and fully retired.
+    uint64_t hostToken = 0;
+    void* hostLoan = nullptr;
+    const uint64_t hostBytes = 64 * 1024;
+    if (api->create(1, hostBytes, &hostToken) != 0 ||
+        api->map(hostToken, nullptr, NEOSWAP_RELAY_READ_WRITE, &hostLoan) != 0) {
+      fail(@"production_manager_host_loan", NeoSwapRelay_Diagnostics()); return;
+    }
+    std::memset(hostLoan, 0x4c, hostBytes);
+    NSDictionary* loaned = NeoSwapRelay_Diagnostics();
+    if (!allBytes(hostLoan, 0x4c) ||
+        [loaned[@"hostLoanLiveBackingBytes"] unsignedLongLongValue] != hostBytes ||
+        [loaned[@"guestLiveBackingBytes"] unsignedLongLongValue] != 0 ||
+        [loaned[@"liveBackingBytes"] unsignedLongLongValue] != hostBytes) {
+      fail(@"production_manager_host_loan_owner_split", loaned); return;
+    }
+    uint64_t refused = 0;
+    if (NeoSwapRelay_SetHostLoanQuota(hostBytes) != NEOSWAP_RELAY_OK ||
+        api->create(1, hostBytes, &refused) != NEOSWAP_RELAY_QUOTA || refused != 0 ||
+        [NeoSwapRelay_Diagnostics()[@"hostLoanQuotaRefusals"] unsignedLongLongValue] != 1 ||
+        NeoSwapRelay_SetHostLoanQuota(0) != NEOSWAP_RELAY_OK) {
+      fail(@"production_manager_host_loan_quota", NeoSwapRelay_Diagnostics()); return;
+    }
+    if (api->unmap(hostToken, hostLoan) != 0 || api->release(hostToken) != 0 ||
+        [NeoSwapRelay_Diagnostics()[@"hostLoanLiveBackingBytes"] unsignedLongLongValue] != 0) {
+      fail(@"production_manager_host_loan_release", NeoSwapRelay_Diagnostics()); return;
     }
     uint64_t token = 0;
     void* writer = nullptr;
@@ -283,6 +316,8 @@ bool isReadOnly(void* address) {
       self.evidence[@"productionManagerCapacityBytes"] = @(8ULL * 1024 * 1024 * 1024);
       self.evidence[@"productionManagerWrittenBytes"] = @(target);
       self.evidence[@"productionManagerRPCS3Only"] = @YES;
+      self.evidence[@"productionManagerHostLoanOwnerEnabled"] = @YES;
+      self.evidence[@"productionManagerHostLoanQuotaEnforced"] = @YES;
       self.evidence[@"productionManager"] = after;
       finish(self.evidence);
     });
@@ -303,7 +338,8 @@ def validate_evidence(report: dict) -> None:
     for key in ('passed', 'creatorExitObserved', 'firstCreatorExitObserved', 'secondCreatorExitObserved',
                 'aliasCoherencePassed', 'readOnlyAliasPassed', 'releaseWhileMappedRefused',
                 'staleTokenRefused', 'releaseZeroingPassed', 'releasePassed', 'secondPreparationPassed',
-                'productionManagerPassed', 'productionManagerMainThreadNonblocking', 'productionManagerRPCS3Only'):
+                'productionManagerPassed', 'productionManagerMainThreadNonblocking', 'productionManagerRPCS3Only',
+                'productionManagerHostLoanOwnerEnabled', 'productionManagerHostLoanQuotaEnforced'):
         if report.get(key) is not True:
             raise RuntimeError('Missing actual relay lifecycle proof: ' + key)
     for key in ('realIPhoneValidated', 'realRPCS3GameplayValidated'):

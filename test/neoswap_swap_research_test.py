@@ -58,12 +58,20 @@ int main(){assert(!rejects(0,0));assert(rejects(1,0));assert(rejects(0,1));asser
     subprocess.run([str(startup)],check=True)
     plugin=(ROOT/'packages/neo_swap/ios/Classes/NeoSwapPlugin.mm').read_text()
     target=plugin.split('- (uint64_t)adaptiveDonationTarget {',1)[1].split('\n}',1)[0]
+    # Build409: the target takes its floor and reserve from the global budget
+    # controller accessors. Execute their exact production bodies too; the two
+    # Objective-C message sends become calls of the extracted C++ functions.
+    floor=plugin.split('- (uint64_t)donorFloorBytes {',1)[1].split('\n}',1)[0]
+    reserve=plugin.split('- (uint64_t)donorReserveBytes {',1)[1].split('\n}',1)[0]
+    target=target.replace('[self donorFloorBytes]','donorFloorBytes()').replace('[self donorReserveBytes]','donorReserveBytes()')
+    assert '[self' not in target+floor+reserve, 'Unexpected Objective-C in the extracted donation policy'
     admission=plugin.split('- (void)startDonors {',1)[1].split('    if (self.donorEpoch',1)[0]
     admission=admission[admission.index('    if (NeoSwapExperimentProfile().configured)'):]
     warm=re.search(r'const BOOL warmEligible = (.*?);',bridge,re.S).group(1).replace('titleId.UTF8String ?: ""','title')
     includes=work/'include';includes.mkdir();(includes/'neo_swap').symlink_to(ROOT/'packages/neo_swap/ios/Classes')
     policy=work/'policy.cpp';policy_exe=work/'policy'
     policy.write_text('''#include <cassert>
+#include "NeoSwapBudget.h"
 #include "NeoSwapExperiment.h"
 #include "NeoSwapHost.h"
 #include "NeoSwapUsagePolicy.h"
@@ -76,11 +84,16 @@ static bool active=true;
 static bool cpu_enabled=true;
 static NeoSwapHostStats host{};
 static unsigned starts=0;
+// The plugin instance variables written by applyBudget; zero until a decision exists.
+static neostation::budget::Decision _budgetDecision{};
+static uint64_t _budgetDecisionCount=0;
 const auto& NeoSwapExperimentProfile(){return selected;}
 extern "C" int NeoSwap_OwnerSessionActive(uint32_t){return active;}
 extern "C" int NeoSwap_CPUBufferSnapshot(NeoSwapCPUBufferStats* out){out->enabled=cpu_enabled;return NEOSWAP_OK;}
 extern "C" int NeoSwap_HostSnapshot(NeoSwapHostStats* out){*out=host;return NEOSWAP_OK;}
 namespace neostation::donation {void pool_snapshot(PoolSnapshot& out) noexcept{out=observed;}}
+uint64_t donorFloorBytes(){'''+floor+'''}
+uint64_t donorReserveBytes(){'''+reserve+'''}
 uint64_t actualTarget(){'''+target+'''}
 void actualStartAdmission(){'''+admission+''';++starts;}
 bool actualWarm(std::string_view title){return '''+warm+''';}
@@ -99,6 +112,23 @@ int main(){
     selected=neostation::experiment::parse("baseline");assert(!actualWarm("BCES00510"));assert(actualTarget()==0);
     selected=neostation::experiment::parse("relay");assert(!actualWarm("BCES00510"));assert(actualTarget()==0);
     observed.last_stage=neostation::donation::Stage::snapshot_busy;assert(actualTarget()==0);
+    // Build409: before any decision the production path keeps the fixed values;
+    // after one, the controller's floor and reserve drive the target (relay
+    // host loans admitted: floor 0, 64 MiB reserve rounded to the 128 MiB
+    // quantum; pressure: floor and reserve 0 so an idle pool never grows).
+    observed={};selected=neostation::experiment::parse(nullptr);
+    assert(donorFloorBytes()==kDonationWarmFloorBytes&&donorReserveBytes()==kDonationReserveBytes);
+    _budgetDecision.donor_floor_bytes=0;_budgetDecision.donor_reserve_bytes=64*kMiB;_budgetDecisionCount=1;
+    assert(donorFloorBytes()==0&&donorReserveBytes()==64*kMiB);
+    assert(actualTarget()==128*kMiB);observed.live_bytes=200*kMiB;assert(actualTarget()==384*kMiB);
+    _budgetDecision.donor_reserve_bytes=0;observed.live_bytes=0;assert(actualTarget()==0);
+    observed.live_bytes=64*kMiB;assert(actualTarget()==128*kMiB);
+    _budgetDecision.donor_floor_bytes=neostation::budget::legacy_donor_floor_bytes;
+    _budgetDecision.donor_reserve_bytes=neostation::budget::legacy_donor_reserve_bytes;observed.live_bytes=0;
+    assert(actualTarget()==512*kMiB);
+    // Research profiles keep their small fixed values whatever the controller decided.
+    selected=neostation::experiment::parse("integrated");assert(donorFloorBytes()==16*kMiB&&donorReserveBytes()==32*kMiB);
+    _budgetDecision={};_budgetDecisionCount=0;
 }
 ''')
     subprocess.run([compiler,'-std=c++20','-Wall','-Wextra','-Werror','-I',str(ROOT/'packages/neo_swap/ios/Classes'),
