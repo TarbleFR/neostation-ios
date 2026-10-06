@@ -241,10 +241,11 @@ bool isReadOnly(void* address) {
       fail(@"production_manager_initial_owner_scope", diagnostics); return;
     }
     // A real host loan through the production manager: written, counted on
-    // owner 1 only, bounded by the budget quota and fully retired.
+    // owner 1 only, bounded by the budget quota and fully retired. It has the
+    // probe size because allBytes() verifies exactly `target` bytes.
     uint64_t hostToken = 0;
     void* hostLoan = nullptr;
-    const uint64_t hostBytes = 64 * 1024;
+    const uint64_t hostBytes = target;
     if (api->create(1, hostBytes, &hostToken) != 0 ||
         api->map(hostToken, nullptr, NEOSWAP_RELAY_READ_WRITE, &hostLoan) != 0) {
       fail(@"production_manager_host_loan", NeoSwapRelay_Diagnostics()); return;

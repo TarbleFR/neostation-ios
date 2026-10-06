@@ -264,6 +264,17 @@ static NSDictionary* NeoSwapEffectivePermissions() {
     dispatch_resume(self.timer);
     return self;
 }
+// Budget-driven donor floor and reserve. Defined for every build: the
+// diagnostic snapshot reports them even when the donation service is not
+// compiled in, where they only describe the fixed policy.
+- (uint64_t)donorFloorBytes {
+    if (NeoSwapExperimentProfile().configured) return 16*kMiB;
+    return _budgetDecisionCount ? _budgetDecision.donor_floor_bytes : kDonationWarmFloorBytes;
+}
+- (uint64_t)donorReserveBytes {
+    if (NeoSwapExperimentProfile().configured) return 32*kMiB;
+    return _budgetDecisionCount ? _budgetDecision.donor_reserve_bytes : kDonationReserveBytes;
+}
 #if defined(NEOSWAP_DONATION)
 - (void)startDonors {
     if (!NeoSwapExperimentProfile().donors() || self.donorSessions || !NeoSwap_OwnerSessionActive(NEOSWAP_RPCS3)) return;
@@ -399,14 +410,6 @@ static NSDictionary* NeoSwapEffectivePermissions() {
         [self donorFloorBytes], [self donorReserveBytes],
         NeoSwapExperimentProfile().configured ? 16*kMiB : kDonationGrowthQuantumBytes,
         kDonationHardLimitBytes);
-}
-- (uint64_t)donorFloorBytes {
-    if (NeoSwapExperimentProfile().configured) return 16*kMiB;
-    return _budgetDecisionCount ? _budgetDecision.donor_floor_bytes : kDonationWarmFloorBytes;
-}
-- (uint64_t)donorReserveBytes {
-    if (NeoSwapExperimentProfile().configured) return 32*kMiB;
-    return _budgetDecisionCount ? _budgetDecision.donor_reserve_bytes : kDonationReserveBytes;
 }
 - (void)retireDonorsIfIdle {
     if (!self.donorSessions || NeoSwap_OwnerSessionActive(NEOSWAP_RPCS3)) return;

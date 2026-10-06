@@ -84,10 +84,14 @@ jobs:
               assert actual==digest,(path,actual,digest)
               assert candidate['files_sha256'][path]==digest,(path,candidate['files_sha256'][path],digest)
           reference=json.loads(subprocess.check_output(['git','show',identity['productionRuntimeReferenceCommit']+':build-utils/rpcs3/canonical-source.json']))
-          assert pins['files_sha256']['rpcs3/ios/NeoSwapVulkanBuffer.h']==reference['files_sha256']['rpcs3/ios/NeoSwapVulkanBuffer.h']
+          # Build409: the coherent Vulkan import keeps its abc9566 structure and
+          # differs only by the host-loan kind it requests (verified line by line
+          # by test/check_neo_swap_scope.py); pin that exact reviewed postimage.
+          assert pins['files_sha256']['rpcs3/ios/NeoSwapVulkanBuffer.h']=='721d0f983eb1c482c638213dbf05ce70541f50584f65056f713266aa4d86a5a7'
+          identity['productionImportReferenceSHA256']=reference['files_sha256']['rpcs3/ios/NeoSwapVulkanBuffer.h']
           verified_paths=runtime_paths+list(reviewed_deltas)
           identity['verifiedRuntimeSourceSHA256']={p:hashlib.sha256(pathlib.Path(p).read_bytes()).hexdigest() for p in verified_paths}
-          identity['productionRuntimeReferenceScope']='Build385 host donation broker pinned by reviewed candidate hashes; coherent RPCS3 Vulkan import remains pinned to abc9566; exact Build393 donor IPC/request-handler shared 256MiB ceiling remains separately pinned; guest relay validated independently'
+          identity['productionRuntimeReferenceScope']='Build385 host donation broker pinned by reviewed candidate hashes; coherent RPCS3 Vulkan import pinned to the Build409 postimage (abc9566 structure, GPU host-visible loan kind); exact Build393 donor IPC/request-handler shared 256MiB ceiling remains separately pinned; guest relay validated independently'
           pathlib.Path('build/neoswap-vulkan-1gib/identity.json').write_text(json.dumps(identity,indent=2)+'\n')
           with open(os.environ['GITHUB_ENV'],'a') as f:
               f.write('NEOSWAP_RPCS3_SOURCE='+str(source)+'\n')
