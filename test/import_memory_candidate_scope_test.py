@@ -87,6 +87,7 @@ PRODUCTION_FILES = {
     # Build401: explicit main-menu entry moved from Tools.
     'lib/widgets/header.dart',
     'lib/widgets/airplay_menu_button.dart',
+    'lib/widgets/main_menu_tab_strip.dart',
     # Build400: reviewed host scheduling, single FPS sampler and discovery guidance.
     'lib/l10n/neoplay_discovery_locale.dart',
     'packages/neo_swap/ios/Classes/NeoSwapSourceWork.h',
@@ -447,6 +448,7 @@ SUPPORT_FILES |= {
     'test/neoplay_companion_test.dart',
     'test/neoplay_config_test.py',
     'test/neoplay_dialog_test.dart',
+    'test/main_menu_tab_strip_test.dart',
     'test/neoplay_ipa_packaging_test.py',
     'test/neoplay_locale_test.dart',
     'tools/neoplay-receiver/playback-smoke.mjs',

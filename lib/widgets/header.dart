@@ -17,7 +17,7 @@ import 'package:neostation/services/permission_service.dart';
 import 'package:neostation/services/rpcs3_internal_service.dart';
 import 'package:neostation/providers/sqlite_config_provider.dart';
 import 'package:neostation/widgets/header_sort_dropdown.dart';
-import 'package:neostation/widgets/airplay_menu_button.dart';
+import 'package:neostation/widgets/main_menu_tab_strip.dart';
 import 'package:neostation/widgets/bumper_glyph.dart';
 import 'package:neostation/widgets/notification_bell.dart';
 import 'package:neostation/screens/app_screen.dart';
@@ -254,87 +254,37 @@ class HeaderState extends State<Header> {
                       child: NeoGlass(
                         role: GlassSurfaceRole.chrome,
                         borderRadius:
-                            Theme.of(context)
-                                .extension<CornerRadii>()
-                                ?.radiusExternal ??
+                            Theme.of(
+                              context,
+                            ).extension<CornerRadii>()?.radiusExternal ??
                             BorderRadius.circular(8.r),
                         padding: EdgeInsets.symmetric(horizontal: 4.r),
                         boxShadow: [
                           BoxShadow(
-                            color: Theme.of(context).colorScheme.shadow
-                                .withValues(alpha: 0.1),
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.shadow.withValues(alpha: 0.1),
                             blurRadius: 4.r,
                             offset: Offset(2.0.r, 2.0.r),
                           ),
                         ],
-                        child: Builder(
-                          builder: (context) {
-                            final visibleTabs = visibleNavTabs(
-                              configProvider.config,
-                            );
-                            // The indicator tracks the tab's slot in the *rendered*
-                            // strip, not its canonical index — otherwise hiding a tab
-                            // parks it past the end of a shortened strip.
-                            final selectedSlot = visibleTabs.indexOf(
-                              NavTab.values[widget.selectedTabIndex],
-                            );
-
-                            return Stack(
-                              children: [
-                                // Moving indicator
-                                AnimatedPositioned(
-                                  left:
-                                      (selectedSlot < 0 ? 0 : selectedSlot) *
-                                      32.r,
-                                  top: 4.r,
-                                  bottom: 4.r,
-                                  width: 32.r,
-                                  duration: const Duration(milliseconds: 160),
-                                  curve: Curves.easeInOut,
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .primary,
-                                      borderRadius:
-                                          Theme.of(context)
-                                              .extension<CornerRadii>()
-                                              ?.radiusInternal ??
-                                          BorderRadius.circular(4.r),
-                                    ),
-                                  ),
-                                ),
-                                // Tab buttons
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    for (final tab in visibleTabs)
-                                      SizedBox(
-                                        width: 32.r,
-                                        height: 32.r,
-                                        child: _buildTabButton(
-                                          context,
-                                          tab.index,
-                                          navTabSpec(tab).icon,
-                                          navTabSpec(tab).labelKey
-                                              .getString(context),
-                                          iconData: navTabSpec(tab).iconData,
-                                          tintAsset: navTabSpec(tab).tintIcon,
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                              ],
-                            );
-                          },
+                        child: MainMenuTabStrip(
+                          tabs: visibleNavTabs(configProvider.config),
+                          selected: NavTab.values[widget.selectedTabIndex],
+                          showAirPlay:
+                              defaultTargetPlatform == TargetPlatform.iOS,
+                          tabBuilder: (tab) => _buildTabButton(
+                            context,
+                            tab.index,
+                            navTabSpec(tab).icon,
+                            navTabSpec(tab).labelKey.getString(context),
+                            iconData: navTabSpec(tab).iconData,
+                            tintAsset: navTabSpec(tab).tintIcon,
+                          ),
                         ),
                       ),
                     ),
                     _buildShoulderButton('RB', false),
-                    if (defaultTargetPlatform == TargetPlatform.iOS) ...[
-                      SizedBox(width: 4.r),
-                      const AirPlayMenuButton(),
-                    ],
                   ],
                 ),
               ),
@@ -347,9 +297,9 @@ class HeaderState extends State<Header> {
                   child: NeoGlass(
                     role: GlassSurfaceRole.chrome,
                     borderRadius:
-                        Theme.of(context)
-                            .extension<CornerRadii>()
-                            ?.radiusExternal ??
+                        Theme.of(
+                          context,
+                        ).extension<CornerRadii>()?.radiusExternal ??
                         BorderRadius.circular(14),
                     padding: EdgeInsets.symmetric(
                       horizontal: 10.r,
@@ -357,8 +307,9 @@ class HeaderState extends State<Header> {
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: Theme.of(context).colorScheme.shadow
-                            .withValues(alpha: 0.1),
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.shadow.withValues(alpha: 0.1),
                         blurRadius: 4.r,
                         offset: Offset(2.0.r, 2.0.r),
                       ),
@@ -409,9 +360,11 @@ class HeaderState extends State<Header> {
                         if (Platform.isIOS && _jitActive) ...[
                           SizedBox(width: 8.r),
                           Tooltip(
-                            message: 'JIT ${Rpcs3UiLocale.text(context, 'enabled')}',
+                            message:
+                                'JIT ${Rpcs3UiLocale.text(context, 'enabled')}',
                             child: Semantics(
-                              label: 'JIT ${Rpcs3UiLocale.text(context, 'enabled')}',
+                              label:
+                                  'JIT ${Rpcs3UiLocale.text(context, 'enabled')}',
                               child: Container(
                                 key: const ValueKey('header-jit-active-dot'),
                                 width: 8.r,
