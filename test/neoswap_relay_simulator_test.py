@@ -290,12 +290,21 @@ bool isReadOnly(void* address) {
     [NSThread sleepForTimeInterval:0.05];
     NeoSwap_SetOwnerSessionActive(0, 0);
     NeoSwapRelay_Maintain();
+    // Every diagnostics snapshot taken while the manager retires the capacity
+    // must be coherent: a snapshot that still says ready must still hold the
+    // capacity. Sampling every millisecond covers the retirement window.
     const CFAbsoluteTime idleDeadline = CFAbsoluteTimeGetCurrent() + 2;
     NSDictionary* idle = nil;
+    uint64_t idleSamples = 0;
     do {
       idle = NeoSwapRelay_Diagnostics();
+      ++idleSamples;
+      if ([idle[@"ready"] boolValue] && ![idle[@"retainedCapacityBytes"] unsignedLongLongValue]) {
+        fail(@"production_manager_diagnostics_ready_without_capacity",
+             @{@"sample":@(idleSamples), @"diagnostics":idle}); return;
+      }
       if (![idle[@"retainedCapacityBytes"] unsignedLongLongValue]) break;
-      [NSThread sleepForTimeInterval:0.01];
+      [NSThread sleepForTimeInterval:0.001];
     } while (CFAbsoluteTimeGetCurrent() < idleDeadline);
     if ([idle[@"retainedCapacityBytes"] unsignedLongLongValue] ||
         [idle[@"ready"] boolValue] || [idle[@"preparationRunning"] boolValue]) {
@@ -319,6 +328,8 @@ bool isReadOnly(void* address) {
       self.evidence[@"productionManagerRPCS3Only"] = @YES;
       self.evidence[@"productionManagerHostLoanOwnerEnabled"] = @YES;
       self.evidence[@"productionManagerHostLoanQuotaEnforced"] = @YES;
+      self.evidence[@"productionManagerDiagnosticsCoherent"] = @YES;
+      self.evidence[@"productionManagerIdleSamples"] = @(idleSamples);
       self.evidence[@"productionManager"] = after;
       finish(self.evidence);
     });
@@ -345,9 +356,13 @@ def validate_evidence(report: dict) -> None:
                 'aliasCoherencePassed', 'readOnlyAliasPassed', 'releaseWhileMappedRefused',
                 'staleTokenRefused', 'releaseZeroingPassed', 'releasePassed', 'secondPreparationPassed',
                 'productionManagerPassed', 'productionManagerMainThreadNonblocking', 'productionManagerRPCS3Only',
-                'productionManagerHostLoanOwnerEnabled', 'productionManagerHostLoanQuotaEnforced'):
+                'productionManagerHostLoanOwnerEnabled', 'productionManagerHostLoanQuotaEnforced',
+                'productionManagerDiagnosticsCoherent'):
         if report.get(key) is not True:
             raise RuntimeError('Missing actual relay lifecycle proof: ' + key)
+    samples = report.get('productionManagerIdleSamples')
+    if type(samples) is not int or samples < 1:
+        raise RuntimeError('Idle retirement must be observed through at least one coherent diagnostics sample')
     for key in ('realIPhoneValidated', 'realRPCS3GameplayValidated'):
         if report.get(key) is not False:
             raise RuntimeError('Simulator evidence must not claim physical iPhone/gameplay proof')

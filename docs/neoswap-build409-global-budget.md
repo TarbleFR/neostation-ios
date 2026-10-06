@@ -256,6 +256,14 @@ Reste avant l'IPA : succès du run Core, épinglage (`RPCS3_CORE_HOST_SHA`,
 `RPCS3_CORE_RUN_ID`, paire de remplacement supplémentaire dans le test
 candidat), puis commit `[neoswap-ipa] [rpcs3-host-integration]`.
 
+### 4.4 Défaut confirmé par la CI : instantané de diagnostic incohérent du gestionnaire de relais
+
+- **Symptôme.** `neoswap-relay-check` a échoué sur `012100a8` (run 37500676092) et `3c661845` (run 37506687702) à l'étape `production_manager_idle_retires_rpcs3_capacity` avec, dans le même instantané, `ready: true`, `retainedCapacityBytes: 0` et `capacityBytes: 0`. Les runs sur `3a98417a`, `f6e869d2` et `a8caeae0` ont réussi sans changement des sources du relais : défaut intermittent.
+- **Cause établie dans les sources.** `-[NeoSwapRelayManager diagnostics]` lisait `_ready` sous `_lock`, relâchait le verrou puis prenait l'instantané du backend. La passe d'entretien sans session (`maintain`) met `_ready = NO` sous `_lock` puis appelle `shutdown()` hors verrou ; une lecture entrelacée associait un `ready` lu avant la passe à une capacité lue après son retrait. Le convoi sur le mutex du backend (`collect`, instantané, `shutdown`) rend cet entrelacement probable sur un exécuteur chargé.
+- **Correction.** L'instantané du backend, les diagnostics de pression et l'état d'activation de l'owner 1 sont lus dans la même section critique que les indicateurs du gestionnaire. Tout chemin qui arrête le backend efface `_ready` sous `_lock` avant l'arrêt (entretien, pression mémoire) ou s'exécute avec `_ready` déjà à NO (préparation) ; un instantané ne peut donc plus associer `ready` à une capacité retirée. Aucun ordre de verrous inverse n'existe : le backend ne rappelle jamais le gestionnaire.
+- **Non-régression.** Le harnais Simulateur échantillonne les diagnostics toutes les millisecondes pendant le retrait et échoue à l'étape `production_manager_diagnostics_ready_without_capacity` dès qu'un échantillon est incohérent ; il exporte `productionManagerDiagnosticsCoherent` et `productionManagerIdleSamples`, exigés par `validate_evidence` et présents dans les fixtures des tests Linux.
+- **Limite.** Le harnais ne force pas l'entrelacement, il le couvre statistiquement. La preuve de la correction est l'analyse des verrous ci-dessus et la relecture du code, pas un passage CI vert.
+
 ## 5. Protocole de validation sur iPhone 16 Pro Max (God of War III)
 
 À chaque palier, même appareil, même version du jeu, mêmes réglages, mêmes

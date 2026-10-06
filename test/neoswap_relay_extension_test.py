@@ -395,6 +395,7 @@ class RelayExtensionTests(unittest.TestCase):
                 'productionManagerPassed':True, 'productionManagerMainThreadNonblocking':True,
                 'productionManagerRPCS3Only':True, 'productionManagerCapacityBytes':8*1024**3,
                 'productionManagerHostLoanOwnerEnabled':True, 'productionManagerHostLoanQuotaEnforced':True,
+                'productionManagerDiagnosticsCoherent':True, 'productionManagerIdleSamples':3,
                 'productionManagerWrittenBytes':TARGET_BYTES}
         good['productionManager'] = {'ready':True, 'creatorExitObserved':True, 'state':'ready',
             'capacityBytes':8*1024**3, 'residentBytes':None, 'liveBackingBytes':0,

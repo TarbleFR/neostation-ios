@@ -315,6 +315,13 @@ NSDictionary* capabilityCheck() {
     });
 }
 - (NSDictionary*)diagnostics {
+    // The manager flags and the backend counters are read inside one critical
+    // section. Every path that shuts the backend down clears _ready under
+    // _lock first (idle maintenance, memory pressure) or runs with _ready
+    // already NO (preparation), so one snapshot never pairs ready with
+    // retired capacity. Two separate reads did, when an idle maintenance pass
+    // retired the capacity between them.
+    NeoSwapRelayStats stats{}; stats.struct_size = sizeof(stats); stats.abi_version = NEOSWAP_RELAY_ABI;
     [_lock lock];
     NSMutableDictionary* result = [_details mutableCopy];
     result[@"ready"] = @(_ready);
@@ -322,9 +329,10 @@ NSDictionary* capabilityCheck() {
     result[@"preparationRunning"] = @(_running);
     result[@"fastFootprintRetryCount"] = @(_fastFootprintRetryCount);
     result[@"fastFootprintRetryPending"] = @(_fastFootprintRetryPending);
-    [_lock unlock];
-    NeoSwapRelayStats stats{}; stats.struct_size = sizeof(stats); stats.abi_version = NEOSWAP_RELAY_ABI;
     NeoSwap_GetRelayAPI(1)->snapshot(&stats);
+    const auto pressure = neostation::relay::backend().pressure_diagnostics();
+    const bool hostLoanOwnerEnabled = NeoSwap_GetRelayAPI(1)->enabled(kHostLoans) != 0;
+    [_lock unlock];
     result[@"abi"] = @1;
     result[@"capacityBytes"] = @(stats.capacity_bytes);
     result[@"retainedCapacityBytes"] = @(stats.retained_capacity_bytes);
@@ -341,7 +349,6 @@ NSDictionary* capabilityCheck() {
     result[@"lastOSError"] = @(stats.last_os_error);
     result[@"rejectionCount"] = @(stats.rejection_count);
     result[@"osErrorCount"] = @(stats.os_error_count);
-    const auto pressure = neostation::relay::backend().pressure_diagnostics();
     result[@"pressureTransitions"] = @(pressure.transitions);
     result[@"existingAliasMapsUnderPressure"] = @(pressure.existing_alias_maps);
     result[@"createPressureRefusals"] = @(pressure.create_refusals);
@@ -357,7 +364,7 @@ NSDictionary* capabilityCheck() {
     result[@"hostLoanPeakBackingBytes"] = @(pressure.owner_peak_bytes[kHostLoans]);
     result[@"hostLoanQuotaBytes"] = @(pressure.owner_quota_bytes[kHostLoans]);
     result[@"hostLoanQuotaRefusals"] = @(pressure.quota_refusals);
-    result[@"hostLoanOwnerEnabled"] = @(NeoSwap_GetRelayAPI(1)->enabled(kHostLoans) != 0);
+    result[@"hostLoanOwnerEnabled"] = @(hostLoanOwnerEnabled);
     if (stats.quarantined_fixed_alias_count) {
         result[@"ready"] = @NO;
         result[@"state"] = @"fixed_alias_quarantined";
