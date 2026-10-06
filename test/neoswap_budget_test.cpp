@@ -156,6 +156,31 @@ int main() {
     d = decide(hot, {});
     assert(d.operational_reserve_bytes == 2 * reserve && d.state == State::growing);
 
+    // Hysteresis between growing and holding: admission enters with one growth
+    // quantum of room and leaves only below half of it, so sample jitter or the
+    // bytes a maintenance pass hands back cannot flip the state every tick.
+    Inputs edge = device_inputs();
+    edge.system_usable_bytes = reserve + growth_quantum_bytes - MiB; // 63 MiB of room
+    Decision held = decide(edge, {});
+    assert(held.state == State::holding && !held.host_loans_admitted && !held.donor_growth_admitted);
+    assert(std::strcmp(held.reason, "room_below_growth_quantum") == 0);
+    Decision growing = decide(device_inputs(), {});
+    assert(growing.state == State::growing);
+    Decision stays = decide(edge, growing);
+    assert(stays.state == State::growing && stays.host_loans_admitted && stays.donor_growth_admitted);
+    edge.system_usable_bytes = reserve + growth_hold_quantum_bytes + MiB; // 33 MiB: still growing
+    stays = decide(edge, stays);
+    assert(stays.state == State::growing && stays.host_loans_admitted);
+    edge.system_usable_bytes = reserve + growth_hold_quantum_bytes - MiB; // 31 MiB: leaves
+    held = decide(edge, stays);
+    assert(held.state == State::holding && !held.host_loans_admitted && !held.donor_growth_admitted);
+    edge.system_usable_bytes = reserve + growth_quantum_bytes - MiB; // 63 MiB from holding: not enough
+    held = decide(edge, held);
+    assert(held.state == State::holding);
+    edge.system_usable_bytes = reserve + growth_quantum_bytes; // one full quantum re-admits
+    assert(decide(edge, held).state == State::growing);
+    static_assert(growth_hold_quantum_bytes * 2 == growth_quantum_bytes);
+
     // Saturating sums never wrap for impossible inputs.
     Inputs wrap = device_inputs();
     wrap.relay_guest_live_bytes = UINT64_MAX;

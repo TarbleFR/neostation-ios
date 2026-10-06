@@ -83,7 +83,7 @@ Sorties appliquées :
 | `mobilized_bytes` | relais invité + relais hôte + prêts donneurs : intervalles vivants hors empreinte hôte |
 
 États : `idle`, `warming` (relais absent, donneurs), `growing`, `holding`,
-`shrinking` (hystérésis jusqu'à 1,5 × réserve), `pressure` (fermeture, prêts
+`shrinking` (hystérésis jusqu'à 1,5 × réserve), `growing`/`holding` (admission à un quantum de 64 Mio de marge mesurée, sortie seulement sous 32 Mio, pour qu'une gigue d'échantillon ou les octets rendus par une maintenance ne fassent pas basculer l'état à chaque tick), `pressure` (fermeture, prêts
 vivants conservés). Aucune sortie ne révoque un prêt vivant.
 
 ### 2.2 Prêts hôte adossés au relais (`NeoSwap.cpp`, `Backend.cpp`)
@@ -95,7 +95,7 @@ vivants conservés). Aucune sortie ne révoque un prêt vivant.
   `vm_map` ANYWHERE 64 Kio) → prêt donneur → fichier (≥ 1 Mio uniquement).
   Les refus relais retombent sur les chemins existants ; les images vidéo et
   les petits buffers n'utilisent jamais de fichier.
-- Cache de réemploi borné : 32 entrées, 128 Mio, 2 s. Une libération conserve
+- Cache de réemploi borné : 32 entrées, 128 Mio, 2 s. Les âges sont mesurés sur l'horloge monotone du courtier, celle qui horodate les libérations (`NeoSwap_RelayLoanMaintain(0, …)`) ; le cache n'est vidé qu'en l'absence de session, en `shrinking` ou en `pressure`, jamais en `holding`. Une libération conserve
   la vue mappée et la requête identique suivante la reprend sans parcours du
   backend ni effacement. Vidé à la fin de session et quand l'admission se ferme.
 - Index d'adresses à adressage ouvert (effacement par décalage arrière) :

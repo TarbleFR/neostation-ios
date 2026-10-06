@@ -768,7 +768,13 @@ static NSDictionary* NeoSwapEffectivePermissions() {
 #if defined(NEOSWAP_SHADER_STORAGE)
     NeoSwapStorage_SetBudgetShrink(decision.storage_shrink_requested);
 #endif
-    (void)NeoSwap_RelayLoanMaintain(nowMs, !relayAdmitted);
+    // The reuse cache is drained only without a session or while the system
+    // shrinks. Holding keeps the bounded, aged cache: draining it would hand
+    // room back to the kernel sample and flip the state every tick. Ages use
+    // the broker's own clock (0), the one that stamps releases.
+    const bool drainCache = !NeoSwapExperimentProfile().relay() || decision.state == State::idle ||
+                            decision.state == State::shrinking || decision.state == State::pressure;
+    (void)NeoSwap_RelayLoanMaintain(0, drainCache);
     if (decision.state != previous.state || std::strcmp(decision.reason, previous.reason) != 0) {
         ++_budgetStateChanges;
         // Structural change only, at most four times per second by construction.

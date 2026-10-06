@@ -12,6 +12,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <chrono>
+#include <thread>
 #include <map>
 #include <random>
 #include <vector>
@@ -191,6 +193,15 @@ int main() {
     assert(NeoSwap_RelayLoanMaintain(0, 0) == NEOSWAP_OK && loans().cached_blocks == 1);
     assert(NeoSwap_RelayLoanMaintain(UINT64_MAX / 2, 0) == NEOSWAP_OK && !loans().cached_blocks);
     assert(loans().cache_flushes == 1 && relay().object_count == 2 && os.unmaps == 1 && os.zeros == 1);
+    // now_ms = 0 selects the broker's own monotonic clock, the one that stamps
+    // releases: a parked interval survives an immediate pass and is retired
+    // once the bounded window has really elapsed on that clock.
+    void* parked = allocate(NEOSWAP_GPU_HOST_VISIBLE, 2 * MiB, 16384);
+    assert(parked && api->release(parked) == NEOSWAP_OK && loans().cached_blocks == 1);
+    assert(NeoSwap_RelayLoanMaintain(0, 0) == NEOSWAP_OK && loans().cached_blocks == 1);
+    std::this_thread::sleep_for(std::chrono::milliseconds(2100));
+    assert(NeoSwap_RelayLoanMaintain(0, 0) == NEOSWAP_OK && !loans().cached_blocks);
+    assert(loans().cache_flushes == 2 && relay().object_count == 2 && os.unmaps == 2);
     // Lowering the quota below live refuses new loans but revokes nothing.
     assert(NeoSwap_SetRelayHostLoanPolicy(MiB, 1, 1) == NEOSWAP_OK);
     assert(allocate_result(NEOSWAP_CPU_DATA, MiB) == NEOSWAP_DISABLED);

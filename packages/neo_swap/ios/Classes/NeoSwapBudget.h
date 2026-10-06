@@ -85,6 +85,10 @@ constexpr std::uint64_t reserve_floor_bytes = 256 * MiB;
 constexpr std::uint64_t reserve_ceiling_bytes = 768 * MiB;
 constexpr std::uint64_t guest_reserve_floor_bytes = 1536 * MiB;
 constexpr std::uint64_t growth_quantum_bytes = 64 * MiB;
+// Hysteresis of the growing state: admission starts with one growth quantum
+// of measured room and ends only below half of it, so sample jitter or the
+// bytes a maintenance pass hands back cannot flip the state every tick.
+constexpr std::uint64_t growth_hold_quantum_bytes = growth_quantum_bytes / 2;
 constexpr std::uint64_t small_cpu_minimum_room_bytes = 128 * MiB;
 constexpr std::uint64_t legacy_donor_floor_bytes = 512 * MiB;
 constexpr std::uint64_t legacy_donor_reserve_bytes = 128 * MiB;
@@ -133,6 +137,8 @@ constexpr Decision decide(const Inputs& in, const Decision& previous) noexcept {
     }
     const std::uint64_t relay_free_for_host = in.relay_capacity_bytes > out.guest_reserve_bytes
         ? in.relay_capacity_bytes - out.guest_reserve_bytes : 0;
+    const std::uint64_t admission_room = previous.state == State::growing
+        ? growth_hold_quantum_bytes : growth_quantum_bytes;
     if (in.relay_ready) {
         // Grow only by measured room; a ceiling never exceeds what the relay
         // can still back after the guest reserve.
@@ -140,7 +146,7 @@ constexpr Decision decide(const Inputs& in, const Decision& previous) noexcept {
         out.host_loan_quota_bytes = desired < relay_free_for_host ? desired : relay_free_for_host;
         if (out.host_loan_quota_bytes < in.relay_host_live_bytes)
             out.host_loan_quota_bytes = in.relay_host_live_bytes;
-        out.host_loans_admitted = in.system_valid && out.growth_room_bytes >= growth_quantum_bytes &&
+        out.host_loans_admitted = in.system_valid && out.growth_room_bytes >= admission_room &&
                                   out.host_loan_quota_bytes > in.relay_host_live_bytes;
     }
     // Donors are the fallback backing. While relay host loans are admitted the
@@ -153,7 +159,7 @@ constexpr Decision decide(const Inputs& in, const Decision& previous) noexcept {
         out.donor_floor_bytes = legacy_donor_floor_bytes;
         out.donor_reserve_bytes = legacy_donor_reserve_bytes;
     }
-    out.donor_growth_admitted = in.system_valid && out.growth_room_bytes >= growth_quantum_bytes;
+    out.donor_growth_admitted = in.system_valid && out.growth_room_bytes >= admission_room;
     out.small_cpu_admitted = in.system_valid && in.system_usable_bytes >= small_cpu_minimum_room_bytes &&
         ((in.relay_ready && out.host_loans_admitted) || in.donors_available);
     const bool was_shrinking = previous.state == State::shrinking || previous.state == State::pressure;
@@ -183,8 +189,8 @@ constexpr Decision decide(const Inputs& in, const Decision& previous) noexcept {
         out.reason = "measured_room_available";
     } else {
         out.state = State::holding;
-        out.reason = out.growth_room_bytes < growth_quantum_bytes ? "room_below_growth_quantum"
-                                                                   : "relay_host_capacity_exhausted";
+        out.reason = out.growth_room_bytes < admission_room ? "room_below_growth_quantum"
+                                                            : "relay_host_capacity_exhausted";
     }
     return out;
 }

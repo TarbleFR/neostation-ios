@@ -1088,6 +1088,9 @@ extern "C" int NeoSwap_SetRelayHostLoanPolicy(uint64_t quota_bytes, int admitted
 }
 extern "C" int NeoSwap_RelayLoanMaintain(uint64_t now_ms, int flush_all) {
 #if defined(NEOSWAP_RELAY)
+    // Releases stamp cached intervals with the broker's monotonic clock; ages
+    // are only meaningful against that same clock, so 0 selects it.
+    if (!now_ms) now_ms = monotonic_ms();
     auto& b = broker(); std::lock_guard guard(b.mutex);
     return relay_loan_maintain_locked(b, now_ms, flush_all != 0 ||
         !b.relay_loans.admitted.load(std::memory_order_acquire));

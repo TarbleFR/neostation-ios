@@ -98,6 +98,8 @@ NEOSWAP_PUBLIC int NeoSwap_WaitForDonationReady(uint64_t minimum_bytes, uint32_t
 NEOSWAP_PUBLIC int NeoSwap_SetRelayHostLoanPolicy(uint64_t quota_bytes, int admitted, int video_frames);
 // Retires cached (released, still mapped) loans older than the bounded reuse
 // window, or every cached loan when flush_all is set. Maintenance only.
+// now_ms = 0 uses the broker's own monotonic clock, the one that stamps
+// releases; tests may pass an explicit value on that same base.
 NEOSWAP_PUBLIC int NeoSwap_RelayLoanMaintain(uint64_t now_ms, int flush_all);
 NEOSWAP_PUBLIC int NeoSwap_RelayLoanSnapshot(NeoSwapRelayLoanStats* stats);
 #ifdef __cplusplus
