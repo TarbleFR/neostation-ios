@@ -13,8 +13,8 @@ final class NeoPlayEncodedMediaTests: XCTestCase {
         muxer.onSegment = { bytes, initial, duration in lock.lock(); parts.append(Part(initial: initial, duration: duration, data: bytes.base64EncodedString())); lock.unlock() }
         for frame in 0..<150 {
             let time = CMTime(value: Int64(frame + 300), timescale: 30)
-            muxer.append(try video(frame: frame, time: time), video: true)
-            muxer.append(try audio(frame: frame, time: time), video: false)
+            muxer.append(try makeVideo(frame: frame, time: time), video: true)
+            muxer.append(try makeAudio(frame: frame, time: time), video: false)
             Thread.sleep(forTimeInterval: 1.0 / 30.0)
         }
         let finished = expectation(description: "Encoder drained")
@@ -60,7 +60,7 @@ final class NeoPlayEncodedMediaTests: XCTestCase {
         XCTAssertEqual(reader.status, .completed)
         return (start, end, count)
     }
-    private func video(frame: Int, time: CMTime) throws -> CMSampleBuffer {
+    func makeVideo(frame: Int, time: CMTime) throws -> CMSampleBuffer {
         var pixel: CVPixelBuffer?
         guard CVPixelBufferCreate(kCFAllocatorDefault, 640, 480, kCVPixelFormatType_32BGRA, [kCVPixelBufferIOSurfacePropertiesKey: [:]] as CFDictionary, &pixel) == kCVReturnSuccess, let pixel else { throw NPError.encoder }
         CVPixelBufferLockBaseAddress(pixel, [])
@@ -75,7 +75,7 @@ final class NeoPlayEncodedMediaTests: XCTestCase {
         guard CMSampleBufferCreateReadyWithImageBuffer(allocator: kCFAllocatorDefault, imageBuffer: pixel, formatDescription: format, sampleTiming: &info, sampleBufferOut: &sample) == noErr, let sample else { throw NPError.encoder }
         return sample
     }
-    private func audio(frame: Int, time: CMTime) throws -> CMSampleBuffer {
+    func makeAudio(frame: Int, time: CMTime) throws -> CMSampleBuffer {
         var samples = [Int16](repeating: 0, count: 1600 * 2)
         for i in 0..<1600 { let value = Int16(sin(2 * .pi * 440 * Double(frame * 1600 + i) / 48000) * 8000); samples[i*2] = value; samples[i*2+1] = value }
         let data = samples.withUnsafeBytes { Data($0) }

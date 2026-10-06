@@ -42,7 +42,7 @@ final class NPController {
         startTimer = Timer.scheduledTimer(withTimeInterval: 40, repeats: false) { _ in fail(.timeout) }
         if id.hasPrefix("windows:"), let service = discovery.services[id], let host = service.hostName {
             let transport = NPWindowsTransport(); windows = transport; transport.onError = fail; transport.onPlayback = playing
-            transport.onReady = { [weak self] size in DispatchQueue.main.async { self?.startCapture(token: token, size: size, castRoute: false, stopLabel: stopLabel) } }
+            transport.onReady = { [weak self, weak transport] size in DispatchQueue.main.async { self?.startCapture(token: token, size: size, castRoute: false, stopLabel: stopLabel, frames: transport?.framesSupported == true) } }
             transport.onDisplay = { [weak self] size in DispatchQueue.main.async { guard let self, self.fence.accepts(token) else { return }; self.capture?.updateDisplay(size) } }
             transport.connect(host: host, port: service.port, pin: pin)
         } else if id.hasPrefix("cast:") {
@@ -60,12 +60,14 @@ final class NPController {
             cast.connect(id)
         } else { stop(error: .receiverGone); throw NPError.receiverGone }
     }
-    private func startCapture(token: Int, size: NPSize, castRoute: Bool, stopLabel: String) {
+    private func startCapture(token: Int, size: NPSize, castRoute: Bool, stopLabel: String, frames: Bool = false) {
         guard fence.accepts(token), capture == nil else { return }
-        let capture = NPCapture(); self.capture = capture; capture.display = size; capture.cast = castRoute
+        NPLog.record("session.protocol", ["frames": frames])
+        let capture = NPCapture(); self.capture = capture; capture.display = size; capture.cast = castRoute; capture.frames = frames
         capture.onError = { [weak self] error in DispatchQueue.main.async { guard let self, self.fence.accepts(token) else { return }; self.stop(error: error) } }
         capture.onStarted = { [weak self] in guard let self, self.fence.accepts(token) else { return }; self.state = "capturing"; self.showOverlay(label: stopLabel); self.publish() }
         let store = self.store, windows = self.windows
+        capture.onPacket = { packet in windows?.sendPacket(packet) }
         capture.onSegment = { [weak self] data, initial, duration in
             do {
                 if let store { if initial { try store.initialize(data) } else { try store.append(data, duration: duration) } }

@@ -3,8 +3,10 @@ import ReplayKit
 import UIKit
 
 // This class owns only its ReplayKit capture and encoder. No emulator, JIT, VPN or audio-session setters.
+// Two encoders: NPFrameEncoder (v2, per-picture packets, Windows receivers that
+// advertise `frames`) and NPMuxer (v1 fMP4 segments, cast routes and old receivers).
 final class NPCapture: NSObject, RPScreenRecorderDelegate {
-    private let queue = DispatchQueue(label: "neoplay.capture", qos: .userInitiated)
+    private let queue = DispatchQueue(label: "neoplay.capture", qos: .userInteractive)
     private let videoSlots = DispatchSemaphore(value: 3)
     private let audioSlots = DispatchSemaphore(value: 16)
     private let outputSlots = DispatchSemaphore(value: 8)
@@ -12,17 +14,20 @@ final class NPCapture: NSObject, RPScreenRecorderDelegate {
     private var activeDisplay = NPSize(width: 1280, height: 720)
     private var displayRevision = 0
     private var muxer: NPMuxer?
+    private var encoder: NPFrameEncoder?
     private var requested = false // main-thread state
     private var ownsRecorder = false
     private var pending = false
     private var previousMicrophone = false
     private weak var previousDelegate: RPScreenRecorderDelegate?
     var onSegment: ((Data, Bool, Double) -> Void)?
+    var onPacket: ((Data) -> Void)?
     var onError: ((NPError) -> Void)?
     var onStarted: (() -> Void)?
     var onStopped: (() -> Void)?
     var display = NPSize(width: 1280, height: 720)
     var cast = false
+    var frames = false // receiver accepts the v2 frame protocol
     private var lastSampleAt = Date()
     private var watchdog: Timer?
     func start() {
@@ -30,7 +35,7 @@ final class NPCapture: NSObject, RPScreenRecorderDelegate {
         guard !pending, !ownsRecorder, recorder.isAvailable, !recorder.isRecording else { onError?(.unavailable); return }
         requested = true; pending = true; previousMicrophone = recorder.isMicrophoneEnabled; previousDelegate = recorder.delegate
         recorder.isMicrophoneEnabled = false; recorder.delegate = self
-        let display = self.display, cast = self.cast
+        let display = self.display, cast = self.cast, perFrame = self.frames && !self.cast
         queue.sync { generation += 1; activeDisplay = display; lastSampleAt = Date() }
         let token = queue.sync { generation }
         recorder.startCapture(handler: { [weak self] sample, kind, error in
@@ -45,7 +50,23 @@ final class NPCapture: NSObject, RPScreenRecorderDelegate {
                 do {
                     if kind == .video, let image = NPMuxer.image(sample) {
                         let size = NPSize(width: Int(image.extent.width), height: Int(image.extent.height))
-                        if self.muxer?.source != size {
+                        if perFrame {
+                            if self.encoder?.source != size {
+                                self.encoder?.cancel()
+                                let encoder = try NPFrameEncoder(source: size, display: self.activeDisplay); self.encoder = encoder
+                                encoder.onError = { [weak self] error in DispatchQueue.main.async { if self?.requested == true { self?.onError?(error) } } }
+                                // VideoToolbox calls back on its own thread; the packet order is preserved by hopping to the capture queue.
+                                encoder.onPacket = { [weak self, weak encoder] packet in
+                                    guard let self else { return }
+                                    guard self.outputSlots.wait(timeout: .now()) == .success else { DispatchQueue.main.async { self.onError?(.backpressure) }; return }
+                                    self.queue.async {
+                                        defer { self.outputSlots.signal() }
+                                        guard token == self.generation, self.encoder === encoder else { return }
+                                        self.onPacket?(packet)
+                                    }
+                                }
+                            }
+                        } else if self.muxer?.source != size {
                             self.muxer?.cancel()
                             let muxer = try NPMuxer(source: size, display: self.activeDisplay, cast: cast); self.muxer = muxer
                             muxer.onError = { [weak self] error in DispatchQueue.main.async { if self?.requested == true { self?.onError?(error) } } }
@@ -60,7 +81,7 @@ final class NPCapture: NSObject, RPScreenRecorderDelegate {
                             }
                         }
                     }
-                    self.muxer?.append(sample, video: kind == .video)
+                    if perFrame { self.encoder?.append(sample, video: kind == .video) } else { self.muxer?.append(sample, video: kind == .video) }
                 } catch { DispatchQueue.main.async { if self.requested { self.onError?(.encoder) } } }
             }
         }, completionHandler: { [weak self] error in
@@ -84,8 +105,11 @@ final class NPCapture: NSObject, RPScreenRecorderDelegate {
             self.queue.asyncAfter(deadline: .now() + 0.5) {
                 guard self.generation == token, self.displayRevision == revision else { return }
                 self.activeDisplay = size
-                guard let muxer = self.muxer, NPPolicy.encodeSize(source: muxer.source, display: size) != muxer.output else { return }
                 // Only restart the encoder after a settled viewport change, never the game.
+                if let encoder = self.encoder, NPPolicy.encodeSize(source: encoder.source, display: size) != encoder.output {
+                    NPLog.record("display.resize", ["width": size.width, "height": size.height]); encoder.cancel(); self.encoder = nil
+                }
+                guard let muxer = self.muxer, NPPolicy.encodeSize(source: muxer.source, display: size) != muxer.output else { return }
                 NPLog.record("display.resize", ["width": size.width, "height": size.height])
                 muxer.cancel(); self.muxer = nil
             }
@@ -93,7 +117,7 @@ final class NPCapture: NSObject, RPScreenRecorderDelegate {
     }
     func stop() {
         requested = false; watchdog?.invalidate(); watchdog = nil
-        queue.async { self.generation += 1; self.muxer?.cancel(); self.muxer = nil }
+        queue.async { self.generation += 1; self.muxer?.cancel(); self.muxer = nil; self.encoder?.cancel(); self.encoder = nil }
         if pending { return } // The late start completion stops its own recorder before another session can start.
         guard ownsRecorder else { onStopped?(); return }; ownsRecorder = false
         RPScreenRecorder.shared().stopCapture { [weak self] _ in DispatchQueue.main.async { self?.restoreRecorder(); self?.onStopped?() } }

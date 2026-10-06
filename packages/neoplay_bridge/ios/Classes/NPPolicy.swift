@@ -5,10 +5,22 @@ enum NPPolicy {
     static let version = 1
     static let maxPacket = 4 * 1024 * 1024
     static let maxQueuedBytes = 8 * 1024 * 1024
+    // Picture quality is decided here, on the sender, and nowhere else.
+    //
+    // The encoded size no longer follows the receiver window: a 1280-px-wide
+    // window used to halve the iPhone picture *and* its bit budget (w*h*6 ->
+    // 4.5 Mbit/s), which is what "mediocre" looked like. The receiver scales a
+    // full picture down losslessly; it cannot invent detail from a small one.
     static func encodeSize(source: NPSize, display: NPSize, cap: NPSize = NPSize(width: 1920, height: 1080)) -> NPSize {
-        guard source.width > 0, source.height > 0, display.width > 0, display.height > 0 else { return NPSize(width: 1280, height: 720) }
-        let scale = min(1.0, Double(min(display.width, cap.width)) / Double(source.width), Double(min(display.height, cap.height)) / Double(source.height))
+        guard source.width > 0, source.height > 0 else { return NPSize(width: 1280, height: 720) }
+        let scale = min(1.0, Double(cap.width) / Double(source.width), Double(cap.height) / Double(source.height))
         return NPSize(width: max(2, Int(Double(source.width) * scale) / 2 * 2), height: max(2, Int(Double(source.height) * scale) / 2 * 2))
+    }
+    // bits per second for a local Wi-Fi link: 12 bit/pixel/s (1920x886 -> 20 Mbit/s,
+    // 1280x720 -> 11 Mbit/s), between 8 and 30 Mbit/s. AirPlay mirroring sits in the
+    // same range. Chromecast keeps a lower cap because its decoders and links are slower.
+    static func bitrate(for size: NPSize, cast: Bool = false) -> Int {
+        min(cast ? 12_000_000 : 30_000_000, max(8_000_000, size.width * size.height * 12))
     }
 }
 

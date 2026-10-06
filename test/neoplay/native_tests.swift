@@ -38,6 +38,13 @@ final class NeoPlayNativeTests: XCTestCase {
     }
     func testGeometryKeepsAspectAndBounds() {
         XCTAssertEqual(NPPolicy.encodeSize(source: NPSize(width:640,height:480), display:NPSize(width:1920,height:1080)), NPSize(width:640,height:480))
+        // A small receiver window must not shrink the picture: an iPhone 15 Pro in landscape
+        // mirrored into a 1280-px window still encodes at the 1920 cap.
+        XCTAssertEqual(NPPolicy.encodeSize(source: NPSize(width:2556,height:1179), display:NPSize(width:1280,height:588)), NPSize(width:1920,height:884))
+        XCTAssertEqual(NPPolicy.bitrate(for: NPSize(width:1920,height:884)), 20_367_360)
+        XCTAssertEqual(NPPolicy.bitrate(for: NPSize(width:640,height:480)), 8_000_000)
+        XCTAssertEqual(NPPolicy.bitrate(for: NPSize(width:1920,height:1080)), 24_883_200)
+        XCTAssertEqual(NPPolicy.bitrate(for: NPSize(width:1280,height:720), cast: true), 11_059_200)
         let wide = NPPolicy.encodeSize(source: NPSize(width:3840,height:2160), display:NPSize(width:3440,height:1440))
         XCTAssertEqual(wide, NPSize(width:1920,height:1080))
         let portrait = NPPolicy.encodeSize(source: NPSize(width:1080,height:1920), display:NPSize(width:1920,height:1080))
