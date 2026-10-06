@@ -38,7 +38,7 @@ final class NPFrameEncoder {
             encoderSpecification: nil, imageBufferAttributes: nil, compressedDataAllocator: nil, outputCallback: nil, refcon: nil, compressionSessionOut: &created)
         guard status == noErr, let session = created else { NPLog.record("frames.create", ["status": Int(status)]); throw NPError.encoder }
         self.session = session
-        let bitrate = min(12_000_000, max(2_000_000, output.width * output.height * 6))
+        let bitrate = NPPolicy.bitrate(for: output)
         let properties: [CFString: Any] = [
             kVTCompressionPropertyKey_RealTime: true,
             kVTCompressionPropertyKey_ProfileLevel: kVTProfileLevel_H264_High_AutoLevel,

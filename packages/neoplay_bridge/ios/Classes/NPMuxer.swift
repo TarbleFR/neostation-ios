@@ -29,7 +29,7 @@ final class NPMuxer: NSObject, AVAssetWriterDelegate {
         writer.initialSegmentStartTime = .zero
         video = AVAssetWriterInput(mediaType: .video, outputSettings: [
             AVVideoCodecKey: AVVideoCodecType.h264, AVVideoWidthKey: output.width, AVVideoHeightKey: output.height,
-            AVVideoCompressionPropertiesKey: [AVVideoAverageBitRateKey: min(12000000, max(2000000, output.width * output.height * 6)), AVVideoProfileLevelKey: AVVideoProfileLevelH264BaselineAutoLevel, AVVideoAllowFrameReorderingKey: false, AVVideoMaxKeyFrameIntervalDurationKey: interval, AVVideoExpectedSourceFrameRateKey: 60]
+            AVVideoCompressionPropertiesKey: [AVVideoAverageBitRateKey: NPPolicy.bitrate(for: output, cast: cast), AVVideoProfileLevelKey: cast ? AVVideoProfileLevelH264BaselineAutoLevel : AVVideoProfileLevelH264HighAutoLevel, AVVideoAllowFrameReorderingKey: false, AVVideoMaxKeyFrameIntervalDurationKey: interval, AVVideoExpectedSourceFrameRateKey: 60]
         ])
         audio = AVAssetWriterInput(mediaType: .audio, outputSettings: [AVFormatIDKey: kAudioFormatMPEG4AAC, AVSampleRateKey: 48000, AVNumberOfChannelsKey: 2, AVEncoderBitRateKey: 128000])
         video.expectsMediaDataInRealTime = true; audio.expectsMediaDataInRealTime = true
