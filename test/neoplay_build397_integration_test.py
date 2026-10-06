@@ -10,11 +10,24 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 BASE = 'd3d5681cc8b10af1cd503ea72a4886c82faaa3ef'
 FEATURE = 'f4b65f09d5a71ad2e0c72ab347b3df285c98b0f7'
+# Build409 (maintainer decision of 6 October 2026): the NeoPlay v2 frame
+# protocol revision is the reviewed bridge. Every bridge file must be
+# byte-identical to it; it adds exactly one file to the feature revision and
+# changes four more, all other files still match the feature revision.
+FRAMES = 'fb744a8e5eb50abc8fb03837a9398b9100bd25e6'
+FRAMES_ADDED_FILES = frozenset({'packages/neoplay_bridge/ios/Classes/NPFrameEncoder.swift'})
+FRAMES_CHANGED_FILES = frozenset({
+    'packages/neoplay_bridge/ios/Classes/NPCapture.swift',
+    'packages/neoplay_bridge/ios/Classes/NPMuxer.swift',
+    'packages/neoplay_bridge/ios/Classes/NPPolicy.swift',
+    'packages/neoplay_bridge/ios/Classes/NPWindowsTransport.swift',
+})
 # The original NeoPlay transport, encoders and all other native files remain
 # byte-identical. Only the audited discovery retry/error-lifecycle delta below
 # replaces the feature revision's postimage; arbitrary further edits still fail.
 REVIEWED_NEOPLAY_DISCOVERY_POSTIMAGES = {
-    'packages/neoplay_bridge/ios/Classes/NPController.swift': '6f440858413c73b5bf98422544bd400bf26c09ac0c9180827a03b88683ad32be',
+    # NPController also carries the v2 negotiation (frames flag, packet route).
+    'packages/neoplay_bridge/ios/Classes/NPController.swift': 'fa57684a8741ef392611a191a7a505b8a28b3db7b3925f4e70ae0ca94432372a',
     'packages/neoplay_bridge/ios/Classes/NPDiscovery.swift': 'f874fb82b909f7344e00a6ec0f02c446613e20b0fb17b990e015bb124f1eaa19',
     'packages/neoplay_bridge/ios/Classes/NPGoogleCast.swift': '20cb1c77db74c2d6456d74025502ae766abad278b7b14e8962a29b2a91f3b846',
 }
@@ -189,14 +202,18 @@ class Build398Integration(unittest.TestCase):
         self.assertIn('python3 build-utils/validate_neoswap_ipa.py', text)
         self.assertNotIn('gh release create', text)
     def test_native_neoplay_code_is_the_reviewed_feature_source(self):
-        files = subprocess.check_output(['git','ls-tree','-r','--name-only',FEATURE,'--','packages/neoplay_bridge'],cwd=ROOT).decode().splitlines()
-        self.assertTrue(files)
+        feature_files = subprocess.check_output(['git','ls-tree','-r','--name-only',FEATURE,'--','packages/neoplay_bridge'],cwd=ROOT).decode().splitlines()
+        files = subprocess.check_output(['git','ls-tree','-r','--name-only',FRAMES,'--','packages/neoplay_bridge'],cwd=ROOT).decode().splitlines()
+        self.assertTrue(feature_files)
+        self.assertEqual(set(files), set(feature_files) | FRAMES_ADDED_FILES, 'The v2 revision adds exactly the frame encoder')
         actual_files = {str(path.relative_to(ROOT)) for path in (ROOT / 'packages/neoplay_bridge').rglob('*')
                         if path.is_file() and not any(part.startswith('.') for part in path.relative_to(ROOT).parts)}
         self.assertEqual(actual_files, set(files), 'No unreviewed native bridge files may be added or removed')
         self.assertTrue(set(REVIEWED_NEOPLAY_DISCOVERY_POSTIMAGES).issubset(files))
         for file in files:
             actual = (ROOT/file).read_bytes()
+            # Every bridge file is byte-identical to the reviewed v2 revision.
+            self.assertEqual(actual, original(file, FRAMES), file)
             if file in REVIEWED_NEOPLAY_DISCOVERY_POSTIMAGES:
                 self.assertEqual(hashlib.sha256(actual).hexdigest(), REVIEWED_NEOPLAY_DISCOVERY_POSTIMAGES[file], file)
                 continue
@@ -206,7 +223,13 @@ class Build398Integration(unittest.TestCase):
                 addition = b'  s.static_framework = true\n'
                 self.assertEqual(actual.count(addition), 1)
                 actual = actual.replace(addition, b'')
+            if file in FRAMES_ADDED_FILES or file in FRAMES_CHANGED_FILES:
+                continue  # the v2 encoder, capture route, bitrate policy and transport
             self.assertEqual(actual, original(file, FEATURE), file)
+        encoder = (ROOT / 'packages/neoplay_bridge/ios/Classes/NPFrameEncoder.swift').read_text()
+        self.assertIn('final class NPFrameEncoder', encoder)
+        self.assertIn('kVTCompressionPropertyKey_AllowFrameReordering: false', encoder)
+        self.assertNotIn('NSLocalizedString', encoder)
         workflow = (ROOT / '.github/workflows/neoplay-check.yml').read_text()
         self.assertIn('python3 test/neoplay_pod_graph_test.py', workflow)
         self.assertIn('build/neoplay-native/pod-graph.json', workflow)
@@ -224,6 +247,7 @@ class Build398Integration(unittest.TestCase):
     def test_candidate_identity_remains_honest(self):
         data = json.loads((ROOT/'native/import-memory-candidate.json').read_text())
         self.assertEqual(data['target_build'], 409)
+        self.assertEqual(data['neoplay_integration']['frames_protocol_source'], FRAMES)
         self.assertEqual(data['neoplay_integration']['preserved_neoswap_base'], BASE)
         self.assertEqual(data['neoplay_integration']['source'], FEATURE)
         self.assertFalse(data['neoplay_integration']['physical_device_validation'])

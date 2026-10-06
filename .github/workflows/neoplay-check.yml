@@ -35,6 +35,11 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
+      - name: Fetch the reviewed NeoPlay reference revisions
+        # The Build397 feature revision is no longer reachable from a branch;
+        # the integration gate compares the bridge with it and with the v2
+        # frame-protocol revision by exact SHA, so fetch both explicitly.
+        run: git fetch --no-tags origin f4b65f09d5a71ad2e0c72ab347b3df285c98b0f7 fb744a8e5eb50abc8fb03837a9398b9100bd25e6
       - name: Validate all NeoPlay languages and dialog lifecycle
         run: |
           dart analyze lib/l10n/neoplay_companion_locale.dart lib/widgets/neoplay_game_hud_host.dart lib/widgets/neoplay_apple_tv_card.dart lib/l10n/neoplay_locale.dart lib/widgets/neoplay_dialog.dart packages/neoplay_bridge/lib/neoplay_bridge.dart lib/screens/settings_screen/new_settings_options/tools_settings_content.dart
