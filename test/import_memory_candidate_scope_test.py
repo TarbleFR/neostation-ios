@@ -409,6 +409,8 @@ PRODUCTION_FILES |= {
     'packages/neoplay_bridge/ios/Classes/NPControllerBatteryMonitor.swift',
     'packages/neoplay_bridge/ios/Classes/NPDiagnostics.swift',
     'packages/neoplay_bridge/ios/Classes/NPDiscovery.swift',
+    # Build409: NeoPlay v2 frame protocol (maintainer decision of 6 October 2026).
+    'packages/neoplay_bridge/ios/Classes/NPFrameEncoder.swift',
     'packages/neoplay_bridge/ios/Classes/NPGameHUD.swift',
     'packages/neoplay_bridge/ios/Classes/NPGameHUDAnchor.swift',
     'packages/neoplay_bridge/ios/Classes/NPGoogleCast.swift',
@@ -438,6 +440,7 @@ SUPPORT_FILES |= {
     'docs/neoplay/validation-2026-10-02.json',
     'test/neoplay/companion_tests.swift',
     'test/neoplay/encoded_media_tests.swift',
+    'test/neoplay/frame_encoder_tests.swift',
     'test/neoplay/native_tests.swift',
     'test/neoplay_build397_integration_test.py',
     'test/neoplay_companion_contract_test.py',

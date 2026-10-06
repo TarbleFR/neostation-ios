@@ -228,6 +228,19 @@ figées, corrigés à la source dans le commit suivant :
   `swap`, l'intégration ARMSX2 (octet pour octet sur `424a360`) et Build 409 ;
   chaînes Build 409 / Build 401 / run `37135708903`.
 
+### 4.3 NeoPlay dans la 409 (décision du mainteneur du 6 octobre 2026)
+
+La 409 ne contenait NeoPlay qu'au niveau du Build 401. Les Builds 402 à 408
+(branche `feature/fast-candidate`, supprimée, dernier commit `6674c2a`) ne
+sont pas dans `experimental`. Sur décision du mainteneur, la branche
+`neoplay-v2-frames` (trois commits : encodeur VideoToolbox par image,
+PCM brut, négociation récepteur par l'indicateur `frames`, taille d'encodage
+indépendante de la fenêtre du récepteur, 12 bit/px/s, profil High sur la
+voie Windows ; dix fichiers, aucune entrée Core) est fusionnée dans
+`experimental`. Aucune chaîne visible n'est ajoutée (journaux techniques
+`NPLog` seulement), donc aucune traduction nouvelle. Les gates NeoPlay et
+le manifeste candidat prennent cette révision comme référence du bridge.
+
 Reste avant l'IPA : succès du run Core, épinglage (`RPCS3_CORE_HOST_SHA`,
 `RPCS3_CORE_RUN_ID`, paire de remplacement supplémentaire dans le test
 candidat), puis commit `[neoswap-ipa] [rpcs3-host-integration]`.
