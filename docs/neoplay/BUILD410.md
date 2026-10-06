@@ -2,6 +2,13 @@
 
 Candidat privé. Aucune validation sur iPhone, Windows physique, Chromecast ou Apple TV n'est revendiquée par cette build ; les preuves sont celles de la CI (harnais natif sur Simulateur iOS 18, récepteur Node et Edge sur Windows).
 
+## Identité de l'IPA privée emballée
+
+- Commit `f5478b036878e5727a035086faff97d0581931cf` (branche `experimental`), workflow `neoswap-ipa.yml` run `37541424599`, artefact `NeoStation-NeoSwap-NeoPlay-Build-410-f5478b036878e5727a035086faff97d0581931cf` (id `11449888291`, expiration 2026-10-09T23:18Z).
+- `NeoStation.ipa` SHA-256 `89fa984e0a1dca6b03378c28d7c8f1bbc5161271f799b000d49140f647751e4f` (144 Mo).
+- Preuves du même commit : `neoplay-check` run `37541424591` (harnais natif 22 tests, 210/210 images émises à la retraite d'un encodeur ; lecture Edge `frames.json` : 191 images présentées, 1 reconfiguration en place, 0 récupération de décodeur, 1 saut d'horloge au changement de palier, PCM audible), les neuf workflows de preuve verts.
+- Révisions intermédiaires du cycle (non emballées) : `1169b0da` (harnais : 194/210 images, correctif du vidage VideoToolbox), `16d35489` (page sans `presenter.mjs` servi), `82d65f40` (second moteur créé à chaque configuration), `483b76f4` (diagnostics de la lecture Edge).
+
 ## Son sans grésillement (protocole « frames » v2 activé de bout en bout)
 
 Défauts établis dans les sources de la Build 409 :
