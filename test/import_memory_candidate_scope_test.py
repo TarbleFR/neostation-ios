@@ -526,6 +526,10 @@ IPA_WORKFLOW_BUILD409_LINES = (
      "      BUILD_NUMBER: ${{ inputs.build_number || '409' }}\n"),
     ('      ARTIFACT_NAME: NeoStation-NeoSwap-NeoPlay-Build-401-${{ github.sha }}\n',
      '      ARTIFACT_NAME: NeoStation-NeoSwap-NeoPlay-Build-409-${{ github.sha }}\n'),
+    # The Build409 Core (run 37491042733 on 1a307a0) replaces the Build401 pin.
+    ('      RPCS3_CORE_HOST_SHA: 7bcc52854d6f5bd9c4bb67acdff676f74eee8318\n',
+     '      RPCS3_CORE_HOST_SHA: 1a307a0f7a353c48496c438d9b8ac7c8260600f7\n'),
+    ("      RPCS3_CORE_RUN_ID: '37120654954'\n", "      RPCS3_CORE_RUN_ID: '37491042733'\n"),
 )
 for path in ARMSX2_INTEGRATION_FILES:
     reviewed = subprocess.check_output(['git', 'show', ARMSX2_INTEGRATION_SHA + ':' + path], cwd=ROOT)
@@ -647,8 +651,11 @@ for workflow_path in ('.github/workflows/neoswap-ipa.yml', '.github/workflows/io
     if workflow_path == '.github/workflows/neoswap-ipa.yml':
         # Related owned-GLSL consumer requires this exact newly built Core;
         # success and complete identity remain mandatory before IPA assembly.
-        assert re.findall(r'(?m)^      RPCS3_CORE_HOST_SHA: (.+)$', workflow) == ['7bcc52854d6f5bd9c4bb67acdff676f74eee8318']
-        assert re.findall(r'(?m)^      RPCS3_CORE_RUN_ID: (.+)$', workflow) == ["'37120654954'"]
+        # Build409 Core: built from 1a307a0 (NeoSwapClient.h kinds 3/4, Vulkan
+        # host-visible import, VDEC frame loans); its inputs are byte-identical
+        # at every later host commit, which neo_swap_core_pin_test verifies.
+        assert re.findall(r'(?m)^      RPCS3_CORE_HOST_SHA: (.+)$', workflow) == ['1a307a0f7a353c48496c438d9b8ac7c8260600f7']
+        assert re.findall(r'(?m)^      RPCS3_CORE_RUN_ID: (.+)$', workflow) == ["'37491042733'"]
         assert "assert result['head_sha']==os.environ['RPCS3_CORE_HOST_SHA']" in workflow
         assert "assert result['conclusion']=='success'" in workflow
         assert 'validate_core_input_identity(identity)' in workflow
