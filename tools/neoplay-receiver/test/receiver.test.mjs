@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { WebSocket } from 'ws';
+import { readFile } from 'node:fs/promises';
 import { createReceiver } from '../server.mjs';
 import { fit, displayLimits, validatePacket, mp4Mime } from '../protocol.mjs';
 import { configPacket, videoPacket, audioPacket } from './packets.mjs';
@@ -12,6 +13,21 @@ test('aspect-fit: 4:3, ultrawide, portrait, and invalid dimensions', () => {
   assert.equal(fit(1080,1920,1920,1080).height,1080);
   assert.throws(() => fit(0,480,1920,1080));
   assert.equal(displayLimits({width:Infinity, height:40000}).height,4320);
+});
+test('the relay serves the page and every module it imports, directly or through the worklet', async t => {
+  const receiver = await createReceiver({port:0,host:'127.0.0.1',advertise:false}); t.after(() => receiver.close());
+  const base = `http://127.0.0.1:${receiver.port}`;
+  const page = await (await fetch(base+'/')).text();
+  const pending = [...page.matchAll(/src="\/([\w.-]+\.mjs)"/g)].map(m => m[1]), served = new Set();
+  pending.push('audio-worklet.mjs'); // loaded by the page through audioWorklet.addModule
+  while (pending.length) {
+    const name = pending.shift(); if (served.has(name)) continue; served.add(name);
+    const response = await fetch(`${base}/${name}`); assert.equal(response.status, 200, `${name} must be served`);
+    const body = await response.text(); assert.equal(body, await readFile(new URL(`../${name}`, import.meta.url), 'utf8'), `${name} served byte for byte`);
+    for (const m of body.matchAll(/from '\.\/([\w.-]+\.mjs)'/g)) pending.push(m[1]);
+  }
+  assert.ok(served.has('player.mjs') && served.has('presenter.mjs') && served.has('audio-ring.mjs'), [...served].join(','));
+  assert.equal((await fetch(base+'/server.mjs')).status, 404); // the relay itself is never served
 });
 test('malformed protocol packets and codec metadata are rejected', () => {
   assert.throws(() => validatePacket(Buffer.alloc(2)));

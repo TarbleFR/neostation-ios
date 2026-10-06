@@ -302,7 +302,7 @@
     "tools/neoplay-receiver/player.mjs": "4f7576f71b04f38cfe1ccc8163a50d69814e336547e252a64d07b41a81a59b39",
     "tools/neoplay-receiver/presenter.mjs": "ae3003ee877da31dbe9c4dcf17e49e31ba0e3df5279eedd12eaa7e9badeea58f",
     "tools/neoplay-receiver/protocol.mjs": "0eb33923a5cb3e1ccae2a4bd878df0856d7d40ecf2c712030ce4450c1083d5da",
-    "tools/neoplay-receiver/server.mjs": "8cd44cab91608e46086c4514fa509e9b0b94eeabdc4ab0c4cc18d686d0cec28a"
+    "tools/neoplay-receiver/server.mjs": "d0338c290e329f922fb91cd3038524a2c2af96c08a2f40e0709e6cd7cc9632e8"
   },
   "git_modes": {
     ".gitattributes": "100644",
@@ -695,7 +695,7 @@
     "tools/neoplay-receiver/test/packets.mjs": "68a2ddf3a0033c025f31564edf94606250f75d69b612da25d36eabfcf1e8dc91",
     "tools/neoplay-receiver/test/presenter.test.mjs": "efe79d5c51f6fab825580d41fda608ef7bd002baf822aa7d928c0b30c5a4f289",
     "tools/neoplay-receiver/test/protocol.test.mjs": "33c9f0d5c59f804cddabae27edef14e448a3adc3085a428eabafa99529dc1974",
-    "tools/neoplay-receiver/test/receiver.test.mjs": "a3fe77145d9e7f3c115476e7e471dfcac1192d778fb4999d7e25cb064600f611"
+    "tools/neoplay-receiver/test/receiver.test.mjs": "78fb3a13671ecc20ce86a4c49fdbfce781fcc093bdaa42c6ed82add9d8bd3e53"
   },
   "support_git_modes": {
     ".github/workflows/neoswap-storage-prototype.yml": "100644",
