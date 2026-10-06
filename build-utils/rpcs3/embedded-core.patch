@@ -12066,16 +12066,24 @@ index 0000000..012200b
 +#endif
 diff --git a/rpcs3/ios/NeoSwapClient.h b/rpcs3/ios/NeoSwapClient.h
 new file mode 100644
-index 0000000..f98ea29
+index 0000000..76c134e
 --- /dev/null
 +++ b/rpcs3/ios/NeoSwapClient.h
-@@ -0,0 +1,89 @@
+@@ -0,0 +1,102 @@
 +#pragma once
 +#include "NeoSwap.h"
 +#include "NeoSwapClientStats.h"
 +#include <atomic>
 +#include <cstddef>
 +
++// Additive allocation kinds carried through the unchanged NeoSwapAPI v1 table.
++// They identify the RPCS3 consumer of a loan for host accounting; an older
++// host rejects them as NEOSWAP_INVALID and the caller keeps its original
++// allocator. Values must match the host's NeoSwapHostKind enumeration.
++enum NeoSwapExtendedKind {
++    NEOSWAP_GPU_HOST_VISIBLE = 3, /* coherent host-visible Vulkan SYSTEM buffers */
++    NEOSWAP_VIDEO_FRAME = 4       /* owned software VDEC frame mappings */
++};
 +namespace neostation::swap {
 +// Each core stores only a borrowed vtable. The broker itself is compiled once
 +// into neo_swap.framework, never into each emulator. No static constructors.
@@ -12091,12 +12099,9 @@ index 0000000..f98ea29
 +        return NEOSWAP_BUSY;
 +    return NEOSWAP_OK;
 +}
-+inline void* try_allocate(uint32_t owner, size_t bytes, size_t alignment) noexcept {
-+    // Small renderer allocations must not take the broker lock or create files.
-+    if (bytes < 1024 * 1024) {
-+        skipped_small.fetch_add(1, std::memory_order_relaxed);
-+        return nullptr;
-+    }
++// Explicit-kind request without a size threshold of its own: callers decide
++// eligibility (Vulkan import limits, frame mapping formats) before asking.
++inline void* try_allocate_kind(uint32_t owner, uint32_t kind, size_t bytes, size_t alignment) noexcept {
 +    const auto* api = client_api.load(std::memory_order_acquire);
 +    if (!api) {
 +        missing_api.fetch_add(1, std::memory_order_relaxed);
@@ -12108,7 +12113,7 @@ index 0000000..f98ea29
 +    }
 +    void* ptr = nullptr;
 +    eligible_attempts.fetch_add(1, std::memory_order_relaxed);
-+    const int result = api->allocate(owner, NEOSWAP_CPU_DATA, bytes, alignment, &ptr);
++    const int result = api->allocate(owner, kind, bytes, alignment, &ptr);
 +    last_result.store(result, std::memory_order_relaxed);
 +    if (result == NEOSWAP_OK && ptr) {
 +        successful_allocations.fetch_add(1, std::memory_order_relaxed);
@@ -12116,6 +12121,14 @@ index 0000000..f98ea29
 +    }
 +    failed_allocations.fetch_add(1, std::memory_order_relaxed);
 +    return nullptr;
++}
++inline void* try_allocate(uint32_t owner, size_t bytes, size_t alignment) noexcept {
++    // Small renderer allocations must not take the broker lock or create files.
++    if (bytes < 1024 * 1024) {
++        skipped_small.fetch_add(1, std::memory_order_relaxed);
++        return nullptr;
++    }
++    return try_allocate_kind(owner, NEOSWAP_CPU_DATA, bytes, alignment);
 +}
 +// RSX CPU data only. Vulkan retains try_allocate() and its 1 MiB threshold.
 +// The host decides whether this title may borrow sub-MiB buffers. A refusal
@@ -12767,13 +12780,22 @@ index 0000000..535b53e
 +#endif
 diff --git a/rpcs3/ios/NeoSwapStorage/VideoBuffer.h b/rpcs3/ios/NeoSwapStorage/VideoBuffer.h
 new file mode 100644
-index 0000000..eb24188
+index 0000000..3ddea67
 --- /dev/null
 +++ b/rpcs3/ios/NeoSwapStorage/VideoBuffer.h
-@@ -0,0 +1,73 @@
+@@ -0,0 +1,122 @@
 +// SPDX-License-Identifier: MIT
 +#pragma once
 +#include "FrameClient.h"
++// The Core tree places this header under ios/NeoSwapStorage/ next to the
++// borrowed NeoSwap allocator client. Without it (host-side copies, isolated
++// tests) frames keep their ordinary anonymous mappings.
++#if __has_include("../NeoSwapClient.h")
++#include "../NeoSwapClient.h"
++#define NEOSWAP_VIDEO_FRAME_LOANS 1
++#else
++#define NEOSWAP_VIDEO_FRAME_LOANS 0
++#endif
 +extern "C" {
 +#include <libavcodec/avcodec.h>
 +#include <libavutil/imgutils.h>
@@ -12788,10 +12810,27 @@ index 0000000..eb24188
 +// The default FFmpeg pool retains freed pixels. Opt-in software VDEC frames
 +// instead own anonymous mappings, released by FFmpeg's LAST reference. This
 +// changes no codec, threading, timestamps, guest output or hardware frames.
++// When the host NeoSwap allocator admits video-frame loans (kind 4), the
++// mapping is borrowed from relay pages outside the host footprint instead;
++// a refusal keeps the anonymous mapping. The borrowed interval is returned
++// through the same last-reference callback. Loaned bytes are counted apart.
 +inline constinit std::atomic<uint64_t> video_mapped_bytes{0},video_mapped_peak{0},video_unmapped_bytes{0};
 +inline constinit std::atomic<uint64_t> video_unmap_failures{0};
++inline constinit std::atomic<uint64_t> video_loaned_bytes{0},video_loaned_peak{0},video_loan_returned_bytes{0};
++inline constinit std::atomic<uint64_t> video_loan_release_failures{0};
++inline constexpr uintptr_t video_loan_tag=1; // spans are page multiples; bit 0 marks a NeoSwap loan
 +inline void retire_video_mapping(void* opaque,uint8_t* pixels) noexcept {
-+    const auto bytes=reinterpret_cast<uintptr_t>(opaque);
++    const auto tagged=reinterpret_cast<uintptr_t>(opaque);
++    const auto bytes=tagged&~video_loan_tag;
++    if(tagged&video_loan_tag){
++#if NEOSWAP_VIDEO_FRAME_LOANS
++        const int result=neostation::swap::release(pixels);
++        if(result==NEOSWAP_OK){video_loaned_bytes.fetch_sub(bytes);video_loan_returned_bytes.fetch_add(bytes);return;}
++        if(result!=NEOSWAP_NOT_OWNED){video_loan_release_failures.fetch_add(1);return;} // broker retains the mapping
++#endif
++        video_loan_release_failures.fetch_add(1); // never munmap a loan the broker did not disown
++        return;
++    }
 +    if(::munmap(pixels,bytes)==0){video_mapped_bytes.fetch_sub(bytes);video_unmapped_bytes.fetch_add(bytes);}
 +    else video_unmap_failures.fetch_add(1);
 +}
@@ -12833,12 +12872,35 @@ index 0000000..eb24188
 +        span+=charge;
 +    }
 +    if(!span)return AVERROR(EINVAL);
-+    auto* mapping=static_cast<uint8_t*>(::mmap(nullptr,span,PROT_READ|PROT_WRITE,MAP_PRIVATE|MAP_ANON,-1,0));
-+    if(mapping==MAP_FAILED)return AVERROR(errno);
-+    auto* buffer=av_buffer_create(mapping,span,retire_video_mapping,reinterpret_cast<void*>(span),0);
-+    if(!buffer){(void)::munmap(mapping,span);return AVERROR(ENOMEM);}
-+    const auto live=video_mapped_bytes.fetch_add(span)+span;auto peak=video_mapped_peak.load();
-+    while(peak<live && !video_mapped_peak.compare_exchange_weak(peak,live)){}
++    uint8_t* mapping=nullptr;bool loaned=false;
++#if NEOSWAP_VIDEO_FRAME_LOANS
++    // Page-aligned relay loan; the host refuses (no file, no wait) when the
++    // budget does not admit video frames, and the anonymous mapping is used.
++    if(auto* loan=neostation::swap::try_allocate_kind(NEOSWAP_RPCS3,NEOSWAP_VIDEO_FRAME,span,page)){
++        mapping=static_cast<uint8_t*>(loan);loaned=true;
++    }
++#endif
++    if(!mapping){
++        mapping=static_cast<uint8_t*>(::mmap(nullptr,span,PROT_READ|PROT_WRITE,MAP_PRIVATE|MAP_ANON,-1,0));
++        if(mapping==MAP_FAILED)return AVERROR(errno);
++    }
++    const uintptr_t opaque=static_cast<uintptr_t>(span)|(loaned?video_loan_tag:0);
++    auto* buffer=av_buffer_create(mapping,span,retire_video_mapping,reinterpret_cast<void*>(opaque),0);
++    if(!buffer){
++#if NEOSWAP_VIDEO_FRAME_LOANS
++        if(loaned){if(neostation::swap::release(mapping)!=NEOSWAP_OK)video_loan_release_failures.fetch_add(1);}
++        else
++#endif
++        (void)::munmap(mapping,span);
++        return AVERROR(ENOMEM);
++    }
++    if(loaned){
++        const auto live=video_loaned_bytes.fetch_add(span)+span;auto peak=video_loaned_peak.load();
++        while(peak<live && !video_loaned_peak.compare_exchange_weak(peak,live)){}
++    } else {
++        const auto live=video_mapped_bytes.fetch_add(span)+span;auto peak=video_mapped_peak.load();
++        while(peak<live && !video_mapped_peak.compare_exchange_weak(peak,live)){}
++    }
 +    frame->buf[0]=buffer;
 +    for(unsigned p=0;p<4;++p){frame->linesize[p]=strides[p];frame->data[p]=sizes[p]?mapping+offsets[p]:nullptr;}
 +    frame->extended_data=frame->data;return 0;
@@ -12846,10 +12908,10 @@ index 0000000..eb24188
 +}
 diff --git a/rpcs3/ios/NeoSwapVulkanBuffer.h b/rpcs3/ios/NeoSwapVulkanBuffer.h
 new file mode 100644
-index 0000000..0c2639e
+index 0000000..112f20b
 --- /dev/null
 +++ b/rpcs3/ios/NeoSwapVulkanBuffer.h
-@@ -0,0 +1,139 @@
+@@ -0,0 +1,142 @@
 +#pragma once
 +#include "NeoSwapClient.h"
 +#include <algorithm>
@@ -12890,7 +12952,10 @@ index 0000000..0c2639e
 +    }
 +    bool import(const render_device& device, u64 alignment, u32 type_bits, u32 access_flags, VkBuffer buffer)
 +    {
-+        m_pointer = neostation::swap::try_allocate(NEOSWAP_RPCS3, m_bytes, alignment);
++        // Identified as a GPU host-visible loan so the host can budget and
++        // report Vulkan imports separately from RSX CPU data. The size gate
++        // (1-256 MiB) is enforced by try_neoswap_buffer before this call.
++        m_pointer = neostation::swap::try_allocate_kind(NEOSWAP_RPCS3, NEOSWAP_GPU_HOST_VISIBLE, m_bytes, alignment);
 +        if (!m_pointer) return false;
 +
 +        // The actual pointer can have stricter memory-type restrictions than

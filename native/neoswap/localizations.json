@@ -50,7 +50,13 @@
     "storageActive": "Shader and video storage active",
     "storageInactive": "Shader and video storage inactive this session",
     "storageMetrics": "Cache: {ram} RAM · {disk} stored · {cold} disk-only · read p95 {latency} ms",
-    "storageVideoMetrics": "Video pixels archived: {cold} · returned this session: {returned} (not total RAM saved)."
+    "storageVideoMetrics": "Video pixels archived: {cold} · returned this session: {returned} (not total RAM saved).",
+    "budgetSummary": "RPCS3 process footprint: {footprint} · supplied by NeoSwap outside the footprint: {mobilized}",
+    "budgetBreakdown": "Relay guest pages: {guest} · relay host loans: {host} · donor loans: {donor} · files: {file} · archived video: {archived}",
+    "budgetState": "Budget controller: {state} ({reason})",
+    "budgetQuota": "Host loan ceiling: {quota} · measured system room: {room} · operational reserve: {reserve}",
+    "budgetNote": "Supplied bytes are live backing intervals charged outside the process footprint. They are not measured resident RAM and do not prove game stability.",
+    "relayLoanKinds": "Relay loans by consumer — RSX data: {cpu} · small RSX buffers: {cache} · Vulkan buffers: {gpu} · video frames: {video}"
   },
   "fr": {
     "title": "NeoSwap — Diagnostics",
@@ -103,7 +109,13 @@
     "storageActive": "Stockage des shaders et vidéos actif",
     "storageInactive": "Stockage des shaders et vidéos inactif pour cette session",
     "storageMetrics": "Cache : {ram} RAM · {disk} stockés · {cold} sur disque uniquement · lecture p95 {latency} ms",
-    "storageVideoMetrics": "Pixels vidéo archivés : {cold} · restitués cette session : {returned} (pas le gain total de RAM)."
+    "storageVideoMetrics": "Pixels vidéo archivés : {cold} · restitués cette session : {returned} (pas le gain total de RAM).",
+    "budgetSummary": "Empreinte du processus RPCS3 : {footprint} · fourni par NeoSwap hors empreinte : {mobilized}",
+    "budgetBreakdown": "Pages invitées du relais : {guest} · prêts hôte du relais : {host} · prêts des donneurs : {donor} · fichiers : {file} · vidéo archivée : {archived}",
+    "budgetState": "Contrôleur de budget : {state} ({reason})",
+    "budgetQuota": "Plafond des prêts hôte : {quota} · marge système mesurée : {room} · réserve opérationnelle : {reserve}",
+    "budgetNote": "Les octets fournis sont des intervalles de mémoire vivants comptés hors de l’empreinte du processus. Ils ne mesurent pas la RAM résidente et ne prouvent pas la stabilité du jeu.",
+    "relayLoanKinds": "Prêts du relais par consommateur — données RSX : {cpu} · petits buffers RSX : {cache} · buffers Vulkan : {gpu} · images vidéo : {video}"
   },
   "de": {
     "title": "NeoSwap — Diagnose",
@@ -156,7 +168,13 @@
     "storageActive": "Shader- und Videospeicher aktiv",
     "storageInactive": "Shader- und Videospeicher in dieser Sitzung inaktiv",
     "storageMetrics": "Cache: {ram} RAM · {disk} gespeichert · {cold} nur auf Datenträger · Lesen p95 {latency} ms",
-    "storageVideoMetrics": "Archivierte Videopixel: {cold} · in dieser Sitzung zurückgegeben: {returned} (nicht die gesamte RAM-Ersparnis)."
+    "storageVideoMetrics": "Archivierte Videopixel: {cold} · in dieser Sitzung zurückgegeben: {returned} (nicht die gesamte RAM-Ersparnis).",
+    "budgetSummary": "Speicherbedarf des RPCS3-Prozesses: {footprint} · von NeoSwap außerhalb des Bedarfs bereitgestellt: {mobilized}",
+    "budgetBreakdown": "Gastseiten des Relais: {guest} · Host-Leihgaben des Relais: {host} · Spender-Leihgaben: {donor} · Dateien: {file} · archiviertes Video: {archived}",
+    "budgetState": "Budget-Steuerung: {state} ({reason})",
+    "budgetQuota": "Obergrenze der Host-Leihgaben: {quota} · gemessener Systemspielraum: {room} · Betriebsreserve: {reserve}",
+    "budgetNote": "Bereitgestellte Bytes sind aktive Speicherintervalle, die außerhalb des Prozessbedarfs verbucht werden. Sie messen keinen residenten RAM und belegen keine Spielstabilität.",
+    "relayLoanKinds": "Relais-Leihgaben nach Verbraucher — RSX-Daten: {cpu} · kleine RSX-Puffer: {cache} · Vulkan-Puffer: {gpu} · Videobilder: {video}"
   },
   "es": {
     "title": "NeoSwap — Diagnósticos",
@@ -209,7 +227,13 @@
     "storageActive": "Almacenamiento de shaders y vídeo activo",
     "storageInactive": "Almacenamiento de shaders y vídeo inactivo en esta sesión",
     "storageMetrics": "Caché: {ram} RAM · {disk} guardados · {cold} solo en disco · lectura p95 {latency} ms",
-    "storageVideoMetrics": "Píxeles de vídeo archivados: {cold} · restituidos en esta sesión: {returned} (no es el ahorro total de RAM)."
+    "storageVideoMetrics": "Píxeles de vídeo archivados: {cold} · restituidos en esta sesión: {returned} (no es el ahorro total de RAM).",
+    "budgetSummary": "Huella del proceso RPCS3: {footprint} · aportado por NeoSwap fuera de la huella: {mobilized}",
+    "budgetBreakdown": "Páginas invitadas del relé: {guest} · préstamos de host del relé: {host} · préstamos de donantes: {donor} · archivos: {file} · vídeo archivado: {archived}",
+    "budgetState": "Controlador de presupuesto: {state} ({reason})",
+    "budgetQuota": "Límite de préstamos de host: {quota} · margen del sistema medido: {room} · reserva operativa: {reserve}",
+    "budgetNote": "Los bytes aportados son intervalos de memoria activos contabilizados fuera de la huella del proceso. No miden RAM residente ni demuestran la estabilidad del juego.",
+    "relayLoanKinds": "Préstamos del relé por consumidor — datos RSX: {cpu} · búferes RSX pequeños: {cache} · búferes Vulkan: {gpu} · fotogramas de vídeo: {video}"
   },
   "it": {
     "title": "NeoSwap — Diagnostica",
@@ -262,7 +286,13 @@
     "storageActive": "Archiviazione di shader e video attiva",
     "storageInactive": "Archiviazione di shader e video inattiva in questa sessione",
     "storageMetrics": "Cache: {ram} RAM · {disk} salvati · {cold} solo su disco · lettura p95 {latency} ms",
-    "storageVideoMetrics": "Pixel video archiviati: {cold} · restituiti in questa sessione: {returned} (non è il risparmio totale di RAM)."
+    "storageVideoMetrics": "Pixel video archiviati: {cold} · restituiti in questa sessione: {returned} (non è il risparmio totale di RAM).",
+    "budgetSummary": "Impronta del processo RPCS3: {footprint} · fornito da NeoSwap fuori dall’impronta: {mobilized}",
+    "budgetBreakdown": "Pagine guest del relay: {guest} · prestiti host del relay: {host} · prestiti dei donatori: {donor} · file: {file} · video archiviato: {archived}",
+    "budgetState": "Controllore del budget: {state} ({reason})",
+    "budgetQuota": "Limite dei prestiti host: {quota} · margine di sistema misurato: {room} · riserva operativa: {reserve}",
+    "budgetNote": "I byte forniti sono intervalli di memoria attivi contabilizzati fuori dall’impronta del processo. Non misurano la RAM residente e non dimostrano la stabilità del gioco.",
+    "relayLoanKinds": "Prestiti del relay per consumatore — dati RSX: {cpu} · piccoli buffer RSX: {cache} · buffer Vulkan: {gpu} · fotogrammi video: {video}"
   },
   "pt": {
     "title": "NeoSwap — Diagnósticos",
@@ -315,7 +345,13 @@
     "storageActive": "Armazenamento de shaders e vídeo ativo",
     "storageInactive": "Armazenamento de shaders e vídeo inativo nesta sessão",
     "storageMetrics": "Cache: {ram} RAM · {disk} guardados · {cold} apenas em disco · leitura p95 {latency} ms",
-    "storageVideoMetrics": "Pixels de vídeo arquivados: {cold} · restaurados nesta sessão: {returned} (não é a economia total de RAM)."
+    "storageVideoMetrics": "Pixels de vídeo arquivados: {cold} · restaurados nesta sessão: {returned} (não é a economia total de RAM).",
+    "budgetSummary": "Pegada do processo RPCS3: {footprint} · fornecido pelo NeoSwap fora da pegada: {mobilized}",
+    "budgetBreakdown": "Páginas convidadas do relé: {guest} · empréstimos de host do relé: {host} · empréstimos de doadores: {donor} · arquivos: {file} · vídeo arquivado: {archived}",
+    "budgetState": "Controlador de orçamento: {state} ({reason})",
+    "budgetQuota": "Teto dos empréstimos de host: {quota} · margem do sistema medida: {room} · reserva operacional: {reserve}",
+    "budgetNote": "Os bytes fornecidos são intervalos de memória ativos contabilizados fora da pegada do processo. Eles não medem RAM residente nem comprovam a estabilidade do jogo.",
+    "relayLoanKinds": "Empréstimos do relé por consumidor — dados RSX: {cpu} · buffers RSX pequenos: {cache} · buffers Vulkan: {gpu} · quadros de vídeo: {video}"
   },
   "ru": {
     "title": "NeoSwap — Диагностика",
@@ -368,7 +404,13 @@
     "storageActive": "Хранение шейдеров и видео активно",
     "storageInactive": "Хранение шейдеров и видео неактивно в этой сессии",
     "storageMetrics": "Кэш: {ram} ОЗУ · {disk} сохранено · {cold} только на диске · чтение p95 {latency} мс",
-    "storageVideoMetrics": "Архивировано видеопикселей: {cold} · возвращено за сессию: {returned} (не общий выигрыш RAM)."
+    "storageVideoMetrics": "Архивировано видеопикселей: {cold} · возвращено за сессию: {returned} (не общий выигрыш RAM).",
+    "budgetSummary": "Объём процесса RPCS3: {footprint} · предоставлено NeoSwap вне объёма процесса: {mobilized}",
+    "budgetBreakdown": "Гостевые страницы ретранслятора: {guest} · хост-займы ретранслятора: {host} · займы доноров: {donor} · файлы: {file} · архивированное видео: {archived}",
+    "budgetState": "Контроллер бюджета: {state} ({reason})",
+    "budgetQuota": "Потолок хост-займов: {quota} · измеренный запас системы: {room} · рабочий резерв: {reserve}",
+    "budgetNote": "Предоставленные байты — это активные интервалы памяти, учитываемые вне объёма процесса. Они не измеряют резидентную RAM и не доказывают стабильность игры.",
+    "relayLoanKinds": "Займы ретранслятора по потребителям — данные RSX: {cpu} · малые буферы RSX: {cache} · буферы Vulkan: {gpu} · видеокадры: {video}"
   },
   "id": {
     "title": "NeoSwap — Diagnostik",
@@ -421,7 +463,13 @@
     "storageActive": "Penyimpanan shader dan video aktif",
     "storageInactive": "Penyimpanan shader dan video tidak aktif dalam sesi ini",
     "storageMetrics": "Cache: {ram} RAM · {disk} tersimpan · {cold} hanya di disk · baca p95 {latency} ms",
-    "storageVideoMetrics": "Piksel video diarsipkan: {cold} · dikembalikan dalam sesi ini: {returned} (bukan total penghematan RAM)."
+    "storageVideoMetrics": "Piksel video diarsipkan: {cold} · dikembalikan dalam sesi ini: {returned} (bukan total penghematan RAM).",
+    "budgetSummary": "Jejak proses RPCS3: {footprint} · disediakan NeoSwap di luar jejak: {mobilized}",
+    "budgetBreakdown": "Halaman tamu relay: {guest} · pinjaman host relay: {host} · pinjaman donor: {donor} · berkas: {file} · video terarsip: {archived}",
+    "budgetState": "Pengendali anggaran: {state} ({reason})",
+    "budgetQuota": "Batas pinjaman host: {quota} · ruang sistem terukur: {room} · cadangan operasional: {reserve}",
+    "budgetNote": "Byte yang disediakan adalah interval memori aktif yang dihitung di luar jejak proses. Ini bukan RAM residen terukur dan tidak membuktikan kestabilan game.",
+    "relayLoanKinds": "Pinjaman relay per konsumen — data RSX: {cpu} · buffer RSX kecil: {cache} · buffer Vulkan: {gpu} · frame video: {video}"
   },
   "ja": {
     "title": "NeoSwap — 診断",
@@ -474,7 +522,13 @@
     "storageActive": "シェーダー・動画ストレージ有効",
     "storageInactive": "このセッションではシェーダー・動画ストレージ無効",
     "storageMetrics": "キャッシュ：{ram} RAM · {disk} 保存済み · {cold} ディスクのみ · 読込 p95 {latency} ms",
-    "storageVideoMetrics": "保存中の動画ピクセル：{cold} · このセッションで復元：{returned}（RAM削減量の合計ではありません）。"
+    "storageVideoMetrics": "保存中の動画ピクセル：{cold} · このセッションで復元：{returned}（RAM削減量の合計ではありません）。",
+    "budgetSummary": "RPCS3 プロセスのフットプリント: {footprint} · NeoSwap がフットプリント外で供給: {mobilized}",
+    "budgetBreakdown": "リレーのゲストページ: {guest} · リレーのホスト貸出: {host} · ドナー貸出: {donor} · ファイル: {file} · アーカイブ済み動画: {archived}",
+    "budgetState": "バジェット制御: {state} ({reason})",
+    "budgetQuota": "ホスト貸出の上限: {quota} · 計測したシステム余裕: {room} · 運用予備: {reserve}",
+    "budgetNote": "供給バイトはプロセスのフットプリント外で計上される有効なメモリ区間です。常駐 RAM の計測値ではなく、ゲームの安定性を証明するものでもありません。",
+    "relayLoanKinds": "消費元別のリレー貸出 — RSX データ: {cpu} · 小さな RSX バッファ: {cache} · Vulkan バッファ: {gpu} · 動画フレーム: {video}"
   },
   "ko": {
     "title": "NeoSwap — 진단",
@@ -527,7 +581,13 @@
     "storageActive": "셰이더 및 영상 저장소 활성",
     "storageInactive": "현재 세션의 셰이더 및 영상 저장소 비활성",
     "storageMetrics": "캐시: {ram} RAM · {disk} 저장 · {cold} 디스크 전용 · 읽기 p95 {latency} ms",
-    "storageVideoMetrics": "보관 중인 영상 픽셀: {cold} · 이번 세션에서 복원: {returned} (총 RAM 절약량이 아님)."
+    "storageVideoMetrics": "보관 중인 영상 픽셀: {cold} · 이번 세션에서 복원: {returned} (총 RAM 절약량이 아님).",
+    "budgetSummary": "RPCS3 프로세스 사용량: {footprint} · NeoSwap이 사용량 밖에서 공급: {mobilized}",
+    "budgetBreakdown": "릴레이 게스트 페이지: {guest} · 릴레이 호스트 대여: {host} · 기부자 대여: {donor} · 파일: {file} · 보관된 비디오: {archived}",
+    "budgetState": "예산 제어기: {state} ({reason})",
+    "budgetQuota": "호스트 대여 상한: {quota} · 측정된 시스템 여유: {room} · 운영 예비: {reserve}",
+    "budgetNote": "공급된 바이트는 프로세스 사용량 밖에서 집계되는 활성 메모리 구간입니다. 측정된 상주 RAM이 아니며 게임 안정성을 증명하지 않습니다.",
+    "relayLoanKinds": "소비자별 릴레이 대여 — RSX 데이터: {cpu} · 작은 RSX 버퍼: {cache} · Vulkan 버퍼: {gpu} · 비디오 프레임: {video}"
   },
   "zh": {
     "title": "NeoSwap — 诊断",
@@ -580,7 +640,13 @@
     "storageActive": "着色器与视频存储已启用",
     "storageInactive": "本次会话未启用着色器与视频存储",
     "storageMetrics": "缓存：{ram} 内存 · {disk} 已存储 · {cold} 仅磁盘 · 读取 p95 {latency} 毫秒",
-    "storageVideoMetrics": "已归档视频像素：{cold} · 本次会话已恢复：{returned}（并非总内存节省量）。"
+    "storageVideoMetrics": "已归档视频像素：{cold} · 本次会话已恢复：{returned}（并非总内存节省量）。",
+    "budgetSummary": "RPCS3 进程占用：{footprint} · NeoSwap 在占用之外提供：{mobilized}",
+    "budgetBreakdown": "中继客体页面：{guest} · 中继宿主借用：{host} · 捐赠借用：{donor} · 文件：{file} · 已归档视频：{archived}",
+    "budgetState": "预算控制器：{state}（{reason}）",
+    "budgetQuota": "宿主借用上限：{quota} · 实测系统余量：{room} · 运行储备：{reserve}",
+    "budgetNote": "提供的字节是记在进程占用之外的有效内存区间，不是实测的常驻 RAM，也不能证明游戏稳定性。",
+    "relayLoanKinds": "按消费者划分的中继借用 — RSX 数据：{cpu} · 小型 RSX 缓冲：{cache} · Vulkan 缓冲：{gpu} · 视频帧：{video}"
   },
   "zh_Hant": {
     "title": "NeoSwap — 診斷",
@@ -633,6 +699,12 @@
     "storageActive": "著色器與影片儲存已啟用",
     "storageInactive": "本次工作階段未啟用著色器與影片儲存",
     "storageMetrics": "快取：{ram} 記憶體 · {disk} 已儲存 · {cold} 僅磁碟 · 讀取 p95 {latency} 毫秒",
-    "storageVideoMetrics": "已封存影片像素：{cold} · 本次工作階段已還原：{returned}（並非總記憶體節省量）。"
+    "storageVideoMetrics": "已封存影片像素：{cold} · 本次工作階段已還原：{returned}（並非總記憶體節省量）。",
+    "budgetSummary": "RPCS3 程序佔用：{footprint} · NeoSwap 在佔用之外提供：{mobilized}",
+    "budgetBreakdown": "中繼客體頁面：{guest} · 中繼主機借用：{host} · 捐贈借用：{donor} · 檔案：{file} · 已封存影片：{archived}",
+    "budgetState": "預算控制器：{state}（{reason}）",
+    "budgetQuota": "主機借用上限：{quota} · 實測系統餘量：{room} · 運作儲備：{reserve}",
+    "budgetNote": "提供的位元組是記在程序佔用之外的有效記憶體區間，不是實測的常駐 RAM，也不能證明遊戲穩定性。",
+    "relayLoanKinds": "依消費者劃分的中繼借用 — RSX 資料：{cpu} · 小型 RSX 緩衝：{cache} · Vulkan 緩衝：{gpu} · 影片畫格：{video}"
   }
 }

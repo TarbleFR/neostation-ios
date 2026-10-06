@@ -13,7 +13,13 @@ namespace neostation::relay {
 constexpr std::uint64_t maximum_capacity = 8ULL * 1024 * 1024 * 1024;
 constexpr std::uint64_t maximum_segment_bytes = 512ULL * 1024 * 1024;
 constexpr std::uint32_t initial_owner_mask = 1U; // NeoSwap RPCS3 owner 0 only.
-constexpr std::uint32_t supported_owner_mask = initial_owner_mask; // RPCS3 only, including preparation checks.
+// Relay owner 1 backs RPCS3 HOST data loans (RSX CPU buffers, host-visible
+// Vulkan buffers, video frames) served by the host broker. It shares the same
+// retained named objects as guest data but is bounded by its own quota so
+// guest allocations keep their reserved share of the capacity.
+constexpr std::uint32_t host_loan_owner = 1U;
+constexpr std::uint32_t supported_owner_mask = initial_owner_mask | (1U << host_loan_owner);
+constexpr std::uint32_t tracked_owner_count = 2;
 
 // Operations return zero on success, otherwise their original OS error.
 // map and unmap MUST be atomic on failure. fixed unmap must OVERWRITE with a
@@ -36,6 +42,11 @@ struct PressureDiagnostics {
     std::uint64_t transitions = 0, existing_alias_maps = 0;
     std::uint64_t create_refusals = 0, first_map_refusals = 0, map_failures = 0;
     int last_map_result = 0, last_map_os_error = 0;
+    // Per-owner live backing and quotas (owner 0 guest data, owner 1 host loans).
+    std::uint64_t owner_live_bytes[tracked_owner_count] = {};
+    std::uint64_t owner_peak_bytes[tracked_owner_count] = {};
+    std::uint64_t owner_quota_bytes[tracked_owner_count] = {};
+    std::uint64_t quota_refusals = 0;
 };
 class Backend final {
 public:
@@ -52,6 +63,10 @@ public:
     int adopt(std::uint32_t entry, std::uint64_t bytes, std::int32_t creator_pid,
               std::uint64_t generation) noexcept;
     void set_pressure(bool raised) noexcept;
+    // Live-byte ceiling for one owner's objects; zero means no owner quota.
+    // Lowering a quota below the live value refuses new objects only: existing
+    // tokens, aliases and their data are never revoked by policy.
+    int set_owner_quota(std::uint32_t owner, std::uint64_t bytes) noexcept;
     int create(std::uint32_t owner, std::uint64_t bytes, std::uint64_t* token) noexcept;
     int map(std::uint64_t token, void* target, std::uint32_t protection, void** mapped) noexcept;
     int unmap(std::uint64_t token, void* address) noexcept;
@@ -73,8 +88,14 @@ private:
     std::unique_ptr<State> state_;
 };
 Backend& backend() noexcept;
+#if defined(NEOSWAP_TESTING)
+// Portable tests inject the OS operations of the process-wide backend before
+// its first use. Deliverable builds never compile this hook.
+void install_operations_for_test(const Operations& operations, void* context) noexcept;
+#endif
 int configure(std::uint32_t enabled_owner_mask,
               std::uint64_t capacity_limit = maximum_capacity) noexcept;
+int set_owner_quota(std::uint32_t owner, std::uint64_t bytes) noexcept;
 int adopt(std::uint32_t entry, std::uint64_t bytes, std::int32_t creator_pid,
           std::uint64_t generation) noexcept;
 void set_pressure(bool raised) noexcept;

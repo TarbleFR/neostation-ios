@@ -21,6 +21,9 @@ typedef struct NeoSwapHostStats {
     uint32_t file_ready_owner_mask;
     uint64_t donor_pending_demand_bytes, donor_inflight_demand_bytes;
     uint64_t donor_pending_demand_count, donor_demand_overflow_count;
+    // Live relay-backed host loans per owner; distinct from donor loans and files.
+    uint64_t owner_relay_live_bytes[NEOSWAP_OWNER_COUNT];
+    uint64_t relay_loan_live_bytes;
 } NeoSwapHostStats;
 
 // Host-only counters, not additions to the immutable emulator API/stats ABI.
@@ -37,6 +40,34 @@ typedef struct NeoSwapCPUBufferStats {
 typedef struct NeoSwapDonationDemand {
     uint64_t sequence, bytes;
 } NeoSwapDonationDemand;
+
+// Host-side view of the additive allocation kinds the RPCS3 client sends
+// through the unchanged NeoSwapAPI v1 table. Values mirror the Core's
+// NeoSwapClient.h extended kinds; a test asserts both definitions agree.
+// Kinds identify the RPCS3 consumer of every loan; they never change ownership
+// rules, alignment limits or the release contract.
+enum NeoSwapHostKind {
+    NEOSWAP_HOST_KIND_CPU_DATA = 1,         /* RSX aligned CPU data >= 1 MiB */
+    NEOSWAP_HOST_KIND_CPU_CACHE = 2,        /* RSX aligned CPU data 64 KiB..1 MiB */
+    NEOSWAP_HOST_KIND_GPU_HOST_VISIBLE = 3, /* coherent host-visible Vulkan SYSTEM buffers */
+    NEOSWAP_HOST_KIND_VIDEO_FRAME = 4,      /* owned software VDEC frame mappings */
+    NEOSWAP_HOST_KIND_COUNT = 5
+};
+
+// Relay-backed HOST loans: RPCS3 host data served from the guest page relay's
+// retained named objects (creator exited, pages charged outside the host
+// footprint). Counts are cumulative independent atomics; live/cached/peak are
+// byte counts of allocated backing intervals, never resident-page proof.
+typedef struct NeoSwapRelayLoanStats {
+    uint64_t live_bytes, peak_bytes, live_blocks, allocation_count;
+    uint64_t quota_bytes, policy_refusals, quota_refusals, backend_refusals;
+    uint64_t reuse_hits, cached_bytes, cached_blocks, cache_flushes;
+    uint64_t release_failures, padding_bytes;
+    uint64_t kind_live_bytes[NEOSWAP_HOST_KIND_COUNT], kind_live_blocks[NEOSWAP_HOST_KIND_COUNT];
+    uint64_t kind_allocation_count[NEOSWAP_HOST_KIND_COUNT], kind_refusal_count[NEOSWAP_HOST_KIND_COUNT];
+    int32_t last_backend_result;
+    uint32_t admitted, available, video_frames_admitted;
+} NeoSwapRelayLoanStats;
 
 #ifdef __cplusplus
 extern "C" {
@@ -61,6 +92,14 @@ NEOSWAP_PUBLIC int NeoSwap_OwnerSessionActive(uint32_t owner);
 // Bounded host-side readiness wait used off the main thread before emulator
 // boot. It observes only verified donor capacity and never creates memory.
 NEOSWAP_PUBLIC int NeoSwap_WaitForDonationReady(uint64_t minimum_bytes, uint32_t timeout_ms);
+// Global budget controller outputs, applied on the diagnostics timer. A quota
+// below the live value refuses new loans only; existing loans are retained.
+// video_frames selects whether kind 4 may borrow relay pages at all.
+NEOSWAP_PUBLIC int NeoSwap_SetRelayHostLoanPolicy(uint64_t quota_bytes, int admitted, int video_frames);
+// Retires cached (released, still mapped) loans older than the bounded reuse
+// window, or every cached loan when flush_all is set. Maintenance only.
+NEOSWAP_PUBLIC int NeoSwap_RelayLoanMaintain(uint64_t now_ms, int flush_all);
+NEOSWAP_PUBLIC int NeoSwap_RelayLoanSnapshot(NeoSwapRelayLoanStats* stats);
 #ifdef __cplusplus
 }
 #endif

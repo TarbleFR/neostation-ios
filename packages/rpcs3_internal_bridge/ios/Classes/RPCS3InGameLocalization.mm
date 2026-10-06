@@ -40,6 +40,7 @@ NSDictionary<NSString*, NSDictionary<NSString*, NSString*>*>* Translations() {
         @"memoryMicroprocess": @"Microprocess RAM",
         @"memoryPhysical": @"Physical RAM used",
         @"memoryUnitGB": @"GB",
+        @"memoryNeoSwap": @"NeoSwap supplied",
       },
       @"fr": @{
         @"stateDone": @"Savestate créée et rechargée.", @"stateFailed": @"Échec de l’opération de savestate.",
@@ -74,6 +75,7 @@ NSDictionary<NSString*, NSDictionary<NSString*, NSString*>*>* Translations() {
         @"memoryMicroprocess": @"RAM microprocessus",
         @"memoryPhysical": @"RAM physique utilisée",
         @"memoryUnitGB": @"Go",
+        @"memoryNeoSwap": @"Fourni par NeoSwap",
       },
       @"de": @{
         @"stateDone": @"Spielstand erstellt und wiederhergestellt.", @"stateFailed": @"Spielstandvorgang fehlgeschlagen.",
@@ -108,6 +110,7 @@ NSDictionary<NSString*, NSDictionary<NSString*, NSString*>*>* Translations() {
         @"memoryMicroprocess": @"Mikroprozess-RAM",
         @"memoryPhysical": @"Genutzter physischer RAM",
         @"memoryUnitGB": @"GB",
+        @"memoryNeoSwap": @"Von NeoSwap bereitgestellt",
       },
       @"es": @{
         @"stateDone": @"Estado creado y restaurado.", @"stateFailed": @"Falló la operación del estado de guardado.",
@@ -142,6 +145,7 @@ NSDictionary<NSString*, NSDictionary<NSString*, NSString*>*>* Translations() {
         @"memoryMicroprocess": @"RAM de microprocesos",
         @"memoryPhysical": @"RAM física utilizada",
         @"memoryUnitGB": @"GB",
+        @"memoryNeoSwap": @"Aportado por NeoSwap",
       },
       @"it": @{
         @"stateDone": @"Stato creato e ripristinato.", @"stateFailed": @"Operazione sullo stato non riuscita.",
@@ -176,6 +180,7 @@ NSDictionary<NSString*, NSDictionary<NSString*, NSString*>*>* Translations() {
         @"memoryMicroprocess": @"RAM dei microprocessi",
         @"memoryPhysical": @"RAM fisica utilizzata",
         @"memoryUnitGB": @"GB",
+        @"memoryNeoSwap": @"Fornito da NeoSwap",
       },
       @"pt": @{
         @"stateDone": @"Estado criado e restaurado.", @"stateFailed": @"A operação do estado falhou.",
@@ -210,6 +215,7 @@ NSDictionary<NSString*, NSDictionary<NSString*, NSString*>*>* Translations() {
         @"memoryMicroprocess": @"RAM dos microprocessos",
         @"memoryPhysical": @"RAM física utilizada",
         @"memoryUnitGB": @"GB",
+        @"memoryNeoSwap": @"Fornecido pelo NeoSwap",
       },
       @"id": @{
         @"stateDone": @"Status permainan dibuat dan dipulihkan.", @"stateFailed": @"Operasi status permainan gagal.",
@@ -244,6 +250,7 @@ NSDictionary<NSString*, NSDictionary<NSString*, NSString*>*>* Translations() {
         @"memoryMicroprocess": @"RAM mikroproses",
         @"memoryPhysical": @"RAM fisik terpakai",
         @"memoryUnitGB": @"GB",
+        @"memoryNeoSwap": @"Disediakan NeoSwap",
       },
       @"ru": @{
         @"stateDone": @"Состояние сохранено и восстановлено.", @"stateFailed": @"Операция с сохранением состояния не удалась.",
@@ -278,6 +285,7 @@ NSDictionary<NSString*, NSDictionary<NSString*, NSString*>*>* Translations() {
         @"memoryMicroprocess": @"ОЗУ микропроцессов",
         @"memoryPhysical": @"Физическая ОЗУ занята",
         @"memoryUnitGB": @"ГБ",
+        @"memoryNeoSwap": @"Предоставлено NeoSwap",
       },
       @"ja": @{
         @"stateDone": @"ステートを保存して復元しました。", @"stateFailed": @"ステート操作に失敗しました。",
@@ -312,6 +320,7 @@ NSDictionary<NSString*, NSDictionary<NSString*, NSString*>*>* Translations() {
         @"memoryMicroprocess": @"マイクロプロセスのRAM",
         @"memoryPhysical": @"使用中の物理RAM",
         @"memoryUnitGB": @"GB",
+        @"memoryNeoSwap": @"NeoSwap 提供分",
       },
       @"ko": @{
         @"stateDone": @"상태를 저장하고 복원했습니다.", @"stateFailed": @"상태 저장 작업에 실패했습니다.",
@@ -346,6 +355,7 @@ NSDictionary<NSString*, NSDictionary<NSString*, NSString*>*>* Translations() {
         @"memoryMicroprocess": @"마이크로프로세스 RAM",
         @"memoryPhysical": @"사용 중인 물리 RAM",
         @"memoryUnitGB": @"GB",
+        @"memoryNeoSwap": @"NeoSwap 제공",
       },
       @"zh": @{
         @"stateDone": @"即时存档已创建并恢复。", @"stateFailed": @"即时存档操作失败。",
@@ -380,6 +390,7 @@ NSDictionary<NSString*, NSDictionary<NSString*, NSString*>*>* Translations() {
         @"memoryMicroprocess": @"微进程分配内存",
         @"memoryPhysical": @"实际使用物理内存",
         @"memoryUnitGB": @"GB",
+        @"memoryNeoSwap": @"NeoSwap 提供",
       },
       @"zh_Hant": @{
         @"stateDone": @"即時存檔已建立並還原。", @"stateFailed": @"即時存檔操作失敗。",
@@ -414,6 +425,7 @@ NSDictionary<NSString*, NSDictionary<NSString*, NSString*>*>* Translations() {
         @"memoryMicroprocess": @"微程序配置記憶體",
         @"memoryPhysical": @"實際使用實體記憶體",
         @"memoryUnitGB": @"GB",
+        @"memoryNeoSwap": @"NeoSwap 提供",
       },
     };
   });

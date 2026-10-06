@@ -23,6 +23,7 @@ struct Sample {
 @property(nonatomic, strong) UILabel* ratesLabel;
 @property(nonatomic, strong) UILabel* allocationLabel;
 @property(nonatomic, strong) UILabel* residentLabel;
+@property(nonatomic, strong) UILabel* neoswapLabel;
 @property(nonatomic, strong) UILabel* graphLabel;
 @property(nonatomic, strong) NSNumberFormatter* numberFormatter;
 @property(nonatomic, copy) NSString* localeIdentifier;
@@ -45,6 +46,8 @@ struct Sample {
   self.allocationLabel.textColor = UIColor.systemCyanColor;
   self.residentLabel = [self newLabelWithSize:12];
   self.residentLabel.textColor = UIColor.systemOrangeColor;
+  self.neoswapLabel = [self newLabelWithSize:12];
+  self.neoswapLabel.textColor = UIColor.systemGreenColor;
   self.graphLabel = [self newLabelWithSize:10];
   self.numberFormatter = [NSNumberFormatter new];
   self.numberFormatter.numberStyle = NSNumberFormatterDecimalStyle;
@@ -72,14 +75,15 @@ struct Sample {
   [self addSubview:label];
   return label;
 }
-- (CGSize)intrinsicContentSize { return CGSizeMake(320, 250); }
+- (CGSize)intrinsicContentSize { return CGSizeMake(320, 274); }
 - (void)layoutSubviews {
   [super layoutSubviews];
   const CGFloat width = MAX(0.0, self.bounds.size.width - 20.0);
   self.ratesLabel.frame = CGRectMake(10, 7, width, 21);
   self.allocationLabel.frame = CGRectMake(10, 32, width, 22);
   self.residentLabel.frame = CGRectMake(10, 56, width, 22);
-  self.graphLabel.frame = CGRectMake(10, 81, width, 14);
+  self.neoswapLabel.frame = CGRectMake(10, 80, width, 22);
+  self.graphLabel.frame = CGRectMake(10, 105, width, 14);
   [self setNeedsDisplay];
 }
 - (NSString*)memoryText:(uint64_t)bytes valid:(BOOL)valid {
@@ -94,8 +98,13 @@ struct Sample {
   self.residentLabel.text = [NSString stringWithFormat:@"%@: %@",
       RPCS3LocalizedString(@"memoryPhysical", _localeIdentifier),
       [self memoryText:point.resident valid:point.residentValid]];
-  self.accessibilityValue = [NSString stringWithFormat:@"%@. %@. %@",
-      self.ratesLabel.text, self.allocationLabel.text, self.residentLabel.text];
+  // Host data served outside the footprint by NeoSwap (relay host loans and
+  // donor loans); guest pages stay in the microprocess line above.
+  self.neoswapLabel.text = [NSString stringWithFormat:@"%@: %@",
+      RPCS3LocalizedString(@"memoryNeoSwap", _localeIdentifier),
+      [self memoryText:point.hostLoans valid:point.hostLoansValid]];
+  self.accessibilityValue = [NSString stringWithFormat:@"%@. %@. %@. %@",
+      self.ratesLabel.text, self.allocationLabel.text, self.residentLabel.text, self.neoswapLabel.text];
 }
 - (void)reset {
   NSAssert(NSThread.isMainThread, @"RPCS3 performance UI must run on the main thread");
@@ -115,8 +124,8 @@ struct Sample {
     [self reset];
   self.ratesLabel.text = NeoSwapFPSValid(fps, validFields)
       ? [NSString localizedStringWithFormat:@"FPS %.1f", fps] : @"FPS —";
-  self.accessibilityValue = [NSString stringWithFormat:@"%@. %@. %@",
-      self.ratesLabel.text, self.allocationLabel.text, self.residentLabel.text];
+  self.accessibilityValue = [NSString stringWithFormat:@"%@. %@. %@. %@",
+      self.ratesLabel.text, self.allocationLabel.text, self.residentLabel.text, self.neoswapLabel.text];
   while (_sampleCount && timestampMs - _samples[_sampleStart].timestampMs > kWindowMs) {
     _sampleStart = (_sampleStart + 1) % kCapacity;
     --_sampleCount;
@@ -148,8 +157,8 @@ struct Sample {
   [super drawRect:rect];
   CGContextRef context = UIGraphicsGetCurrentContext();
   if (!context) return;
-  const CGRect graph = CGRectMake(44, 110, MAX(0.0, self.bounds.size.width - 54),
-      MAX(0.0, self.bounds.size.height - 134));
+  const CGRect graph = CGRectMake(44, 134, MAX(0.0, self.bounds.size.width - 54),
+      MAX(0.0, self.bounds.size.height - 158));
   if (graph.size.width <= 0 || graph.size.height <= 0) return;
   double maximumGB = 0.5;
   for (NSUInteger n = 0; n < _sampleCount; ++n) {

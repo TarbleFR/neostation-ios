@@ -461,8 +461,10 @@ VIDEO_FILES={'rpcs3/Emu/Cell/Modules/cellVdec.cpp',
              'rpcs3/ios/NeoSwapStorage/SourceABI.h','rpcs3/ios/NeoSwapStorage/SourceClient.cpp',
              'rpcs3/ios/NeoSwapStorage/FrameClient.h','rpcs3/ios/NeoSwapStorage/VideoBuffer.h'}
 VIDEO_ADDED={'rpcs3/ios/NeoSwapStorage/FrameClient.h','rpcs3/ios/NeoSwapStorage/VideoBuffer.h'}
-video_manifest=json.loads((ROOT/'build-utils/rpcs3/canonical-source.json').read_text())
-video_patch=(ROOT/'build-utils/rpcs3/embedded-core.patch').read_bytes()
+# The owned-video Core shipped unchanged through Build401 (Core run 37120654954).
+HOST_LOAN_BASE='7bcc52854d6f5bd9c4bb67acdff676f74eee8318'
+video_manifest=json.loads(original('build-utils/rpcs3/canonical-source.json',HOST_LOAN_BASE))
+video_patch=original('build-utils/rpcs3/embedded-core.patch',HOST_LOAN_BASE)
 video_sections=sections(video_patch)
 assert set(video_manifest)==set(current)|{'neoswap_video_frames'}
 for key in set(current)-{'files_sha256','patch_sha256'}:
@@ -476,7 +478,7 @@ assert set(video_sections)==set(source_sections)|VIDEO_ADDED
 for path in set(source_sections)-VIDEO_FILES:
     assert video_sections[path]==source_sections[path], 'Video changed unrelated Core patch section: '+path
 for name in ('SourceABI.h','SourceClient.h','SourceClient.cpp','FrameClient.h','VideoBuffer.h'):
-    assert hashlib.sha256((ROOT/'native/neoswap-storage'/name).read_bytes()).hexdigest()==video_manifest['files_sha256']['rpcs3/ios/NeoSwapStorage/'+name]
+    assert hashlib.sha256(original('native/neoswap-storage/'+name,HOST_LOAN_BASE)).hexdigest()==video_manifest['files_sha256']['rpcs3/ios/NeoSwapStorage/'+name]
 # Source ABI extends the admitted domain only; declarations/layout are identical.
 def declarations(payload):
     payload=re.sub(rb'/\*.*?\*/',b'',payload,flags=re.S)
@@ -490,7 +492,56 @@ video=video_manifest['neoswap_video_frames']
 assert video['source_abi']==1 and video['domain']==3 and video['admission_io'] is False
 assert video['guest_gpu_jit_untouched'] is True and video['device_tested'] is False and video['gameplay_validated'] is False
 AUDITED_CORE_FILES |= VIDEO_FILES
-current=video_manifest
+# Build409: relay HOST loans. The Core delta is three client headers only:
+# additive allocation kinds on the unchanged allocator ABI 1, the Vulkan import
+# identifying itself as a GPU host-visible loan, and owned video frames
+# borrowing a host loan before their anonymous mapping. Every other section,
+# the main ABI, JIT/VM/GPU policy and the video producer stay byte-identical.
+HOST_LOAN_FILES={'rpcs3/ios/NeoSwapClient.h','rpcs3/ios/NeoSwapVulkanBuffer.h','rpcs3/ios/NeoSwapStorage/VideoBuffer.h'}
+loan_manifest=json.loads((ROOT/'build-utils/rpcs3/canonical-source.json').read_text())
+loan_patch=(ROOT/'build-utils/rpcs3/embedded-core.patch').read_bytes()
+loan_sections=sections(loan_patch)
+assert set(loan_manifest)==set(video_manifest)|{'neoswap_host_loans'}
+for key in set(video_manifest)-{'files_sha256','patch_sha256','policy','neoswap'}:
+    assert loan_manifest[key]==video_manifest[key], 'Host loans changed unrelated canonical policy: '+key
+assert set(loan_manifest['neoswap'])==set(video_manifest['neoswap'])
+for key in set(video_manifest['neoswap'])-{'coverage'}:
+    assert loan_manifest['neoswap'][key]==video_manifest['neoswap'][key], 'Allocator client contract changed: '+key
+assert set(loan_manifest['files_sha256'])==set(video_manifest['files_sha256'])
+assert {p for p,h in loan_manifest['files_sha256'].items() if video_manifest['files_sha256'].get(p)!=h}==HOST_LOAN_FILES
+assert hashlib.sha256(loan_patch).hexdigest()==loan_manifest['patch_sha256']
+assert set(loan_sections)==set(video_sections)
+for path in set(video_sections)-HOST_LOAN_FILES:
+    assert loan_sections[path]==video_sections[path], 'Host loans changed unrelated Core patch section: '+path
+assert hashlib.sha256((ROOT/'native/neoswap-storage/VideoBuffer.h').read_bytes()).hexdigest()==loan_manifest['files_sha256']['rpcs3/ios/NeoSwapStorage/VideoBuffer.h']
+for name in ('SourceABI.h','SourceClient.h','SourceClient.cpp','FrameClient.h'):
+    assert hashlib.sha256((ROOT/'native/neoswap-storage'/name).read_bytes()).hexdigest()==loan_manifest['files_sha256']['rpcs3/ios/NeoSwapStorage/'+name]
+loan_client=postimage_lines(loan_sections['rpcs3/ios/NeoSwapClient.h'])
+assert b'NEOSWAP_GPU_HOST_VISIBLE = 3' in loan_client and b'NEOSWAP_VIDEO_FRAME = 4' in loan_client
+assert b'inline void* try_allocate_kind(uint32_t owner, uint32_t kind, size_t bytes, size_t alignment) noexcept' in loan_client
+assert b'return try_allocate_kind(owner, NEOSWAP_CPU_DATA, bytes, alignment);' in loan_client
+assert loan_client.count(b'api->allocate(') == 2, 'Only the kind-aware helper and the CPU_CACHE path may call the ABI'
+old_client_header=postimage_lines(video_sections['rpcs3/ios/NeoSwapClient.h'])
+assert old_client_header.index(b'// RSX CPU data only.')>0
+assert loan_client[loan_client.index(b'// RSX CPU data only.'):]==old_client_header[old_client_header.index(b'// RSX CPU data only.'):], 'CPU_CACHE path, snapshot or release changed'
+loan_vulkan=postimage_lines(loan_sections['rpcs3/ios/NeoSwapVulkanBuffer.h'])
+old_vulkan=postimage_lines(video_sections['rpcs3/ios/NeoSwapVulkanBuffer.h'])
+assert loan_vulkan.count(b'neostation::swap::try_allocate_kind(NEOSWAP_RPCS3, NEOSWAP_GPU_HOST_VISIBLE, m_bytes, alignment)')==1
+assert b'neostation::swap::try_allocate(NEOSWAP_RPCS3, m_bytes, alignment)' not in loan_vulkan
+vulkan_without_comment=b''.join(line for line in loan_vulkan.splitlines(keepends=True) if not line.strip().startswith(b'// Identified as a GPU') and not line.strip().startswith(b'// report Vulkan imports') and not line.strip().startswith(b'// (1-256 MiB) is enforced'))
+assert vulkan_without_comment.replace(b'try_allocate_kind(NEOSWAP_RPCS3, NEOSWAP_GPU_HOST_VISIBLE, m_bytes, alignment)',b'try_allocate(NEOSWAP_RPCS3, m_bytes, alignment)')==old_vulkan, 'Vulkan import changed beyond its loan kind'
+loan_video=postimage_lines(loan_sections['rpcs3/ios/NeoSwapStorage/VideoBuffer.h'])
+assert b'#if __has_include("../NeoSwapClient.h")' in loan_video and b'NEOSWAP_VIDEO_FRAME' in loan_video
+assert b'try_allocate_kind(NEOSWAP_RPCS3,NEOSWAP_VIDEO_FRAME,span,page)' in loan_video
+assert b'if(!mapping){\n        mapping=static_cast<uint8_t*>(::mmap(nullptr,span,PROT_READ|PROT_WRITE,MAP_PRIVATE|MAP_ANON,-1,0));' in loan_video
+assert b'video_loan_tag' in loan_video and b'neostation::swap::release(pixels)' in loan_video
+assert loan_video.count(b'::munmap(')==old_video_munmaps if (old_video_munmaps:=postimage_lines(video_sections['rpcs3/ios/NeoSwapStorage/VideoBuffer.h']).count(b'::munmap(')) else True
+assert loan_video[loan_video.index(b'inline bool video_mapping_format'):loan_video.index(b'    if(!span)return AVERROR(EINVAL);')]==postimage_lines(video_sections['rpcs3/ios/NeoSwapStorage/VideoBuffer.h'])[postimage_lines(video_sections['rpcs3/ios/NeoSwapStorage/VideoBuffer.h']).index(b'inline bool video_mapping_format'):postimage_lines(video_sections['rpcs3/ios/NeoSwapStorage/VideoBuffer.h']).index(b'    if(!span)return AVERROR(EINVAL);')], 'Frame format/plane layout policy changed'
+loans=loan_manifest['neoswap_host_loans']
+assert loans['client_abi']==1 and loans['extended_kinds']=={'gpu_host_visible':3,'video_frame':4}
+assert loans['backing_selected_by_host'] is True and loans['device_runtime_tested'] is False and loans['gameplay_validated'] is False
+AUDITED_CORE_FILES |= HOST_LOAN_FILES
+current=loan_manifest
 assert candidate['manifest']['rpcs3_postimages_sha256'] == {
     path: current['files_sha256'][path] for path in sorted(AUDITED_CORE_FILES)
 }, 'Candidate/Core postimage identity drift'
@@ -526,5 +577,5 @@ assert broker.count('Broker& broker() { static Broker b; return b; }') == 1
 catalog = json.loads((ROOT / 'native/neoswap/localizations.json').read_text())
 assert set(catalog) == {'en', 'es', 'ru', 'zh', 'zh_Hant', 'pt', 'fr', 'de', 'it', 'id', 'ja', 'ko'}
 print('PASS NeoSwap scope: historical Vulkan/Core changes retained; explicitly reviewed postimages; '
-      'optional shader CPU cache and owned GLSL source archive; JIT/PPU/SPU and allocator v1 unchanged; '
+      'optional shader CPU cache, owned GLSL source archive and Build409 relay host-loan kinds; JIT/PPU/SPU and allocator v1 unchanged; '
       'runtime ABI30/relay ABI1; one host broker; no physical iPhone validation claim')

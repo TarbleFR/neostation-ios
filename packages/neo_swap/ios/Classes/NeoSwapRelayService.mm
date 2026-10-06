@@ -13,6 +13,10 @@ constexpr uint64_t MiB = 1024 * 1024;
 constexpr uint64_t kCapacity = 8 * 1024 * MiB;
 constexpr uint64_t kSegment = 512 * MiB;
 constexpr uint32_t kRPCS3 = 0;
+// Relay owner 1 serves RPCS3 HOST data loans through the broker; it shares the
+// retained objects with guest data and is bounded by the budget quota.
+constexpr uint32_t kHostLoans = neostation::relay::host_loan_owner;
+constexpr uint32_t kOwnerMask = (1u << kRPCS3) | (1u << kHostLoans);
 constexpr NSTimeInterval kNormalRetryDelaySeconds = 30.0;
 constexpr NSTimeInterval kFastFootprintRetryDelaySeconds = 0.15;
 constexpr NSUInteger kMaxFastFootprintRetries = 1;
@@ -158,7 +162,7 @@ NSDictionary* capabilityCheck() {
         int setup = neostation::relay::shutdown();
         if (setup == 0) {
             neostation::relay::set_pressure(self->_memoryPressureRaised);
-            setup = neostation::relay::configure(1u << kRPCS3, kCapacity);
+            setup = neostation::relay::configure(kOwnerMask, kCapacity);
         }
         if (setup != 0) {
             [self finishGeneration:generation details:@{@"state":@"backend_refused", @"result":@(setup)} ready:NO];
@@ -202,7 +206,7 @@ NSDictionary* capabilityCheck() {
         details[@"capabilityCheck"] = measured;
         result = [measured[@"result"] intValue];
     }
-    if (result == 0) result = neostation::relay::configure(1u << kRPCS3, kCapacity);
+    if (result == 0) result = neostation::relay::configure(kOwnerMask, kCapacity);
     if (result != 0) {
         (void)neostation::relay::configure(0, kCapacity);
         const int cleanup = neostation::relay::shutdown();
@@ -345,6 +349,15 @@ NSDictionary* capabilityCheck() {
     result[@"mapFailureCount"] = @(pressure.map_failures);
     result[@"lastMapFailureResult"] = @(pressure.last_map_result);
     result[@"lastMapFailureOSError"] = @(pressure.last_map_os_error);
+    // Guest objects (owner 0) and host loans (owner 1) share liveBackingBytes;
+    // these split that total and report the host-loan quota in force.
+    result[@"guestLiveBackingBytes"] = @(pressure.owner_live_bytes[kRPCS3]);
+    result[@"guestPeakBackingBytes"] = @(pressure.owner_peak_bytes[kRPCS3]);
+    result[@"hostLoanLiveBackingBytes"] = @(pressure.owner_live_bytes[kHostLoans]);
+    result[@"hostLoanPeakBackingBytes"] = @(pressure.owner_peak_bytes[kHostLoans]);
+    result[@"hostLoanQuotaBytes"] = @(pressure.owner_quota_bytes[kHostLoans]);
+    result[@"hostLoanQuotaRefusals"] = @(pressure.quota_refusals);
+    result[@"hostLoanOwnerEnabled"] = @(NeoSwap_GetRelayAPI(1)->enabled(kHostLoans) != 0);
     if (stats.quarantined_fixed_alias_count) {
         result[@"ready"] = @NO;
         result[@"state"] = @"fixed_alias_quarantined";
@@ -365,4 +378,7 @@ static NeoSwapRelayManager* manager() {
 extern "C" void NeoSwapRelay_Start(void) { [manager() start]; }
 extern "C" void NeoSwapRelay_Maintain(void) { [manager() maintain]; }
 extern "C" int NeoSwapRelay_WaitReady(uint32_t timeout_ms) { return [manager() waitReady:timeout_ms]; }
+extern "C" int NeoSwapRelay_SetHostLoanQuota(uint64_t bytes) {
+    return neostation::relay::set_owner_quota(kHostLoans, bytes);
+}
 NSDictionary* NeoSwapRelay_Diagnostics(void) { return [manager() diagnostics]; }

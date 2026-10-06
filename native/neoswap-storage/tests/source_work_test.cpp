@@ -24,6 +24,12 @@ static void memory_need(){
     p.update(512ULL<<20,true,false);CHECK(p.needed()); // NORMAL recovery / still low RAM
     p.update(0,false,false);CHECK(!p.needed());
     p.update(0,false,true);CHECK(!p.needed()); // an event does not invent a valid margin
+    // The global budget controller's shrink request archives early with ample
+    // process headroom, then the hysteresis releases it like a measured need.
+    p.update(4ULL<<30,true,false,0,true);CHECK(p.needed());CHECK(std::string(p.reason())=="global_budget_shrinking");
+    p.update(4ULL<<30,true,false,0,false);CHECK(!p.needed());
+    p.update(0,false,false,0,true);CHECK(!p.needed()); // shrink never invents a valid margin either
+    p.update(512ULL<<20,true,true,0,true);CHECK(p.needed());CHECK(std::string(p.reason())=="system_memory_warning_admission_paused");
 }
 static void coalescing(){
     Queue q;CHECK(q.request());

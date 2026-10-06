@@ -35,14 +35,28 @@ inline NeoSwapUsageStatus NeoSwapUsage(uint64_t live, const NeoSwapClientStats* 
 struct NeoSwapMemoryGraphPoint {
     uint64_t allocated = 0;
     uint64_t resident = 0;
+    // HOST data NeoSwap supplies outside the process footprint: relay host
+    // loans (RSX data, Vulkan buffers, video frames) plus donor loans. Guest
+    // pages are part of `allocated` but not of this contribution figure.
+    uint64_t hostLoans = 0;
     bool allocatedValid = false;
     bool residentValid = false;
+    bool hostLoansValid = false;
 };
+inline uint64_t NeoSwapHostLoanBytes(const NeoSwapHostStats* host) noexcept {
+    if (!host) return 0;
+    const uint64_t donor = host->owner_donated_live_bytes[NEOSWAP_RPCS3];
+    return host->relay_loan_live_bytes > UINT64_MAX - donor ? UINT64_MAX : host->relay_loan_live_bytes + donor;
+}
 inline NeoSwapMemoryGraphPoint NeoSwapMemoryGraph(const NeoSwapHostStats* host,
     uint64_t relayLiveBacking, bool relayMeasured, uint64_t processResident) noexcept {
     NeoSwapMemoryGraphPoint point{};
     point.resident = processResident;
     point.residentValid = processResident != 0;
+    if (host) {
+        point.hostLoans = NeoSwapHostLoanBytes(host);
+        point.hostLoansValid = true;
+    }
     if (host && relayMeasured) {
         const uint64_t loans = host->owner_donated_live_bytes[NEOSWAP_RPCS3];
         if (relayLiveBacking <= UINT64_MAX - loans) {

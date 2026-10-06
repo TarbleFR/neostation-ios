@@ -70,6 +70,20 @@ jobs:
           xcrun clang++ -std=c++20 -O1 -g -Wall -Wextra -Werror -pthread -DNEOSWAP_TESTING -fsanitize=address,undefined \
             -Ipackages/neo_swap/ios/Classes packages/neo_swap/ios/Classes/NeoSwap.cpp test/neoswap_capacity_probe_test.cpp -o "$RUNNER_TEMP/neoswap-capacity"
           "$RUNNER_TEMP/neoswap-capacity" | tee build/neoswap/capacity-tests.txt
+          # Global budget controller: pure decision table, no kernel sample.
+          xcrun clang++ -std=c++20 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined \
+            -Ipackages/neo_swap/ios/Classes test/neoswap_budget_test.cpp -o "$RUNNER_TEMP/neoswap-budget"
+          "$RUNNER_TEMP/neoswap-budget" | tee build/neoswap/budget-tests.txt
+          # Production broker + production relay backend over a real shared-file
+          # fixture: relay host loans, kinds, quotas, reuse cache, address index.
+          mkdir -p "$RUNNER_TEMP/neoswap-loans-include"
+          ln -s "$GITHUB_WORKSPACE/native/neoswap-relay" "$RUNNER_TEMP/neoswap-loans-include/Relay"
+          xcrun clang++ -std=c++20 -O1 -g -Wall -Wextra -Werror -pthread -DNEOSWAP_TESTING -DNEOSWAP_RELAY=1 \
+            -fsanitize=address,undefined -I"$RUNNER_TEMP/neoswap-loans-include" \
+            -Ipackages/neo_swap/ios/Classes -Inative/neoswap \
+            packages/neo_swap/ios/Classes/NeoSwap.cpp native/neoswap-relay/Backend.cpp native/neoswap-donation/Broker.cpp \
+            test/neoswap_relay_loans_test.cpp -o "$RUNNER_TEMP/neoswap-relay-loans"
+          "$RUNNER_TEMP/neoswap-relay-loans" | tee build/neoswap/relay-loans-tests.txt
           mkdir -p "$RUNNER_TEMP/neoswap-demand-include"
           ln -s "$GITHUB_WORKSPACE/native/neoswap-donation" "$RUNNER_TEMP/neoswap-demand-include/Donation"
           xcrun clang++ -std=c++20 -O1 -g -Wall -Wextra -Werror -pthread \

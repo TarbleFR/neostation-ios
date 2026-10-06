@@ -34,6 +34,7 @@ struct State {
     neostation::source_work::ReadTiming sourceReadTiming;
     neostation::source_work::VideoMemoryNeed videoMemoryNeed;
     std::atomic<bool> videoAdmissionNeeded{false};
+    std::atomic<bool> budgetShrink{false};
     std::atomic<uint64_t> videoNeedSampleUs{0},videoPolicyRefusals{0};
 #ifdef NEOSWAP_STORAGE_TESTING
     bool testMemory=false,testAvailableValid=false;
@@ -71,7 +72,7 @@ void refreshVideoNeed(State& s,ProcessMetrics metrics){
     if(s.testMemory){metrics.process_available_bytes=s.testAvailable;metrics.process_available_valid=s.testAvailableValid;}
 #endif
     s.videoMemoryNeed.update(metrics.process_available_bytes,metrics.process_available_valid,
-        s.memoryPressure!=Pressure::normal,NSProcessInfo.processInfo.physicalMemory);
+        s.memoryPressure!=Pressure::normal,NSProcessInfo.processInfo.physicalMemory,s.budgetShrink.load());
     s.videoAdmissionNeeded.store(s.videoMemoryNeed.needed()&&!s.background&&s.memoryPressure==Pressure::normal);
     s.videoNeedSampleUs.store(monotonicUs());
 }
@@ -131,6 +132,7 @@ NSDictionary* sourceDictionary(neostation::source_archive::Archive& archive,Stat
         @"videoPixelReturnedArchiveBytesCumulative":@(x.pixel_restored_bytes),
         @"transientCheckpointRetries":@(x.transient_retries),
         @"videoAdmissionNeedsMemory":@(s.videoAdmissionNeeded.load()),
+        @"videoBudgetShrinkRequested":@(s.budgetShrink.load()),
         @"videoAdmissionRefusalsWithoutMemoryNeed":@(s.videoPolicyRefusals.load()),
         @"videoMemoryEnterAvailableBytes":@(s.videoMemoryNeed.enter_threshold()),
         @"videoMemoryLeaveAvailableBytes":@(s.videoMemoryNeed.leave_threshold()),
@@ -391,6 +393,11 @@ void NeoSwapStorage_Initialize(void) {
 const NeoSwapStorageAPI* NeoSwapStorage_GetAPI(uint32_t version){NeoSwapStorage_Initialize();return version==NEOSWAP_STORAGE_ABI?&api:nullptr;}
 const NeoSwapSourceAPI* NeoSwapStorage_GetSourceAPI(uint32_t version){NeoSwapStorage_Initialize();return version==NEOSWAP_SOURCE_ABI?&sourceAPI:nullptr;}
 void NeoSwapStorage_SetBinderResult(int result){state().binderResult.store(result);}
+void NeoSwapStorage_SetBudgetShrink(BOOL shrink){
+    auto& s=state();
+    if(s.budgetShrink.exchange(shrink!=NO)==(shrink!=NO))return;
+    dispatch_async(s.queue,^{auto& st=state();refreshVideoNeed(st,sample_process());});
+}
 void NeoSwapStorage_SetSourceBinderResult(int result){state().sourceBinderResult.store(result);}
 BOOL NeoSwapStorage_GetPreference(void){
     const auto& profile=NeoSwapExperimentProfile();

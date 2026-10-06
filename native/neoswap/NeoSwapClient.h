@@ -4,6 +4,14 @@
 #include <atomic>
 #include <cstddef>
 
+// Additive allocation kinds carried through the unchanged NeoSwapAPI v1 table.
+// They identify the RPCS3 consumer of a loan for host accounting; an older
+// host rejects them as NEOSWAP_INVALID and the caller keeps its original
+// allocator. Values must match the host's NeoSwapHostKind enumeration.
+enum NeoSwapExtendedKind {
+    NEOSWAP_GPU_HOST_VISIBLE = 3, /* coherent host-visible Vulkan SYSTEM buffers */
+    NEOSWAP_VIDEO_FRAME = 4       /* owned software VDEC frame mappings */
+};
 namespace neostation::swap {
 // Each core stores only a borrowed vtable. The broker itself is compiled once
 // into neo_swap.framework, never into each emulator. No static constructors.
@@ -19,12 +27,9 @@ inline int install(const NeoSwapAPI* api) noexcept {
         return NEOSWAP_BUSY;
     return NEOSWAP_OK;
 }
-inline void* try_allocate(uint32_t owner, size_t bytes, size_t alignment) noexcept {
-    // Small renderer allocations must not take the broker lock or create files.
-    if (bytes < 1024 * 1024) {
-        skipped_small.fetch_add(1, std::memory_order_relaxed);
-        return nullptr;
-    }
+// Explicit-kind request without a size threshold of its own: callers decide
+// eligibility (Vulkan import limits, frame mapping formats) before asking.
+inline void* try_allocate_kind(uint32_t owner, uint32_t kind, size_t bytes, size_t alignment) noexcept {
     const auto* api = client_api.load(std::memory_order_acquire);
     if (!api) {
         missing_api.fetch_add(1, std::memory_order_relaxed);
@@ -36,7 +41,7 @@ inline void* try_allocate(uint32_t owner, size_t bytes, size_t alignment) noexce
     }
     void* ptr = nullptr;
     eligible_attempts.fetch_add(1, std::memory_order_relaxed);
-    const int result = api->allocate(owner, NEOSWAP_CPU_DATA, bytes, alignment, &ptr);
+    const int result = api->allocate(owner, kind, bytes, alignment, &ptr);
     last_result.store(result, std::memory_order_relaxed);
     if (result == NEOSWAP_OK && ptr) {
         successful_allocations.fetch_add(1, std::memory_order_relaxed);
@@ -44,6 +49,14 @@ inline void* try_allocate(uint32_t owner, size_t bytes, size_t alignment) noexce
     }
     failed_allocations.fetch_add(1, std::memory_order_relaxed);
     return nullptr;
+}
+inline void* try_allocate(uint32_t owner, size_t bytes, size_t alignment) noexcept {
+    // Small renderer allocations must not take the broker lock or create files.
+    if (bytes < 1024 * 1024) {
+        skipped_small.fetch_add(1, std::memory_order_relaxed);
+        return nullptr;
+    }
+    return try_allocate_kind(owner, NEOSWAP_CPU_DATA, bytes, alignment);
 }
 // RSX CPU data only. Vulkan retains try_allocate() and its 1 MiB threshold.
 // The host decides whether this title may borrow sub-MiB buffers. A refusal

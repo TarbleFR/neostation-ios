@@ -116,7 +116,7 @@
     "rpcs3/ios/NeoStationSavestateIO.h": "d82e1fae306e025e580954e24f35b3aaa3a782dcfeea2f16722d1dbf9b1dd6e6",
     "rpcs3/ios/NeoStationSavestateStatus.h": "b5d4b1597563ef978433fa0a2f19543d4d51ba32775c4add8bc228de9bbd7692",
     "rpcs3/ios/NeoSwap.h": "542cba8717bac3335765f5e76ee6e6a66a93b421253a315eda6d6ad0d2680666",
-    "rpcs3/ios/NeoSwapClient.h": "84e07cfcb69a49f4aef1595462ce3a863dac2ae6418c5cfe876b262dc9cde757",
+    "rpcs3/ios/NeoSwapClient.h": "054eb1c5bca85d89f9af0a6c39a4196bfd609dd28c62b879f8b4e33bfd06a3da",
     "rpcs3/ios/NeoSwapClientStats.h": "55e745b85142d109075f2b8f220a288e1a5501f69a79eb8d4de15c7b993902fc",
     "rpcs3/ios/NeoSwapRelay.h": "c1d727c589dded13993f979ce33683df45728a92d387ee7e2a0533f7dfcf1ecd",
     "rpcs3/ios/NeoSwapRelayClient.h": "76b7af80eca16c70e8f62f9c65f5b76ccb92f32e7cd59db2861089b10e655a58",
@@ -127,8 +127,8 @@
     "rpcs3/ios/NeoSwapStorage/SourceClient.cpp": "8e5ceed582e50174cd41022647cbf2462455cdcfd9da06bf8492c800abd89812",
     "rpcs3/ios/NeoSwapStorage/SourceClient.h": "514dfe36544460ce3b5826a1493f1ebd81abc16151efa9126d50d83bd97d8f45",
     "rpcs3/ios/NeoSwapStorage/StorageABI.h": "561696eecc439a6c55a685b4c456c944411fa689f822a13b709ed652032d7b7c",
-    "rpcs3/ios/NeoSwapStorage/VideoBuffer.h": "0968403fcfed33d3c7b218202ea6668f432484328502ab916040645d529c28b4",
-    "rpcs3/ios/NeoSwapVulkanBuffer.h": "e20f464b6c427f576c6c842fc10bcefb6f0be287ced7518684a64c1c0b5e343c",
+    "rpcs3/ios/NeoSwapStorage/VideoBuffer.h": "96969e0c76af6e506815a6cdc9323c523e68bf636445bb511dcb844723ffe140",
+    "rpcs3/ios/NeoSwapVulkanBuffer.h": "721d0f983eb1c482c638213dbf05ce70541f50584f65056f713266aa4d86a5a7",
     "rpcs3/ios/RPCS3IOS.cpp": "35bb5e095853ea0f0dfc10442a0d74d034e03163fcdeba8a360028430ec1a409",
     "rpcs3/ios/RPCS3IOS.exports": "59b8e924659e6391fb215a3fb499a6b174267ab9a98c3a489b7becc463e1be62",
     "rpcs3/ios/RPCS3IOS.h": "2de3446d20494b821e15c90fec17460fc46d48dfe6077fcd861bbc19a19ba140",
@@ -146,14 +146,14 @@
     "rpcs3/util/vm.hpp": "ac58df153ca5e9b1e9f69511879035493338265ee2de96656072ab777a07ecbc",
     "rpcs3/util/vm_native.cpp": "2c8c9547fc4ae1b6c7d2b39d19475c64b6922d4ac21b193cbded859fc2796a8c"
   },
-  "patch_sha256": "b34ca9f8643039b64e88aea22f56b5164552e1c3460bd3148913b8b45ab27d8c",
-  "policy": "Build353 experimental; selective XITRIX Preview 0.10 engine backports (ARM64 SPU/PPU, VM reservations, RSX/Metal, audio recovery, savestate and graphics correctness); Build352 God of War III bounded-memory policy and Build350 lifecycle baseline retained; NeoSwap v1 opt-in host-owned file-backed RSX CPU data allocator, existing JIT/VM/GPU policies unchanged; selective XITRIX v0.10.1 SPU BID continuation, disabled-texture eviction, MoltenVK conditional-rendering fixes; SPU object cache v5 retires old CFG objects; optional NeoSwap client diagnostics ABI 1, main Core ABI 30 unchanged; NeoSwap coherent host-visible Vulkan SYSTEM buffer imports (1-256MiB), strict external-memory/type/alignment checks, deferred GPU resource disposal and allocator fallback; optional NeoSwap guest page relay ABI 1 for guest data shared aliases, host-owned preparation after authenticated creator exit and ordinary file fallback before first published mapping; Build395: measured God of War III opt-in for RSX CPU aligned buffers 64KiB-1MiB via verified donor loans only, fixed metadata budgets, fast pressure gate and original heap fallback; no JIT/VM/GPU/private allocations redirected",
+  "patch_sha256": "7db1bb716f2d9c3de48e1dd091b5f4f920a999707070632a207835a4663026d5",
+  "policy": "Build353 experimental; selective XITRIX Preview 0.10 engine backports (ARM64 SPU/PPU, VM reservations, RSX/Metal, audio recovery, savestate and graphics correctness); Build352 God of War III bounded-memory policy and Build350 lifecycle baseline retained; NeoSwap v1 opt-in host-owned file-backed RSX CPU data allocator, existing JIT/VM/GPU policies unchanged; selective XITRIX v0.10.1 SPU BID continuation, disabled-texture eviction, MoltenVK conditional-rendering fixes; SPU object cache v5 retires old CFG objects; optional NeoSwap client diagnostics ABI 1, main Core ABI 30 unchanged; NeoSwap coherent host-visible Vulkan SYSTEM buffer imports (1-256MiB), strict external-memory/type/alignment checks, deferred GPU resource disposal and allocator fallback; optional NeoSwap guest page relay ABI 1 for guest data shared aliases, host-owned preparation after authenticated creator exit and ordinary file fallback before first published mapping; Build395: measured God of War III opt-in for RSX CPU aligned buffers 64KiB-1MiB via verified donor loans only, fixed metadata budgets, fast pressure gate and original heap fallback; no JIT/VM/GPU/private allocations redirected; Build409: additive NeoSwap client kinds (GPU host-visible imports, owned video-frame mappings) through the unchanged allocator ABI 1, relay host loans selected by the host budget controller; no JIT/VM/GPU/private allocations redirected",
   "schema_version": 2,
   "upstream_commit": "22f1152783cef1f7e04af7b1c895173e28fd5b03",
   "upstream_repository": "XITRIX/rpcs3",
   "neoswap": {
     "client_abi": 1,
-    "coverage": "RSX CPU aligned buffers >= 1 MiB, all titles",
+    "coverage": "RSX CPU aligned buffers >= 64 KiB (all titles, host-gated), coherent host-visible Vulkan SYSTEM buffers 1-256 MiB identified as GPU host-visible loans, owned software VDEC frame mappings identified as video-frame loans; backing selected by the host (relay host loans, donors, files)",
     "broker_compiled_into_host_only": true,
     "device_runtime_tested": false
   },
@@ -221,6 +221,19 @@
     "restore": "VDEC CPU consumer outside queue and conversion locks; failures retain frame and clear partial output",
     "guest_gpu_jit_untouched": true,
     "device_tested": false,
+    "gameplay_validated": false
+  },
+  "neoswap_host_loans": {
+    "client_abi": 1,
+    "extended_kinds": {
+      "gpu_host_visible": 3,
+      "video_frame": 4
+    },
+    "scope": "additive kinds on the unchanged NeoSwapAPI v1 allocate() call; an older host returns NEOSWAP_INVALID and the Core keeps its original allocator or anonymous mapping",
+    "video_frames": "allocate_video_mapping borrows a page-aligned relay host loan when the host admits kind 4; refusal keeps the anonymous mapping; the loan is returned by the same last-reference callback and never munmapped",
+    "backing_selected_by_host": true,
+    "relay_host_loans_outside_host_footprint": "retained named objects whose creator exited; physical residency not measured",
+    "device_runtime_tested": false,
     "gameplay_validated": false
   }
 }

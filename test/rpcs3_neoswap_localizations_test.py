@@ -16,7 +16,7 @@ KEYS = (
     "swapDisabled", "swapWaiting", "swapSmall", "swapRejected", "swapReleased",
     "swapActive",
 )
-MEMORY_KEYS = ("memoryMicroprocess", "memoryPhysical", "memoryUnitGB")
+MEMORY_KEYS = ("memoryMicroprocess", "memoryPhysical", "memoryUnitGB", "memoryNeoSwap")
 LOCALES = {"en", "es", "ru", "zh", "zh_Hant", "pt", "fr", "de", "it", "id", "ja", "ko"}
 ENGLISH = (
     "RPCS3", "Shared", "Target", "Resident", "Compressed", "Donors",
@@ -113,8 +113,8 @@ int main() { @autoreleasepool {
   Check([RPCS3CanonicalLocale(@"unsupported") isEqualToString:@"en"], @"Unknown locale");
   for (NSString* key in expected[@"en"])
     Check([RPCS3LocalizedString(key, nil) isEqualToString:expected[@"en"][key]], @"Missing locale");
-  Check(checks == 204, @"All twelve catalogues were exercised");
-  std::puts("PASS: production Foundation lookup executes 204 NeoSwap translations plus traditional Chinese variants and locale fallback; no iPhone runtime claim");
+  Check(checks == 216, @"All twelve catalogues were exercised");
+  std::puts("PASS: production Foundation lookup executes 216 NeoSwap translations plus traditional Chinese variants and locale fallback; no iPhone runtime claim");
 } return 0; }
 '''.replace("EXPECTED_CATALOGUES", expected)
     with tempfile.TemporaryDirectory(prefix="rpcs3-neoswap-locales-") as temporary:

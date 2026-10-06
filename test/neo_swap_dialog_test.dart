@@ -542,4 +542,108 @@ void main() {
       await tester.binding.setSurfaceSize(null);
     },
   );
+  testWidgets(
+    'the budget summary shows what RPCS3 holds and what NeoSwap supplies',
+    (tester) async {
+      const mib = 1024 * 1024;
+      messenger.setMockMethodCallHandler(
+        channel,
+        (_) async => {
+          ...sample(),
+          'neoswapContribution': {
+            'hostFootprintBytes': 3000 * mib,
+            'mobilizedOutsideFootprintBytes': 1400 * mib,
+            'relayGuestLiveBytes': 973 * mib,
+            'relayHostLoanLiveBytes': 379 * mib,
+            'donorLoanLiveBytes': 48 * mib,
+            'fileFallbackLiveBytes': 32 * mib,
+            'storageArchivedLiveBytes': 20 * mib,
+          },
+          'budget': {
+            'state': 'growing',
+            'reason': 'measured_room_available',
+            'hostLoanQuotaBytes': 1536 * mib,
+            'growthRoomBytes': 1152 * mib,
+            'operationalReserveBytes': 476 * mib,
+            'relayHostLoans': {
+              'kindLiveBytes': {
+                'cpuData': 128 * mib,
+                'cpuCache': 96 * mib,
+                'gpuHostVisible': 120 * mib,
+                'videoFrame': 35 * mib,
+              },
+            },
+          },
+        },
+      );
+      await open(tester);
+      final context = tester.element(find.byType(NeoSwapDialog));
+      expect(
+        find.text(
+          NeoSwapLocale.get(context, 'budgetSummary', {
+            'footprint': '3000.0 MiB',
+            'mobilized': '1400.0 MiB',
+          }),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.text(
+          NeoSwapLocale.get(context, 'budgetBreakdown', {
+            'guest': '973.0 MiB',
+            'host': '379.0 MiB',
+            'donor': '48.0 MiB',
+            'file': '32.0 MiB',
+            'archived': '20.0 MiB',
+          }),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.text(
+          NeoSwapLocale.get(context, 'relayLoanKinds', {
+            'cpu': '128.0 MiB',
+            'cache': '96.0 MiB',
+            'gpu': '120.0 MiB',
+            'video': '35.0 MiB',
+          }),
+        ),
+        findsOneWidget,
+      );
+      // Raw controller identifiers are shown unchanged inside the sentence.
+      expect(
+        find.text(
+          NeoSwapLocale.get(context, 'budgetState', {
+            'state': 'growing',
+            'reason': 'measured_room_available',
+          }),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.text(
+          NeoSwapLocale.get(context, 'budgetQuota', {
+            'quota': '1536.0 MiB',
+            'room': '1152.0 MiB',
+            'reserve': '476.0 MiB',
+          }),
+        ),
+        findsOneWidget,
+      );
+      expect(find.text(NeoSwapLocale.get(context, 'budgetNote')), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+      await tester.binding.setSurfaceSize(null);
+    },
+  );
+  testWidgets('an older host without budget data shows no budget rows', (
+    tester,
+  ) async {
+    messenger.setMockMethodCallHandler(channel, (_) async => sample());
+    await open(tester);
+    expect(find.byKey(const ValueKey('neoSwapBudgetSummary')), findsNothing);
+    expect(find.byKey(const ValueKey('neoSwapBudgetState')), findsNothing);
+    expect(find.byKey(const ValueKey('neoSwapTarget')), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+    await tester.binding.setSurfaceSize(null);
+  });
 }

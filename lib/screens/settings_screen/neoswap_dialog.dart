@@ -157,6 +157,18 @@ class _NeoSwapDialogState extends State<NeoSwapDialog> {
         ? (cache['rawRamBytes'] as num) +
               (cache['compressedCacheRamBytes'] as num)
         : null;
+    // Global budget controller: what RPCS3 holds and what NeoSwap supplies
+    // outside the process footprint. Raw state/reason identifiers stay as-is.
+    final contribution = _stats?['neoswapContribution'] is Map
+        ? _stats!['neoswapContribution'] as Map
+        : const {};
+    final budget = _stats?['budget'] is Map ? _stats!['budget'] as Map : const {};
+    final relayLoans = budget['relayHostLoans'] is Map
+        ? budget['relayHostLoans'] as Map
+        : const {};
+    final relayKinds = relayLoans['kindLiveBytes'] is Map
+        ? relayLoans['kindLiveBytes'] as Map
+        : const {};
     return PopScope(
       canPop: !_busy,
       child: Dialog(
@@ -218,6 +230,60 @@ class _NeoSwapDialogState extends State<NeoSwapDialog> {
                       }),
                       key: const ValueKey('neoSwapVideoStorageMetrics'),
                     ),
+                ],
+                if (contribution.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  Text(
+                    t('budgetSummary', {
+                      'footprint': _bytes(contribution['hostFootprintBytes']),
+                      'mobilized': _bytes(
+                        contribution['mobilizedOutsideFootprintBytes'],
+                      ),
+                    }),
+                    key: const ValueKey('neoSwapBudgetSummary'),
+                  ),
+                  Text(
+                    t('budgetBreakdown', {
+                      'guest': _bytes(contribution['relayGuestLiveBytes']),
+                      'host': _bytes(contribution['relayHostLoanLiveBytes']),
+                      'donor': _bytes(contribution['donorLoanLiveBytes']),
+                      'file': _bytes(contribution['fileFallbackLiveBytes']),
+                      'archived': _bytes(
+                        contribution['storageArchivedLiveBytes'],
+                      ),
+                    }),
+                    key: const ValueKey('neoSwapBudgetBreakdown'),
+                  ),
+                  if (relayKinds.isNotEmpty)
+                    Text(
+                      t('relayLoanKinds', {
+                        'cpu': _bytes(relayKinds['cpuData']),
+                        'cache': _bytes(relayKinds['cpuCache']),
+                        'gpu': _bytes(relayKinds['gpuHostVisible']),
+                        'video': _bytes(relayKinds['videoFrame']),
+                      }),
+                      key: const ValueKey('neoSwapRelayLoanKinds'),
+                    ),
+                  if (budget.isNotEmpty) ...[
+                    Text(
+                      t('budgetState', {
+                        'state': '${budget['state'] ?? '—'}',
+                        'reason': '${budget['reason'] ?? '—'}',
+                      }),
+                      key: const ValueKey('neoSwapBudgetState'),
+                    ),
+                    Text(
+                      t('budgetQuota', {
+                        'quota': _bytes(budget['hostLoanQuotaBytes']),
+                        'room': _bytes(budget['growthRoomBytes']),
+                        'reserve': _bytes(budget['operationalReserveBytes']),
+                      }),
+                    ),
+                  ],
+                  Text(
+                    t('budgetNote'),
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
                 ],
                 const SizedBox(height: 16),
                 Text(

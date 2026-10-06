@@ -10,6 +10,10 @@ void NeoSwapStorage_Initialize(void);
 const NeoSwapStorageAPI* NeoSwapStorage_GetAPI(uint32_t version);
 const NeoSwapSourceAPI* NeoSwapStorage_GetSourceAPI(uint32_t version);
 void NeoSwapStorage_SetBinderResult(int result);
+// Global budget controller input: while set, cold video pixels are archived
+// before the process headroom alone would require it. Admission still refuses
+// under system pressure, in the background and with stale measurements.
+void NeoSwapStorage_SetBudgetShrink(BOOL shrink);
 void NeoSwapStorage_SetSourceBinderResult(int result);
 void NeoSwapStorage_BeginSession(NSString* title);
 void NeoSwapStorage_EndSession(void);

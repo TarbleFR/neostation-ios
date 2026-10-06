@@ -193,8 +193,12 @@ static void failures_do_not_free_live_ranges() {
 static void guards_and_pressure() {
     Fixture f;
     std::uint64_t token = 99;
-    assert(f.backend.configure(2) == NEOSWAP_RELAY_INVALID);
+    // Owner 1 is the host-loan owner; any other owner stays unsupported. The
+    // guest-only mask from the fixture keeps host loans disabled here.
+    assert(f.backend.configure(4) == NEOSWAP_RELAY_INVALID);
+    assert(f.backend.configure(1 | 8) == NEOSWAP_RELAY_INVALID);
     assert(f.backend.create(1, page, &token) == NEOSWAP_RELAY_DISABLED && token == 0);
+    assert(f.backend.create(2, page, &token) == NEOSWAP_RELAY_DISABLED && token == 0);
     assert(f.backend.create(0, page - 1, &token) == NEOSWAP_RELAY_INVALID);
     assert(f.backend.create(0, 0, &token) == NEOSWAP_RELAY_INVALID);
     assert(f.backend.create(32, page, &token) == NEOSWAP_RELAY_INVALID);
@@ -225,7 +229,9 @@ static void guards_and_pressure() {
     f.backend.set_pressure(false);
     const auto beforeScope = f.stats();
     const auto mappingsBeforeScope = f.os.mappings.size();
-    for (uint32_t owner = 1; owner < 6; ++owner) {
+    // Owners 2..5 are legacy allocator slots that the relay never serves;
+    // owner 1 (host loans) is covered by host_loan_owner_quota_protects_guest_share.
+    for (uint32_t owner = 2; owner < 6; ++owner) {
         assert(f.backend.configure(1U | (1U << owner)) == NEOSWAP_RELAY_INVALID);
         assert(!f.backend.enabled(owner) && f.backend.enabled(0));
         token = 99;
@@ -516,7 +522,48 @@ static void published_backing_survives_pressure() {
     assert(evidence.last_map_result == NEOSWAP_RELAY_PRESSURE && evidence.last_map_os_error == 0);
 }
 
+static void host_loan_owner_quota_protects_guest_share() {
+    using neostation::relay::host_loan_owner;
+    Fixture f(8 * page);
+    assert(f.backend.configure(neostation::relay::supported_owner_mask) == NEOSWAP_RELAY_OK);
+    assert(f.backend.enabled(0) && f.backend.enabled(host_loan_owner) && !f.backend.enabled(2));
+    assert(f.backend.set_owner_quota(2, page) == NEOSWAP_RELAY_INVALID);
+    assert(f.backend.set_owner_quota(host_loan_owner, 2 * page) == NEOSWAP_RELAY_OK);
+    std::uint64_t host_a = 0, host_b = 0, host_c = 0, guest = 0;
+    assert(f.backend.create(host_loan_owner, page, &host_a) == NEOSWAP_RELAY_OK && host_a);
+    assert(f.backend.create(host_loan_owner, page, &host_b) == NEOSWAP_RELAY_OK && host_b);
+    // The quota refuses the third host object while capacity remains; guest
+    // objects are never charged against the host quota.
+    assert(f.backend.create(host_loan_owner, page, &host_c) == NEOSWAP_RELAY_QUOTA && !host_c);
+    assert(f.backend.create(0, page, &guest) == NEOSWAP_RELAY_OK && guest);
+    auto evidence = f.backend.pressure_diagnostics();
+    assert(evidence.owner_live_bytes[0] == page && evidence.owner_live_bytes[host_loan_owner] == 2 * page);
+    assert(evidence.owner_peak_bytes[host_loan_owner] == 2 * page && evidence.quota_refusals == 1);
+    assert(evidence.owner_quota_bytes[host_loan_owner] == 2 * page && evidence.owner_quota_bytes[0] == 0);
+    // Lowering the quota below the live value refuses growth without revoking.
+    assert(f.backend.set_owner_quota(host_loan_owner, page) == NEOSWAP_RELAY_OK);
+    void* view = nullptr;
+    assert(f.backend.map(host_a, nullptr, NEOSWAP_RELAY_READ_WRITE, &view) == NEOSWAP_RELAY_OK && view);
+    f.os.write(view, 0, 0x4C);
+    assert(f.backend.create(host_loan_owner, page, &host_c) == NEOSWAP_RELAY_QUOTA && !host_c);
+    assert(f.os.read(view, 0) == 0x4C);
+    assert(f.backend.unmap(host_a, view) == NEOSWAP_RELAY_OK && f.backend.release(host_a) == NEOSWAP_RELAY_OK);
+    evidence = f.backend.pressure_diagnostics();
+    assert(evidence.owner_live_bytes[host_loan_owner] == page && evidence.quota_refusals == 2);
+    // Zero quota means capacity-bound only; a released interval is reusable.
+    assert(f.backend.set_owner_quota(host_loan_owner, 0) == NEOSWAP_RELAY_OK);
+    assert(f.backend.create(host_loan_owner, page, &host_c) == NEOSWAP_RELAY_OK && host_c);
+    assert(f.backend.create(host_loan_owner, 5 * page, &host_a) == NEOSWAP_RELAY_OK && host_a);
+    assert(f.stats().live_bytes == 8 * page && f.stats().object_count == 4);
+    for (auto token : {host_a, host_b, host_c, guest}) assert(f.backend.release(token) == NEOSWAP_RELAY_OK);
+    evidence = f.backend.pressure_diagnostics();
+    assert(!evidence.owner_live_bytes[0] && !evidence.owner_live_bytes[host_loan_owner]);
+    assert(evidence.owner_peak_bytes[host_loan_owner] == 7 * page);
+    assert(f.backend.shutdown() == NEOSWAP_RELAY_OK);
+}
+
 int main() {
+    host_loan_owner_quota_protects_guest_share();
     published_backing_survives_pressure();
     alias_identity_and_lifetime();
     failures_do_not_free_live_ranges();
@@ -529,5 +576,5 @@ int main() {
     every_fixed_alias_is_attempted_before_retire_returns();
     retirement_is_bounded_and_fair();
     eight_gibibyte_capacity_keeps_bounded_tokens_and_wide_counters();
-    std::cout << "relay backend: alias identity, fixed reservations, failure ownership, zeroing, pressure, coalescing, deferred retirement and lifecycle checks passed\n";
+    std::cout << "relay backend: alias identity, fixed reservations, failure ownership, zeroing, pressure, coalescing, deferred retirement, host-loan owner quotas and lifecycle checks passed\n";
 }

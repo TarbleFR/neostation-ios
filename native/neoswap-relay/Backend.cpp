@@ -135,6 +135,8 @@ struct Backend::State {
         const auto first = object.offset / alignment;
         for (std::size_t n = 0; n < object.bytes / alignment; ++n) entry.occupied.reset(first + n);
         stats.live_bytes -= object.bytes;
+        if (object.owner < tracked_owner_count)
+            pressure_diagnostics.owner_live_bytes[object.owner] -= object.bytes;
         --stats.object_count;
         if (object.retiring) --stats.retiring_object_count;
         object = {};
@@ -241,6 +243,15 @@ void Backend::set_pressure(bool raised) noexcept {
         ++state_->pressure_diagnostics.transitions;
     state_->stats.pressure_raised = raised ? 1U : 0U;
 }
+int Backend::set_owner_quota(std::uint32_t owner, std::uint64_t bytes) noexcept {
+    if (!state_) return NEOSWAP_RELAY_DISABLED;
+    auto& s = *state_;
+    std::lock_guard<std::mutex> guard(s.mutex);
+    if (owner >= tracked_owner_count || !(supported_owner_mask & (1U << owner)))
+        return s.fail(NEOSWAP_RELAY_INVALID);
+    s.pressure_diagnostics.owner_quota_bytes[owner] = bytes;
+    return NEOSWAP_RELAY_OK;
+}
 int Backend::create(std::uint32_t owner, std::uint64_t bytes, std::uint64_t* token) noexcept {
     if (token) *token = 0;
     if (!state_) return NEOSWAP_RELAY_DISABLED;
@@ -256,6 +267,16 @@ int Backend::create(std::uint32_t owner, std::uint64_t bytes, std::uint64_t* tok
         return s.fail(NEOSWAP_RELAY_PRESSURE);
     }
     if (bytes > s.stats.capacity_bytes - s.stats.live_bytes) return s.fail(NEOSWAP_RELAY_QUOTA);
+    if (owner < tracked_owner_count) {
+        // A per-owner ceiling bounds HOST loans so guest objects retain their
+        // reserved share. Zero means the owner is bounded by capacity only.
+        const auto quota = s.pressure_diagnostics.owner_quota_bytes[owner];
+        const auto live = s.pressure_diagnostics.owner_live_bytes[owner];
+        if (quota && (live >= quota || bytes > quota - live)) {
+            ++s.pressure_diagnostics.quota_refusals;
+            return s.fail(NEOSWAP_RELAY_QUOTA);
+        }
+    }
     if (s.next_serial > (std::numeric_limits<std::uint64_t>::max() >> token_shift))
         return s.fail(NEOSWAP_RELAY_LIMIT);
     std::size_t object_index = maximum_objects;
@@ -280,6 +301,12 @@ int Backend::create(std::uint32_t owner, std::uint64_t bytes, std::uint64_t* tok
             s.next_object = (object_index + 1) % maximum_objects;
             s.stats.live_bytes += bytes;
             s.stats.peak_live_bytes = std::max(s.stats.peak_live_bytes, s.stats.live_bytes);
+            if (owner < tracked_owner_count) {
+                auto& live = s.pressure_diagnostics.owner_live_bytes[owner];
+                live += bytes;
+                s.pressure_diagnostics.owner_peak_bytes[owner] =
+                    std::max(s.pressure_diagnostics.owner_peak_bytes[owner], live);
+            }
             ++s.stats.object_count;
             *token = object.token;
             return s.success();
@@ -503,8 +530,26 @@ const Operations system_operations{retain, drop, map_pages, unmap_pages, zero_pa
 const Operations system_operations{}; // No fabricated portable donation.
 #endif
 } // namespace
+#if defined(NEOSWAP_TESTING)
+namespace {
+const Operations* test_operations = nullptr;
+void* test_context = nullptr;
+}
+void install_operations_for_test(const Operations& operations, void* context) noexcept {
+    static Operations retained;
+    retained = operations;
+    test_operations = &retained;
+    test_context = context;
+}
+Backend& backend() noexcept {
+    static Backend instance(test_operations ? *test_operations : system_operations, test_context);
+    return instance;
+}
+#else
 Backend& backend() noexcept { static Backend instance(system_operations); return instance; }
+#endif
 int configure(std::uint32_t mask, std::uint64_t limit) noexcept { return backend().configure(mask, limit); }
+int set_owner_quota(std::uint32_t owner, std::uint64_t bytes) noexcept { return backend().set_owner_quota(owner, bytes); }
 int adopt(std::uint32_t entry, std::uint64_t bytes, std::int32_t pid, std::uint64_t generation) noexcept {
     return backend().adopt(entry, bytes, pid, generation);
 }

@@ -19,9 +19,17 @@ int main() {
     graphHost.owner_donated_live_bytes[NEOSWAP_RPCS3] = 51380224;
     graphHost.donor_prepared_bytes = 939524096;
     graphHost.reserved_virtual_bytes = 303038464;
+    graphHost.relay_loan_live_bytes = 268435456;
     auto point = NeoSwapMemoryGraph(&graphHost, 1020788736, true, 2264317952);
     assert(point.allocatedValid && point.allocated == 1072168960);
     assert(point.residentValid && point.resident == 2264317952);
+    // Host contribution: relay host loans plus donor loans, never guest pages.
+    assert(point.hostLoansValid && point.hostLoans == 268435456 + 51380224);
+    assert(NeoSwapHostLoanBytes(&graphHost) == point.hostLoans && !NeoSwapHostLoanBytes(nullptr));
+    assert(!NeoSwapMemoryGraph(nullptr, 1, true, 1).hostLoansValid);
+    graphHost.relay_loan_live_bytes = UINT64_MAX;
+    assert(NeoSwapHostLoanBytes(&graphHost) == UINT64_MAX);
+    graphHost.relay_loan_live_bytes = 268435456;
     assert(NeoSwapDecimalGB(1000000000) == 1.0);
     assert(NeoSwapDecimalGB(500000000) == 0.5);
     // Lost creators/readiness must not hide allocations still owned by RPCS3.

@@ -1561,12 +1561,15 @@ static void RPCS3CollectSavestate(void* context, const rpcs3_ios_savestate_info*
         @"stage": @"game_boot", @"message": @"NeoSwap could not open the RPCS3 adaptive memory session."});
       return;
     }
-    NeoSwap_SetCPUBufferExperiment(NeoSwapExperimentProfile().donors() &&
-        NeoSwapCPUBufferTitle(titleId.UTF8String ?: ""));
+    // Sub-MiB RSX buffers borrow relay host loans or donor pages for every
+    // title; the global budget closes the gate under measured pressure. The
+    // God of War III list only selects the high-footprint Core profile now.
+    const BOOL cpuBuffersEnabled = NeoSwapExperimentProfile().relay() || NeoSwapExperimentProfile().donors();
+    NeoSwap_SetCPUBufferExperiment(cpuBuffersEnabled);
     NeoSwapStorage_BeginSession(titleId);
     RPCS3Diagnostic(@"neoswap_cpu_buffers", [NSString stringWithFormat:
-        @"title=%@ enabled=%d minimum_bytes=65536 maximum_exclusive=1048576 disk_fallback=0",
-        titleId, NeoSwapExperimentProfile().donors() && NeoSwapCPUBufferTitle(titleId.UTF8String ?: "")]);
+        @"title=%@ enabled=%d high_footprint_profile=%d minimum_bytes=65536 maximum_exclusive=1048576 disk_fallback=0 backing=relay_host_loans_then_donors",
+        titleId, cpuBuffersEnabled, NeoSwapCPUBufferTitle(titleId.UTF8String ?: "")]);
     RPCS3Diagnostic(@"neoswap_session", [NSString stringWithFormat:@"active=1 result=%d", sessionResult]);
     __block RPCS3GameViewController* controller = nil;
     // Flutter delivers this handler on the main queue; dispatch_sync to the

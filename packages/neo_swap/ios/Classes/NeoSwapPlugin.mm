@@ -4,12 +4,15 @@
 #include "NeoSwapCapacityProbe.h"
 #include "NeoSwapMemorySamples.h"
 #include "NeoSwapExperiment.h"
+#include "NeoSwapBudget.h"
 #import <UIKit/UIKit.h>
 #if defined(NEOSWAP_SHADER_STORAGE)
 #import "NeoSwapStorageService.h"
 #endif
 #if defined(NEOSWAP_RELAY)
 #import "NeoSwapRelayService.h"
+#import "NeoSwapRelay.h"
+#include "Relay/Backend.h"
 #endif
 #import <Foundation/Foundation.h>
 #include <TargetConditionals.h>
@@ -18,6 +21,8 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <cerrno>
+#include <cstring>
+#include <algorithm>
 #include <dlfcn.h>
 #if defined(NEOSWAP_DONATION)
 #import "Donation/NeoSwapDonorIPC.h"
@@ -48,6 +53,13 @@ static_assert(kDonationInitialChunkBytes == neostation::donation::max_chunk_byte
 
 @interface NeoSwapPlugin () {
     neostation::diagnostics::MemorySamples _memorySamples;
+    // Global budget controller: last decision and its sampled inputs, applied
+    // on every diagnostics tick while an RPCS3 session is active.
+    neostation::budget::Inputs _budgetInputs;
+    neostation::budget::Decision _budgetDecision;
+    uint64_t _budgetDecisionCount;
+    uint64_t _budgetStateChanges;
+    uint64_t _budgetLastChangeMs;
 }
 @property(nonatomic, strong) dispatch_queue_t queue;
 @property(nonatomic, strong) dispatch_source_t timer;
@@ -84,6 +96,9 @@ static_assert(kDonationInitialChunkBytes == neostation::donation::max_chunk_byte
 @property(nonatomic, assign) NeoSwapDonationDemand donorDemand;
 @property(nonatomic, assign) uint64_t donorGenerationCounter;
 #endif
+- (void)applyBudget;
+- (uint64_t)donorFloorBytes;
+- (uint64_t)donorReserveBytes;
 @end
 
 static NSDictionary* NeoSwapEffectivePermissions() {
@@ -192,6 +207,7 @@ static NSDictionary* NeoSwapEffectivePermissions() {
         NeoSwapPlugin* strongSelf = weakSelf;
         if (!strongSelf) return;
         @autoreleasepool {
+            [strongSelf applyBudget];
 #if defined(NEOSWAP_DONATION)
             (void)neostation::donation::retry_cleanup();
             if (NeoSwapExperimentProfile().donors() && NeoSwap_OwnerSessionActive(NEOSWAP_RPCS3)) {
@@ -289,6 +305,15 @@ static NSDictionary* NeoSwapEffectivePermissions() {
     neostation::donation::PoolSnapshot pool{};
     neostation::donation::pool_snapshot(pool);
     if (pool.generation != self.donorEpoch || pool.retained_bytes >= pool.target_bytes) return 0;
+    // The global budget controller refuses donor growth without measured room
+    // or while the system is shrinking; explicit demands wait with everyone else.
+    if (!_budgetDecision.donor_growth_admitted) {
+        self.donorGrowthRefusal = @{@"stage":@"global_budget_refused_growth",
+            @"budgetState":[NSString stringWithUTF8String:neostation::budget::state_name(_budgetDecision.state)],
+            @"reason":[NSString stringWithUTF8String:_budgetDecision.reason],
+            @"kernelResult":@(KERN_RESOURCE_SHORTAGE)};
+        return 0;
+    }
     neostation::donation::SystemHeadroom system{};
     const auto sampled = neostation::donation::system_headroom(system);
     // phys_footprint includes uncompressed-page equivalents of compressed
@@ -368,11 +393,20 @@ static NSDictionary* NeoSwapEffectivePermissions() {
     }
     // Existing file allocations cannot become donor loans by filling an idle
     // pool. Only real donor use and the separate demand queue justify growth.
+    // While relay host loans are admitted the controller lowers the floor to
+    // zero so idle prepared donor pages are not duplicated relay capacity.
     return neostation::donation::adaptive_donation_target(pool.live_bytes,
-        NeoSwapExperimentProfile().configured ? 16*kMiB : kDonationWarmFloorBytes,
-        NeoSwapExperimentProfile().configured ? 32*kMiB : kDonationReserveBytes,
+        [self donorFloorBytes], [self donorReserveBytes],
         NeoSwapExperimentProfile().configured ? 16*kMiB : kDonationGrowthQuantumBytes,
         kDonationHardLimitBytes);
+}
+- (uint64_t)donorFloorBytes {
+    if (NeoSwapExperimentProfile().configured) return 16*kMiB;
+    return _budgetDecisionCount ? _budgetDecision.donor_floor_bytes : kDonationWarmFloorBytes;
+}
+- (uint64_t)donorReserveBytes {
+    if (NeoSwapExperimentProfile().configured) return 32*kMiB;
+    return _budgetDecisionCount ? _budgetDecision.donor_reserve_bytes : kDonationReserveBytes;
 }
 - (void)retireDonorsIfIdle {
     if (!self.donorSessions || NeoSwap_OwnerSessionActive(NEOSWAP_RPCS3)) return;
@@ -404,12 +438,8 @@ static NSDictionary* NeoSwapEffectivePermissions() {
 }
 - (void)advanceDonors {
     if (!self.donorSessions || !NeoSwap_OwnerSessionActive(NEOSWAP_RPCS3)) return;
-    neostation::donation::SystemHeadroom cacheHeadroom{};
-    const auto cacheSample = neostation::donation::system_headroom(cacheHeadroom);
-    // Cached quarter-second admission signal, never query the kernel on every
-    // small renderer allocation. Dispatch warnings below also close it at once.
-    NeoSwap_SetCPUBufferPressure(self.cpuBufferPressureRaised || !cacheSample ||
-        cacheHeadroom.usable_bytes < 128 * kMiB);
+    // The quarter-second small-CPU admission gate is applied by applyBudget
+    // from the same kernel sample; dispatch warnings still close it at once.
     (void)neostation::donation::pool_collect_lost();
     if (NeoSwapExperimentProfile().configured && !self.donorDemand.bytes) {
         NeoSwapDonationDemand demand{};
@@ -664,6 +694,87 @@ static NSDictionary* NeoSwapEffectivePermissions() {
     [self advanceDonors];
 }
 #endif
+- (void)applyBudget {
+    using namespace neostation::budget;
+    Inputs in{};
+    in.session_active = NeoSwap_OwnerSessionActive(NEOSWAP_RPCS3) != 0;
+    in.physical_bytes = NSProcessInfo.processInfo.physicalMemory;
+    task_vm_info_data_t memory{};
+    mach_msg_type_number_t count = TASK_VM_INFO_COUNT;
+    if (task_info(mach_task_self(), TASK_VM_INFO, (task_info_t)&memory, &count) == KERN_SUCCESS &&
+        count >= TASK_VM_INFO_REV1_COUNT) {
+        in.host_footprint_bytes = memory.phys_footprint;
+        in.host_footprint_valid = true;
+    }
+    in.host_available_bytes = os_proc_available_memory();
+    in.host_available_valid = in.host_available_bytes != 0 || TARGET_OS_SIMULATOR;
+    in.dispatch_warning = self.cpuBufferPressureRaised;
+    in.thermal_serious = NSProcessInfo.processInfo.thermalState >= NSProcessInfoThermalStateSerious;
+#if defined(NEOSWAP_DONATION)
+    neostation::donation::SystemHeadroom system{};
+    if (neostation::donation::system_headroom(system)) {
+        in.system_usable_bytes = system.usable_bytes;
+        in.system_valid = true;
+    }
+    in.system_pressure = static_cast<Pressure>(static_cast<uint32_t>(system.pressure));
+    neostation::donation::PoolSnapshot pool{};
+    neostation::donation::pool_snapshot(pool);
+    in.donors_available = pool.state == neostation::donation::PoolState::verified && pool.donor_count > 0;
+    in.donor_prepared_bytes = pool.prepared_bytes;
+    in.donor_live_bytes = pool.live_bytes;
+#endif
+#if defined(NEOSWAP_RELAY)
+    if (NeoSwapExperimentProfile().relay()) {
+        const auto* relay = NeoSwap_GetRelayAPI(NEOSWAP_RELAY_ABI);
+        NeoSwapRelayStats stats{}; stats.struct_size = sizeof(stats); stats.abi_version = NEOSWAP_RELAY_ABI;
+        if (relay && relay->snapshot(&stats) == NEOSWAP_RELAY_OK) {
+            const auto owners = neostation::relay::backend().pressure_diagnostics();
+            in.relay_ready = relay->enabled(0) != 0 && relay->enabled(neostation::relay::host_loan_owner) != 0;
+            in.relay_capacity_bytes = stats.capacity_bytes;
+            in.relay_guest_live_bytes = owners.owner_live_bytes[0];
+            in.relay_host_live_bytes = owners.owner_live_bytes[neostation::relay::host_loan_owner];
+        }
+    }
+#endif
+    NeoSwapStats totals{}; totals.struct_size = sizeof(totals);
+    NeoSwapHostStats host{};
+    if (NeoSwap_Snapshot(&totals) == NEOSWAP_OK && NeoSwap_HostSnapshot(&host) == NEOSWAP_OK) {
+        const uint64_t outside = host.relay_loan_live_bytes + host.owner_donated_live_bytes[NEOSWAP_RPCS3];
+        in.file_live_bytes = totals.live_bytes > outside ? totals.live_bytes - outside : 0;
+    }
+#if defined(NEOSWAP_SHADER_STORAGE)
+    id archived = [NeoSwapStorage_Diagnostics() valueForKeyPath:@"sourceArchive.videoPixelLiveArchivedBytes"];
+    if ([archived isKindOfClass:NSNumber.class]) in.storage_archived_live_bytes = [archived unsignedLongLongValue];
+#endif
+    const Decision previous = _budgetDecision;
+    const Decision decision = decide(in, previous);
+    _budgetInputs = in;
+    _budgetDecision = decision;
+    ++_budgetDecisionCount;
+    const uint64_t nowMs = static_cast<uint64_t>(NSProcessInfo.processInfo.systemUptime * 1000.0);
+    // Apply: relay host-loan ceiling and admission (quota never below live),
+    // the backend owner quota, the small-CPU gate, storage shrink and cache
+    // maintenance. Existing loans are never revoked by any of these.
+    const bool relayAdmitted = decision.host_loans_admitted && NeoSwapExperimentProfile().relay();
+    const uint64_t quota = std::max(decision.host_loan_quota_bytes, in.relay_host_live_bytes);
+    NeoSwap_SetRelayHostLoanPolicy(quota, relayAdmitted, relayAdmitted);
+#if defined(NEOSWAP_RELAY)
+    if (NeoSwapExperimentProfile().relay()) (void)NeoSwapRelay_SetHostLoanQuota(quota);
+#endif
+    NeoSwap_SetCPUBufferPressure(self.cpuBufferPressureRaised || !decision.small_cpu_admitted);
+#if defined(NEOSWAP_SHADER_STORAGE)
+    NeoSwapStorage_SetBudgetShrink(decision.storage_shrink_requested);
+#endif
+    (void)NeoSwap_RelayLoanMaintain(nowMs, !relayAdmitted);
+    if (decision.state != previous.state || std::strcmp(decision.reason, previous.reason) != 0) {
+        ++_budgetStateChanges;
+        // Structural change only, at most four times per second by construction.
+        if (in.session_active || previous.state != State::idle) {
+            _budgetLastChangeMs = nowMs;
+            [self appendRecord:[self snapshot:@"budget_decision"]];
+        }
+    }
+}
 - (int)configure:(NSInteger)capacity {
     NeoSwapConfig config{};
     config.struct_size = sizeof(config); config.abi_version = NEOSWAP_ABI;
@@ -802,11 +913,71 @@ static NSDictionary* NeoSwapEffectivePermissions() {
 #endif
     NeoSwapCPUBufferStats cpuBuffers{};
     NeoSwap_CPUBufferSnapshot(&cpuBuffers);
+    NeoSwapRelayLoanStats relayLoans{};
+    NeoSwap_RelayLoanSnapshot(&relayLoans);
 #if defined(NEOSWAP_TESTING)
     const BOOL diagnosticProbesAvailable = YES;
 #else
     const BOOL diagnosticProbesAvailable = NO;
 #endif
+    const auto& in = _budgetInputs;
+    const auto& decision = _budgetDecision;
+    // One view of what RPCS3 holds and what NeoSwap supplies outside the host
+    // footprint. Capacity, aliases and cumulative counters are excluded; the
+    // physical residency of relay and donor pages is not measured here.
+    NSDictionary* contribution = @{
+        @"schema":@1,
+        @"hostFootprintBytes":in.host_footprint_valid ? @(in.host_footprint_bytes) : NSNull.null,
+        @"hostAvailableBytes":in.host_available_valid ? @(in.host_available_bytes) : NSNull.null,
+        @"relayGuestLiveBytes":@(in.relay_guest_live_bytes),
+        @"relayHostLoanLiveBytes":@(in.relay_host_live_bytes),
+        @"donorLoanLiveBytes":@(in.donor_live_bytes),
+        @"mobilizedOutsideFootprintBytes":@(decision.mobilized_bytes),
+        @"fileFallbackLiveBytes":@(in.file_live_bytes),
+        @"storageArchivedLiveBytes":@(in.storage_archived_live_bytes),
+        @"neoswapTotalBytes":@(decision.neoswap_total_bytes),
+        @"residencyMeasured":@NO,
+        @"definition":@"live backing intervals charged outside the host process footprint plus file-backed and archived bytes; not resident RAM"};
+    NSDictionary* budget = @{
+        @"schema":@1, @"decisions":@(_budgetDecisionCount), @"stateChanges":@(_budgetStateChanges),
+        @"state":[NSString stringWithUTF8String:neostation::budget::state_name(decision.state)],
+        @"reason":[NSString stringWithUTF8String:decision.reason],
+        @"operationalReserveBytes":@(decision.operational_reserve_bytes),
+        @"growthRoomBytes":@(decision.growth_room_bytes),
+        @"guestReserveBytes":@(decision.guest_reserve_bytes),
+        @"hostLoanQuotaBytes":@(decision.host_loan_quota_bytes),
+        @"hostLoansAdmitted":@(decision.host_loans_admitted),
+        @"smallCpuAdmitted":@(decision.small_cpu_admitted),
+        @"donorFloorBytes":@(decision.donor_floor_bytes),
+        @"donorReserveBytes":@(decision.donor_reserve_bytes),
+        @"donorGrowthAdmitted":@(decision.donor_growth_admitted),
+        @"storageShrinkRequested":@(decision.storage_shrink_requested),
+        @"inputs":@{
+            @"sessionActive":@(in.session_active), @"physicalBytes":@(in.physical_bytes),
+            @"systemUsableBytes":in.system_valid ? @(in.system_usable_bytes) : NSNull.null,
+            @"systemPressure":@(static_cast<uint32_t>(in.system_pressure)),
+            @"dispatchWarning":@(in.dispatch_warning), @"thermalSerious":@(in.thermal_serious),
+            @"relayReady":@(in.relay_ready), @"relayCapacityBytes":@(in.relay_capacity_bytes),
+            @"donorsAvailable":@(in.donors_available), @"donorPreparedBytes":@(in.donor_prepared_bytes)},
+        @"relayHostLoans":@{
+            @"available":@(relayLoans.available), @"admitted":@(relayLoans.admitted),
+            @"videoFramesAdmitted":@(relayLoans.video_frames_admitted),
+            @"quotaBytes":@(relayLoans.quota_bytes), @"liveBytes":@(relayLoans.live_bytes),
+            @"peakBytes":@(relayLoans.peak_bytes), @"liveBlocks":@(relayLoans.live_blocks),
+            @"allocationCount":@(relayLoans.allocation_count), @"reuseHits":@(relayLoans.reuse_hits),
+            @"cachedBytes":@(relayLoans.cached_bytes), @"cachedBlocks":@(relayLoans.cached_blocks),
+            @"cacheFlushes":@(relayLoans.cache_flushes), @"paddingBytes":@(relayLoans.padding_bytes),
+            @"policyRefusals":@(relayLoans.policy_refusals), @"quotaRefusals":@(relayLoans.quota_refusals),
+            @"backendRefusals":@(relayLoans.backend_refusals), @"releaseFailures":@(relayLoans.release_failures),
+            @"lastBackendResult":@(relayLoans.last_backend_result),
+            @"kindLiveBytes":@{@"cpuData":@(relayLoans.kind_live_bytes[1]), @"cpuCache":@(relayLoans.kind_live_bytes[2]),
+                @"gpuHostVisible":@(relayLoans.kind_live_bytes[3]), @"videoFrame":@(relayLoans.kind_live_bytes[4])},
+            @"kindLiveBlocks":@{@"cpuData":@(relayLoans.kind_live_blocks[1]), @"cpuCache":@(relayLoans.kind_live_blocks[2]),
+                @"gpuHostVisible":@(relayLoans.kind_live_blocks[3]), @"videoFrame":@(relayLoans.kind_live_blocks[4])},
+            @"kindAllocations":@{@"cpuData":@(relayLoans.kind_allocation_count[1]), @"cpuCache":@(relayLoans.kind_allocation_count[2]),
+                @"gpuHostVisible":@(relayLoans.kind_allocation_count[3]), @"videoFrame":@(relayLoans.kind_allocation_count[4])},
+            @"kindRefusals":@{@"cpuData":@(relayLoans.kind_refusal_count[1]), @"cpuCache":@(relayLoans.kind_refusal_count[2]),
+                @"gpuHostVisible":@(relayLoans.kind_refusal_count[3]), @"videoFrame":@(relayLoans.kind_refusal_count[4])}}};
     return @{@"scope":@"rpcs3_only", @"diagnosticProbesAvailable":@(diagnosticProbesAvailable),
         @"schema":@1, @"event":event, @"timestamp":@([NSDate date].timeIntervalSince1970),
         @"experiment":@{@"mode":[NSString stringWithUTF8String:NeoSwapExperimentProfile().name()],
@@ -816,6 +987,7 @@ static NSDictionary* NeoSwapEffectivePermissions() {
             @"storage":@(NeoSwapExperimentProfile().storage()), @"changesRequireProcessRestart":@YES},
         @"iosMemoryWarningCount":@(self.iosWarningCount),
         @"thermalState":@(NSProcessInfo.processInfo.thermalState),
+        @"budget":budget, @"neoswapContribution":contribution,
         @"terminationCause":NSNull.null, @"jetsamConfirmed":@NO,
         @"processMemoryEvents":@{@"valid":@(eventsValid), @"kernelResult":@(eventResult),
             @"faults":eventsValid ? @(memoryEvents.faults) : NSNull.null,
@@ -857,8 +1029,8 @@ static NSDictionary* NeoSwapEffectivePermissions() {
         @"donatedClientBytes":@(host.owner_donated_live_bytes[NEOSWAP_RPCS3]),
         @"donationTargetBytes":@(adaptiveTarget), @"donationGoalBytes":@(target),
         @"donationHardLimitBytes":@(kDonationHardLimitBytes),
-        @"donationWarmFloorBytes":@(NeoSwapExperimentProfile().configured ? 16*kMiB : kDonationWarmFloorBytes),
-        @"donationReserveBytes":@(NeoSwapExperimentProfile().configured ? 32*kMiB : kDonationReserveBytes),
+        @"donationWarmFloorBytes":@([self donorFloorBytes]),
+        @"donationReserveBytes":@([self donorReserveBytes]),
         @"donationTargetBasis":@"active_donor_loans_plus_bounded_reserve",
         @"donationUnusedPreparedBytes":@(host.donor_prepared_bytes -
             MIN(host.donor_prepared_bytes, host.donated_live_bytes)),
