@@ -244,12 +244,43 @@ jobs:
         timeout-minutes: 10
         run: |
           set -euo pipefail
+          # Xcode 27 (runs 37642472451 and 37649488071): the menu test passes, its
+          # runner exits 0 and xcodebuild finishes the test without error, then it
+          # never returns while collecting post-test simulator diagnostics. Skip
+          # that collection; if xcodebuild still hangs, accept only XCTest's own
+          # passing verdict for this single test. An exit is still required to be 0.
           xcodebuild test-without-building -project "$RUNNER_TEMP/flutter-probe/ios/Runner.xcodeproj" \
             -scheme MenuProbe -destination "platform=iOS Simulator,id=$PROBE_DEVICE" \
             -parallel-testing-enabled NO \
+            -collect-test-diagnostics never \
             -derivedDataPath "$RUNNER_TEMP/menuDerivedData" \
             -resultBundlePath "$PWD/evidence/menu-result.xcresult" \
-            CODE_SIGNING_ALLOWED=NO > evidence/menu-xcodebuild.log 2>&1
+            CODE_SIGNING_ALLOWED=NO > evidence/menu-xcodebuild.log 2>&1 &
+          XCODEBUILD_PID=$!
+          STATUS=""
+          PASSED_AT=""
+          for second in $(seq 1 480); do
+            if ! kill -0 "$XCODEBUILD_PID" 2>/dev/null; then
+              if wait "$XCODEBUILD_PID"; then STATUS=0; else STATUS=$?; fi
+              break
+            fi
+            if [ -z "$PASSED_AT" ] && grep -q "^Test Suite 'All tests' passed" evidence/menu-xcodebuild.log; then
+              PASSED_AT=$second
+            fi
+            if [ -n "$PASSED_AT" ] && [ $((second - PASSED_AT)) -ge 90 ]; then break; fi
+            sleep 1
+          done
+          if [ -z "$STATUS" ]; then
+            kill "$XCODEBUILD_PID" 2>/dev/null || true
+            wait "$XCODEBUILD_PID" 2>/dev/null || true
+            test -n "$PASSED_AT" || { echo "xcodebuild did not complete the menu suite" >&2; exit 1; }
+            if grep -E "^Test Case .* failed|\*\* TEST .*FAILED" evidence/menu-xcodebuild.log; then exit 1; fi
+            grep -q "^Test Case '-\[MenuProbe.KartPadMenuProbe testImmediateRelaunchFromNativeMenu\]' passed" evidence/menu-xcodebuild.log
+            grep -A1 "^Test Suite 'All tests' passed" evidence/menu-xcodebuild.log | grep -q "Executed 1 test, with 0 failures (0 unexpected)"
+            echo "xcodebuild still running 90 s after XCTest reported the passing suite; stopped" | tee evidence/menu-xcodebuild-hang.txt
+          else
+            test "$STATUS" -eq 0
+          fi
           DATA="$(xcrun simctl get_app_container "$PROBE_DEVICE" com.neostation.kartpadHostProbe data)"
           echo "PROBE_DATA=$DATA" >> "$GITHUB_ENV"
           cp "$DATA/Documents/flutter-probe.json" evidence/menu-probe.json
