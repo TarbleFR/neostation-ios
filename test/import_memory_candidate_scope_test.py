@@ -496,6 +496,12 @@ PRODUCTION_FILES |= {
     'packages/neo_swap/ios/Classes/NeoSwapPreparation.h',
     'tools/neoplay-receiver/diagnostics.mjs',
     'tools/neoplay-receiver/h264-sps.mjs',
+    # Build411: standalone Windows receiver (maintainer commits b91ee93c, 634c0b94,
+    # 26afbb7d): Node single-executable bundle of the relay with its embedded page,
+    # built and smoke-tested on windows-latest by neoplay-exe.yml and neoplay-check.
+    '.github/workflows/neoplay-exe.yml',
+    'tools/neoplay-receiver/build-executable.mjs',
+    'tools/neoplay-receiver/desktop.mjs',
 }
 SUPPORT_FILES |= {
     'docs/neoplay/RECEIVER-VALIDATION.md',
