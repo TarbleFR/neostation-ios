@@ -502,6 +502,11 @@ PRODUCTION_FILES |= {
     '.github/workflows/neoplay-exe.yml',
     'tools/neoplay-receiver/build-executable.mjs',
     'tools/neoplay-receiver/desktop.mjs',
+    # Maintainer commit efecbfc4: receiver discovery helper shared by the page.
+    'tools/neoplay-receiver/discovery.mjs',
+}
+SUPPORT_FILES |= {
+    'tools/neoplay-receiver/test/discovery.test.mjs',
 }
 SUPPORT_FILES |= {
     'docs/neoplay/RECEIVER-VALIDATION.md',

@@ -21,8 +21,10 @@ struct Sample {
   NSUInteger _sampleCount;
 }
 @property(nonatomic, strong) UILabel* ratesLabel;
-@property(nonatomic, strong) UILabel* allocationLabel;
-@property(nonatomic, strong) UILabel* residentLabel;
+// Two series since 7 October 2026 (maintainer request): the RAM the device
+// spends on the session (RPCS3 resident merged with the NeoSwap microprocess
+// backing) and the NeoSwap contribution. Microprocesses are not drawn apart.
+@property(nonatomic, strong) UILabel* deviceLabel;
 @property(nonatomic, strong) UILabel* neoswapLabel;
 @property(nonatomic, strong) UILabel* graphLabel;
 @property(nonatomic, strong) NSNumberFormatter* numberFormatter;
@@ -42,10 +44,8 @@ struct Sample {
   self.accessibilityTraits = UIAccessibilityTraitStaticText;
   self.accessibilityIdentifier = @"rpcs3.performance.overlay";
   self.ratesLabel = [self newLabelWithSize:15];
-  self.allocationLabel = [self newLabelWithSize:12];
-  self.allocationLabel.textColor = UIColor.systemCyanColor;
-  self.residentLabel = [self newLabelWithSize:12];
-  self.residentLabel.textColor = UIColor.systemOrangeColor;
+  self.deviceLabel = [self newLabelWithSize:12];
+  self.deviceLabel.textColor = UIColor.systemOrangeColor;
   self.neoswapLabel = [self newLabelWithSize:12];
   self.neoswapLabel.textColor = UIColor.systemGreenColor;
   self.graphLabel = [self newLabelWithSize:10];
@@ -63,7 +63,7 @@ struct Sample {
   self.accessibilityLabel = RPCS3LocalizedString(@"performance", _localeIdentifier);
   self.graphLabel.text = [NSString stringWithFormat:@"%@ · 60 s",
       RPCS3LocalizedString(@"memoryUnitGB", _localeIdentifier)];
-  if (self.allocationLabel) [self reset];
+  if (self.deviceLabel) [self reset];
 }
 - (UILabel*)newLabelWithSize:(CGFloat)size {
   UILabel* label = [UILabel new];
@@ -80,10 +80,9 @@ struct Sample {
   [super layoutSubviews];
   const CGFloat width = MAX(0.0, self.bounds.size.width - 20.0);
   self.ratesLabel.frame = CGRectMake(10, 7, width, 21);
-  self.allocationLabel.frame = CGRectMake(10, 32, width, 22);
-  self.residentLabel.frame = CGRectMake(10, 56, width, 22);
-  self.neoswapLabel.frame = CGRectMake(10, 80, width, 22);
-  self.graphLabel.frame = CGRectMake(10, 105, width, 14);
+  self.deviceLabel.frame = CGRectMake(10, 32, width, 22);
+  self.neoswapLabel.frame = CGRectMake(10, 56, width, 22);
+  self.graphLabel.frame = CGRectMake(10, 81, width, 14);
   [self setNeedsDisplay];
 }
 - (NSString*)memoryText:(uint64_t)bytes valid:(BOOL)valid {
@@ -92,19 +91,18 @@ struct Sample {
       RPCS3LocalizedString(@"memoryUnitGB", _localeIdentifier)];
 }
 - (void)showPoint:(NeoSwapMemoryGraphPoint)point {
-  self.allocationLabel.text = [NSString stringWithFormat:@"%@: %@",
-      RPCS3LocalizedString(@"memoryMicroprocess", _localeIdentifier),
-      [self memoryText:point.allocated valid:point.allocatedValid]];
-  self.residentLabel.text = [NSString stringWithFormat:@"%@: %@",
-      RPCS3LocalizedString(@"memoryPhysical", _localeIdentifier),
-      [self memoryText:point.resident valid:point.residentValid]];
+  // RPCS3 resident pages merged with the NeoSwap backing charged to its
+  // microprocesses: the RAM the device spends on this session.
+  self.deviceLabel.text = [NSString stringWithFormat:@"%@: %@",
+      RPCS3LocalizedString(@"memoryDevice", _localeIdentifier),
+      [self memoryText:point.deviceRam valid:point.deviceRamValid]];
   // Host data served outside the footprint by NeoSwap (relay host loans and
-  // donor loans); guest pages stay in the microprocess line above.
+  // donor loans); guest pages are part of the device line above.
   self.neoswapLabel.text = [NSString stringWithFormat:@"%@: %@",
       RPCS3LocalizedString(@"memoryNeoSwap", _localeIdentifier),
       [self memoryText:point.hostLoans valid:point.hostLoansValid]];
-  self.accessibilityValue = [NSString stringWithFormat:@"%@. %@. %@. %@",
-      self.ratesLabel.text, self.allocationLabel.text, self.residentLabel.text, self.neoswapLabel.text];
+  self.accessibilityValue = [NSString stringWithFormat:@"%@. %@. %@",
+      self.ratesLabel.text, self.deviceLabel.text, self.neoswapLabel.text];
 }
 - (void)reset {
   NSAssert(NSThread.isMainThread, @"RPCS3 performance UI must run on the main thread");
@@ -124,8 +122,8 @@ struct Sample {
     [self reset];
   self.ratesLabel.text = NeoSwapFPSValid(fps, validFields)
       ? [NSString localizedStringWithFormat:@"FPS %.1f", fps] : @"FPS —";
-  self.accessibilityValue = [NSString stringWithFormat:@"%@. %@. %@. %@",
-      self.ratesLabel.text, self.allocationLabel.text, self.residentLabel.text, self.neoswapLabel.text];
+  self.accessibilityValue = [NSString stringWithFormat:@"%@. %@. %@",
+      self.ratesLabel.text, self.deviceLabel.text, self.neoswapLabel.text];
   while (_sampleCount && timestampMs - _samples[_sampleStart].timestampMs > kWindowMs) {
     _sampleStart = (_sampleStart + 1) % kCapacity;
     --_sampleCount;
@@ -157,14 +155,14 @@ struct Sample {
   [super drawRect:rect];
   CGContextRef context = UIGraphicsGetCurrentContext();
   if (!context) return;
-  const CGRect graph = CGRectMake(44, 134, MAX(0.0, self.bounds.size.width - 54),
-      MAX(0.0, self.bounds.size.height - 158));
+  const CGRect graph = CGRectMake(44, 110, MAX(0.0, self.bounds.size.width - 54),
+      MAX(0.0, self.bounds.size.height - 134));
   if (graph.size.width <= 0 || graph.size.height <= 0) return;
   double maximumGB = 0.5;
   for (NSUInteger n = 0; n < _sampleCount; ++n) {
     const auto& point = _samples[(_sampleStart + n) % kCapacity].memory;
-    if (point.allocatedValid) maximumGB = std::max(maximumGB, NeoSwapDecimalGB(point.allocated));
-    if (point.residentValid) maximumGB = std::max(maximumGB, NeoSwapDecimalGB(point.resident));
+    if (point.deviceRamValid) maximumGB = std::max(maximumGB, NeoSwapDecimalGB(point.deviceRam));
+    if (point.hostLoansValid) maximumGB = std::max(maximumGB, NeoSwapDecimalGB(point.hostLoans));
   }
   maximumGB = std::ceil(maximumGB * 2.0) / 2.0;
   NSDictionary* attrs = @{NSFontAttributeName:[UIFont monospacedDigitSystemFontOfSize:9 weight:UIFontWeightRegular],
@@ -183,9 +181,9 @@ struct Sample {
   [@"0 s" drawAtPoint:CGPointMake(CGRectGetMaxX(graph) - 18, CGRectGetMaxY(graph) + 4) withAttributes:attrs];
   if (!_sampleCount) return;
   const double latest = _samples[(_sampleStart + _sampleCount - 1) % kCapacity].timestampMs;
-  UIBezierPath* allocationLine = [UIBezierPath bezierPath];
-  UIBezierPath* residentLine = [UIBezierPath bezierPath];
-  bool allocationStarted = false, residentStarted = false;
+  UIBezierPath* deviceLine = [UIBezierPath bezierPath];
+  UIBezierPath* neoswapLine = [UIBezierPath bezierPath];
+  bool deviceStarted = false, neoswapStarted = false;
   for (NSUInteger n = 0; n < _sampleCount; ++n) {
     const auto& sample = _samples[(_sampleStart + n) % kCapacity];
     const CGFloat x = CGRectGetMaxX(graph) - graph.size.width * (latest - sample.timestampMs) / kWindowMs;
@@ -196,14 +194,14 @@ struct Sample {
       else [line addLineToPoint:CGPointMake(x, y)];
       started = true;
     };
-    append(allocationLine, sample.memory.allocated, sample.memory.allocatedValid, allocationStarted);
-    append(residentLine, sample.memory.resident, sample.memory.residentValid, residentStarted);
+    append(deviceLine, sample.memory.deviceRam, sample.memory.deviceRamValid, deviceStarted);
+    append(neoswapLine, sample.memory.hostLoans, sample.memory.hostLoansValid, neoswapStarted);
   }
-  [UIColor.systemCyanColor setStroke];
-  allocationLine.lineWidth = 1.5;
-  [allocationLine stroke];
   [UIColor.systemOrangeColor setStroke];
-  residentLine.lineWidth = 1.5;
-  [residentLine stroke];
+  deviceLine.lineWidth = 1.5;
+  [deviceLine stroke];
+  [UIColor.systemGreenColor setStroke];
+  neoswapLine.lineWidth = 1.5;
+  [neoswapLine stroke];
 }
 @end

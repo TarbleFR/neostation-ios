@@ -39,9 +39,17 @@ struct NeoSwapMemoryGraphPoint {
     // loans (RSX data, Vulkan buffers, video frames) plus donor loans. Guest
     // pages are part of `allocated` but not of this contribution figure.
     uint64_t hostLoans = 0;
+    // RAM the device spends on the session (maintainer request of 7 October
+    // 2026): the RPCS3 task resident counter merged with the NeoSwap backing
+    // charged to its microprocesses (`allocated`). The overlay draws only this
+    // merged line and the NeoSwap contribution; microprocesses are no longer
+    // shown separately. Valid whenever the resident counter is; the backing is
+    // added only when it was measured.
+    uint64_t deviceRam = 0;
     bool allocatedValid = false;
     bool residentValid = false;
     bool hostLoansValid = false;
+    bool deviceRamValid = false;
 };
 inline uint64_t NeoSwapHostLoanBytes(const NeoSwapHostStats* host) noexcept {
     if (!host) return 0;
@@ -63,6 +71,11 @@ inline NeoSwapMemoryGraphPoint NeoSwapMemoryGraph(const NeoSwapHostStats* host,
             point.allocated = loans + relayLiveBacking;
             point.allocatedValid = true;
         }
+    }
+    if (point.residentValid) {
+        const uint64_t backing = point.allocatedValid ? point.allocated : 0;
+        point.deviceRam = point.resident > UINT64_MAX - backing ? UINT64_MAX : point.resident + backing;
+        point.deviceRamValid = true;
     }
     return point;
 }

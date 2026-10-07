@@ -209,3 +209,22 @@ démarrage, jeu, redimensionnement/plein écran, pause/reprise, arrêt et relanc
 - Comparaisons : `tools/compare_rpcs3_neoswap_builds.py` et son test.
 - Tests, workflows et manifestes : changements explicites de portée,
   empreintes et exécution obligatoire des nouvelles régressions.
+
+## Overlay de performance RPCS3 — graphique mémoire (7 octobre 2026)
+
+À la demande du mainteneur, l'overlay ne trace plus la RAM des micro-processus
+comme série distincte. Deux séries restent :
+
+- « RAM utilisée par l'appareil » (orange) : pages résidentes du processus RPCS3
+  additionnées à la mémoire NeoSwap comptabilisée dans ses micro-processus
+  (prêts donneurs et relais mesuré). Sans mesure du relais, la ligne retombe sur
+  le seul compteur résident ; la somme sature à `UINT64_MAX`.
+- « Fourni par NeoSwap » (vert) : prêts hôtes du relais et des donneurs, comme
+  avant, désormais aussi tracé dans le graphique.
+
+Les clés `memoryMicroprocess` et `memoryPhysical` sont retirées des douze
+catalogues ; `memoryDevice` les remplace dans les douze langues. Vérifications :
+`test/neoswap_usage_policy_test.cpp` (fusion, relais non mesuré, hôte absent,
+saturation), `test/rpcs3_neoswap_localizations_test.py` (douze catalogues, deux
+séries, compilation UIKit sur macOS) et `test/neoswap_donor_contract_test.py`.
+L'affichage n'a pas été validé sur iPhone dans cette session.

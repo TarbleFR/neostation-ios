@@ -25,6 +25,17 @@ int main() {
     assert(point.residentValid && point.resident == 2264317952);
     // Host contribution: relay host loans plus donor loans, never guest pages.
     assert(point.hostLoansValid && point.hostLoans == 268435456 + 51380224);
+    // Device RAM (7 October 2026): the resident counter merged with the
+    // microprocess backing; the overlay draws this and the host contribution.
+    assert(point.deviceRamValid && point.deviceRam == 2264317952ULL + 1072168960ULL);
+    {
+      const auto unmeasured = NeoSwapMemoryGraph(&graphHost, 1, false, 2264317952);
+      assert(!unmeasured.allocatedValid && unmeasured.deviceRamValid && unmeasured.deviceRam == 2264317952ULL);
+      assert(!NeoSwapMemoryGraph(&graphHost, 1020788736, true, 0).deviceRamValid);
+      assert(NeoSwapMemoryGraph(&graphHost, 1020788736, true, UINT64_MAX).deviceRam == UINT64_MAX);
+      const auto hostless = NeoSwapMemoryGraph(nullptr, 1, true, 7);
+      assert(hostless.deviceRamValid && hostless.deviceRam == 7 && !hostless.allocatedValid);
+    }
     assert(NeoSwapHostLoanBytes(&graphHost) == point.hostLoans && !NeoSwapHostLoanBytes(nullptr));
     assert(!NeoSwapMemoryGraph(nullptr, 1, true, 1).hostLoansValid);
     graphHost.relay_loan_live_bytes = UINT64_MAX;
@@ -41,6 +52,7 @@ int main() {
     graphHost = {};
     point = NeoSwapMemoryGraph(&graphHost, 0, true, 0);
     assert(point.allocatedValid && point.allocated == 0 && !point.residentValid);
+    assert(!point.deviceRamValid && point.deviceRam == 0);
   }
   NeoSwapHostStats host = {};
   NeoSwapClientStats client = {};
@@ -102,5 +114,5 @@ int main() {
   assert(NeoSwapUsage(1ULL << 20, &client, &host) == NeoSwapUsageStatus::active);
   host.file_ready_owner_mask = 1u << NEOSWAP_RPCS3;
   assert(NeoSwapUsage(0, &client, &host) == NeoSwapUsageStatus::waiting);
-  puts("PASS: live buffers take precedence; configured RPCS3 file owner or verified donors establish readiness with zero virtual reserve; missing, rejected, small, released and disabled states remain distinct");
+  puts("PASS: device RAM merges resident pages with measured microprocess backing; live buffers take precedence; configured RPCS3 file owner or verified donors establish readiness with zero virtual reserve; missing, rejected, small, released and disabled states remain distinct");
 }

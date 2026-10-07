@@ -289,8 +289,15 @@ class DonorContractTests(unittest.TestCase):
         self.assertIn('requestNextChunkWithMaximumBytes:self.donorDemand.bytes', plugin)
         self.assertIn('self.donorPendingMaximums[index].unsignedLongLongValue >= self.donorDemand.bytes', plugin)
         self.assertIn('@"donationPreparation":preparation', plugin)
-        self.assertIn('systemCyanColor', overlay)
+        # 7 October 2026: the graph merges the resident counter with the
+        # microprocess backing (deviceRam) and draws NeoSwap as its second line.
+        self.assertNotIn('systemCyanColor', overlay)
         self.assertIn('systemOrangeColor', overlay)
+        self.assertIn('systemGreenColor', overlay)
+        self.assertIn('append(deviceLine, sample.memory.deviceRam, sample.memory.deviceRamValid, deviceStarted);', overlay)
+        self.assertIn('append(neoswapLine, sample.memory.hostLoans, sample.memory.hostLoansValid, neoswapStarted);', overlay)
+        self.assertNotIn('memoryMicroprocess', overlay)
+        self.assertIn('point.deviceRam = point.resident > UINT64_MAX - backing ? UINT64_MAX : point.resident + backing;', policy)
         # Build409: sub-MiB RSX buffers are admitted for every title whenever
         # relay host loans or donors exist; the global budget closes the gate
         # under measured pressure. The title list only selects the Core profile.

@@ -16,7 +16,7 @@ KEYS = (
     "swapDisabled", "swapWaiting", "swapSmall", "swapRejected", "swapReleased",
     "swapActive",
 )
-MEMORY_KEYS = ("memoryMicroprocess", "memoryPhysical", "memoryUnitGB", "memoryNeoSwap")
+MEMORY_KEYS = ("memoryDevice", "memoryUnitGB", "memoryNeoSwap")
 LOCALES = {"en", "es", "ru", "zh", "zh_Hant", "pt", "fr", "de", "it", "id", "ja", "ko"}
 ENGLISH = (
     "RPCS3", "Shared", "Target", "Resident", "Compressed", "Donors",
@@ -74,8 +74,15 @@ def catalogues() -> dict:
     assert 'memoryUsedBytes' not in overlay
     assert 'NeoSwapFPSValid(fps, validFields)' in overlay
     assert '@"FPS %.1f"' in overlay and '@"FPS —"' in overlay
-    assert 'self.ratesLabel.text, self.allocationLabel.text, self.residentLabel.text' in overlay
-    assert 'systemCyanColor' in overlay and 'systemOrangeColor' in overlay
+    assert 'self.ratesLabel.text, self.deviceLabel.text, self.neoswapLabel.text' in overlay
+    # 7 October 2026: the microprocess line is gone; the graph draws the merged
+    # device RAM (orange) and the NeoSwap contribution (green) only.
+    assert 'systemCyanColor' not in overlay and 'systemOrangeColor' in overlay and 'systemGreenColor' in overlay
+    assert 'memoryMicroprocess' not in overlay and 'memoryPhysical' not in overlay
+    assert 'allocationLine' not in overlay and 'residentLine' not in overlay
+    assert 'append(deviceLine, sample.memory.deviceRam, sample.memory.deviceRamValid, deviceStarted);' in overlay
+    assert 'append(neoswapLine, sample.memory.hostLoans, sample.memory.hostLoansValid, neoswapStarted);' in overlay
+    assert 'memoryMicroprocess' not in source and 'memoryPhysical' not in source
     return catalogues
 
 
@@ -113,8 +120,8 @@ int main() { @autoreleasepool {
   Check([RPCS3CanonicalLocale(@"unsupported") isEqualToString:@"en"], @"Unknown locale");
   for (NSString* key in expected[@"en"])
     Check([RPCS3LocalizedString(key, nil) isEqualToString:expected[@"en"][key]], @"Missing locale");
-  Check(checks == 216, @"All twelve catalogues were exercised");
-  std::puts("PASS: production Foundation lookup executes 216 NeoSwap translations plus traditional Chinese variants and locale fallback; no iPhone runtime claim");
+  Check(checks == 204, @"All twelve catalogues were exercised");
+  std::puts("PASS: production Foundation lookup executes 204 NeoSwap translations plus traditional Chinese variants and locale fallback; no iPhone runtime claim");
 } return 0; }
 '''.replace("EXPECTED_CATALOGUES", expected)
     with tempfile.TemporaryDirectory(prefix="rpcs3-neoswap-locales-") as temporary:
@@ -139,7 +146,7 @@ int main() { @autoreleasepool {
 
 if __name__ == "__main__":
     values = catalogues()
-    print("PASS: all 14 legacy NeoSwap keys remain valid in 12 catalogues; two-series decimal-GB memory graph and three new labels verified", flush=True)
+    print("PASS: all 14 legacy NeoSwap keys remain valid in 12 catalogues; merged device-RAM and NeoSwap two-series decimal-GB graph verified", flush=True)
     if sys.platform == "darwin":
         execute_native_lookup(values)
     else:
