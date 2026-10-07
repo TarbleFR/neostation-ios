@@ -98,3 +98,5 @@ n'est démontré par la CI ou le Simulateur.
 - Le correctif de découverte LAN/.local du receiver 0.3.x reste conservé.
 - Le contrôleur iOS réintègre le bail de volume local déjà développé pour le Build408 : après confirmation de lecture Windows, le volume média local est atténué à zéro, maintenu pendant la session puis restauré à sa valeur précédente à l'arrêt/échec/changement de route. ReplayKit continue de capturer l'audio de l'application.
 - Ces corrections restent privées et ne constituent pas une release publique. La coupure réelle du haut-parleur iPhone et le flux iPhone→Windows doivent encore être confirmés sur appareil physique.
+
+Packaging privé demandé après validation des correctifs NeoPlay 0.5.1 et audio local ; source parente : `eef95d9e3f6a630a97b82e4f01ca37946db2bd56`.
