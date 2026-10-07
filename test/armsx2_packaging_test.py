@@ -39,7 +39,12 @@ with tempfile.TemporaryDirectory(prefix='armsx2-packaging-') as directory:
     source.write_bytes((ROOT/'build-utils/armsx2/source.json').read_bytes())
     ledger=workspace/'build/fast-native/identity.json'
     ledger.parent.mkdir(parents=True)
-    for name in ('ios-ci.yml','neoswap-ipa.yml'):
+    # Build412: neoswap-ipa.yml pins the ARMSX2 Core rebuilt at 899d3c44 while
+    # ios-ci.yml keeps f4bdeb5e (purged 7 October 2026), so one artifact cannot
+    # satisfy both pins. Inside a workflow, exercise the guard of the workflow
+    # that downloaded this artifact; elsewhere exercise both.
+    caller=os.environ.get('GITHUB_WORKFLOW_REF','').split('@',1)[0].rsplit('/',1)[-1]
+    for name in (caller,) if caller in ('ios-ci.yml','neoswap-ipa.yml') else ('ios-ci.yml','neoswap-ipa.yml'):
         workflow=(ROOT/'.github/workflows'/name).read_text()
         verify=workflow.split('      - name: Verify pinned ARMSX2 Core identity\n',1)[1]
         program=textwrap.dedent(verify.split("          python3 - <<'PY'\n",1)[1].split('\n          PY',1)[0])

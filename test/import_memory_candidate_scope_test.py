@@ -809,6 +809,19 @@ IPA_WORKFLOW_RUNTIME_PREPARATION_LINES = (
      '            test/rpcs3_spu_warmup_test.py \\\n'
      '            test/native/rpcs3_spu_warmup_test.cpp \\\n'),
 )
+# Build412 (maintainer-approved 7 October 2026): neoswap-ipa.yml and ios-ci.yml
+# now pin different ARMSX2 Cores (IPA_WORKFLOW_BUILD412_PURGED_INPUT_LINES), so
+# the packaging test exercises the guard of the workflow that downloaded the
+# artifact; outside a workflow it still exercises both guards.
+ARMSX2_PACKAGING_TEST_BUILD412_LINES = (
+    ("    for name in ('ios-ci.yml','neoswap-ipa.yml'):\n",
+     "    # Build412: neoswap-ipa.yml pins the ARMSX2 Core rebuilt at 899d3c44 while\n"
+     "    # ios-ci.yml keeps f4bdeb5e (purged 7 October 2026), so one artifact cannot\n"
+     "    # satisfy both pins. Inside a workflow, exercise the guard of the workflow\n"
+     "    # that downloaded this artifact; elsewhere exercise both.\n"
+     "    caller=os.environ.get('GITHUB_WORKFLOW_REF','').split('@',1)[0].rsplit('/',1)[-1]\n"
+     "    for name in (caller,) if caller in ('ios-ci.yml','neoswap-ipa.yml') else ('ios-ci.yml','neoswap-ipa.yml'):\n"),
+)
 for path in ARMSX2_INTEGRATION_FILES:
     reviewed = subprocess.check_output(['git', 'show', ARMSX2_INTEGRATION_SHA + ':' + path], cwd=ROOT)
     if path == '.github/workflows/neoswap-ipa.yml':
@@ -830,6 +843,12 @@ for path in ARMSX2_INTEGRATION_FILES:
             text = text.replace(old, new, 1)
         for old, new in IPA_WORKFLOW_BUILD412_PURGED_INPUT_LINES:
             assert text.count(old) == 1, 'Build412 purged-input workflow line expected once: ' + old
+            text = text.replace(old, new, 1)
+        reviewed = text.encode('utf-8')
+    elif path == 'test/armsx2_packaging_test.py':
+        text = reviewed.decode('utf-8')
+        for old, new in ARMSX2_PACKAGING_TEST_BUILD412_LINES:
+            assert text.count(old) == 1, 'Build412 packaging test line expected once: ' + old
             text = text.replace(old, new, 1)
         reviewed = text.encode('utf-8')
     assert (ROOT / path).read_bytes() == reviewed, 'Reviewed ARMSX2 integration changed: ' + path
