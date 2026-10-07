@@ -93,8 +93,9 @@ export async function createReceiver({port = 17642, host = '0.0.0.0', advertise 
   return {port:actualPort, viewerToken, get pin(){return pin;}, async close(){ wss.clients.forEach(s => s.terminate()); wss.close(); bonjour?.unpublishAll(); bonjour?.destroy(); await new Promise(resolve => server.close(resolve)); }};
 }
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const receiver = await createReceiver();
-  console.log(`NeoPlay Receiver: http://127.0.0.1:${receiver.port}\nOpen this address in Edge or Chrome, then click Ready. Local trusted networks only.`);
-  const stop = async () => { await receiver.close(); process.exit(0); };
-  process.once('SIGINT', stop); process.once('SIGTERM', stop);
+  createReceiver().then(receiver => {
+    console.log(`NeoPlay Receiver: http://127.0.0.1:${receiver.port}\nOpen this address in Edge or Chrome, then click Ready. Local trusted networks only.`);
+    const stop = async () => { await receiver.close(); process.exit(0); };
+    process.once('SIGINT', stop); process.once('SIGTERM', stop);
+  }).catch(error => { console.error(error); process.exitCode = 1; });
 }
