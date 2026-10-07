@@ -44,8 +44,8 @@ async function main() {
     }
     await receiver.close(); console.log('NEOPLAY_PACKAGED_ASSETS_OK'); return;
   }
-  const url = `http://127.0.0.1:${receiver.port}`;
-  console.log(`NeoPlay 0.5.0\n${url}\nKeep this window open while playing.`);
+  const url = `http://127.0.0.1:${receiver.port}/?stable=1`;
+  console.log(`NeoPlay 0.5.1\n${url}\nKeep this window open while playing.`);
   const roots = [process.env.ProgramFiles, process.env['ProgramFiles(x86)'], process.env.LOCALAPPDATA].filter(Boolean);
   const browser = roots.flatMap(root => ['Microsoft/Edge/Application/msedge.exe','Google/Chrome/Application/chrome.exe'].map(path => join(root,path))).find(existsSync);
   if (browser) spawn(browser, [`--app=${url}`], {detached:true,stdio:'ignore'}).unref();
