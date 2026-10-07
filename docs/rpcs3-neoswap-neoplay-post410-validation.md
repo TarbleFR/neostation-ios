@@ -154,6 +154,32 @@ ils ne constituent pas une garantie d’absence de défaut mémoire du système.
 - Aucun flux iPhone → Windows ni session God of War III sur iPhone n’a été
   observé. La validation sur appareil reste ouverte.
 
+## Suite : candidate Build 411 (`8c63c682` et suivants)
+
+- Le correctif PCM de `86b3a053` est validé par la CI : lecture Edge de la
+  fixture native à deux configurations, `underruns` 0 (contre 10 915 trames,
+  soit 227 ms, avec la fixture 410), `gaps` 0, `jumps` 0, 196 images
+  présentées sur 210, une reconfiguration en place, zéro récupération de
+  décodeur (run `37597394989`).
+- Récepteur Build 411 : un seul moteur, un seul nœud AudioWorklet et les
+  images déjà décodées conservés à travers les changements de qualité et un
+  redimensionnement en cours de flux ; fixture native à trois encodeurs ; les
+  assertions du smoke Edge exigent `gaps = 0`, `jumps = 0`, `skips = 0`,
+  horodatages PCM monotones et `underruns ≤ 50 ms`. Détails, identités de
+  l'IPA et limites dans [`neoplay/BUILD411.md`](neoplay/BUILD411.md).
+- Preuve Vulkan 1 Gio : l'échec « no fresh authenticated donor ledger after
+  GPU completion » du run `37597394955` (sources NeoSwap identiques au passage
+  réussi `37595624322`) venait d'un plafond fixe de quatre secondes pour deux
+  mises à jour du donneur dont le battement est d'une seconde ; l'attente suit
+  désormais la tolérance de la session (six secondes, deux fois, avec marge),
+  s'interrompt sur une session échouée et est mesurée (`donorLedgerWaitMs`).
+- Le run recherche `37597395203` a de nouveau expiré au `simctl launch`
+  (120 s) ; même cause indéterminée que le run stockage précédent, hors du
+  chemin de l'IPA.
+- Batterie C++ locale (GCC/clang, AddressSanitizer et UndefinedBehavior
+  Sanitizer) : les dix suites portables, la préparation des donneurs et la
+  preuve de retrait passent sur la révision Build 411.
+
 Pour les captures comparables, suivre
 [`rpcs3-neoswap-measurement-captures.md`](rpcs3-neoswap-measurement-captures.md).
 Le collecteur produit un tableau JSON/Markdown avec SHA source, session,

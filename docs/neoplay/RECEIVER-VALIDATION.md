@@ -43,6 +43,9 @@ contenu audio/vidéo, PIN, jeton ou adresse réseau n'est inclus dans cet export
 | `pcmArrivalGapMaxMs` | Intervalle maximal entre deux réceptions PCM par la page, pour cette fenêtre. Inclut d'éventuelles pauses de l'émetteur ou du navigateur ; ne prouve pas à lui seul une perte réseau. |
 | `queueWaitMaxMs` | Attente maximale dans la file de traitement de la page, pour cette fenêtre. |
 | `lastMediaPtsUs` | PTS audio/vidéo reçus, dans la chronologie de l'émetteur ; pas des heures UTC. |
+| `engines`, `audioNodes` | Moteurs et nœuds AudioWorklet créés depuis le clic Ready : un seul chacun pour toute la session, changements de qualité et redimensionnements compris ; un second nœud signifierait un double chemin audio. |
+| `configurations`, `reconfigures`, `flushedPictures` | Configurations reçues, reconfigurations en place et images vidées de l'ancien décodeur au changement de qualité (présentées, jamais jetées). |
+| `gaps`, `jumps` après un changement de qualité | Doivent rester à zéro : un trou PCM ou un saut d'horloge au changement de palier est le défaut corrigé après la 410. |
 
 `time` utilise l'UTC comme `NPLog.time` côté iOS ; synchroniser les horloges des
 deux appareils. Les débits et délais locaux utilisent une horloge monotone.
