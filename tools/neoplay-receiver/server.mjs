@@ -9,7 +9,7 @@ import { VERSION, MAX_PACKET, MAX_BUFFERED, displayLimits, validatePacket, isIni
 const local = address => ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(address);
 const same = (a, b) => { if (typeof a !== 'string' || typeof b !== 'string') return false; const x=Buffer.from(a), y=Buffer.from(b); return x.length === y.length && timingSafeEqual(x,y); };
 const token = () => randomBytes(24).toString('hex');
-export async function createReceiver({port = 17642, host = '0.0.0.0', advertise = true, name = `NeoPlay — ${hostname()}`} = {}) {
+export async function createReceiver({port = 17642, host = '0.0.0.0', advertise = true, name = `NeoPlay — ${hostname()}`, assets = null} = {}) {
   const viewerToken = token(), receiverId = token();
   let pin = String(randomInt(100000, 1000000)), pinExpires = Date.now() + 300000;
   let sender = null, viewer = null, init = null, limits = displayLimits(), ready = false, grant = null, senderNoFrameReordering = false;
@@ -40,10 +40,11 @@ export async function createReceiver({port = 17642, host = '0.0.0.0', advertise 
         return json(res, 200, {v:VERSION, token:grant.token, ...limits});
       }
       if (!local(req.socket.remoteAddress) || !['localhost','127.0.0.1','[::1]'].some(h => req.headers.host === `${h}:${server.address().port}`)) return json(res, 403, {error:'local_ui_only'});
-      const assets = {'/':'index.html', '/player.mjs':'player.mjs', '/presenter.mjs':'presenter.mjs', '/protocol.mjs':'protocol.mjs', '/audio-ring.mjs':'audio-ring.mjs', '/audio-worklet.mjs':'audio-worklet.mjs', '/diagnostics.mjs':'diagnostics.mjs', '/h264-sps.mjs':'h264-sps.mjs'};
+      const assetPaths = {'/':'index.html', '/player.mjs':'player.mjs', '/presenter.mjs':'presenter.mjs', '/protocol.mjs':'protocol.mjs', '/audio-ring.mjs':'audio-ring.mjs', '/audio-worklet.mjs':'audio-worklet.mjs', '/diagnostics.mjs':'diagnostics.mjs', '/h264-sps.mjs':'h264-sps.mjs'};
       if (req.method === 'GET' && url.pathname === '/favicon.ico') { res.writeHead(204, {'Cache-Control':'max-age=86400'}); return res.end(); } // browsers ask; no 404 in the page
-      if (req.method !== 'GET' || !assets[url.pathname]) return json(res, 404, {error:'not_found'});
-      let data = await readFile(new URL(assets[url.pathname], import.meta.url), 'utf8');
+      if (req.method !== 'GET' || !assetPaths[url.pathname]) return json(res, 404, {error:'not_found'});
+      const assetName = assetPaths[url.pathname];
+      let data = assets ? assets[assetName] : await readFile(new URL(assetName, import.meta.url), 'utf8');
       if (url.pathname === '/') data = data.replace('__VIEWER_TOKEN__', viewerToken);
       res.writeHead(200, {'Content-Type':url.pathname === '/' ? 'text/html; charset=utf-8':'text/javascript', 'Cache-Control':'no-store', 'X-Content-Type-Options':'nosniff', 'Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'self' ws://127.0.0.1:* ws://localhost:*; worker-src 'self'; media-src blob:; frame-ancestors 'none'"}); res.end(data);
     } catch { if (!res.headersSent) json(res, 500, {error:'request_failed'}); else res.end(); }
