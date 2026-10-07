@@ -18,7 +18,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 4
 .workspace{display:grid;grid-template-columns:minmax(0,1fr) 310px;gap:18px;min-height:0}
 .player{position:relative;border:1px solid var(--line);border-radius:18px;overflow:hidden;background:#050608;min-height:0;box-shadow:0 18px 60px rgba(0,0,0,.28)}
 #stage{position:absolute;inset:0}video,canvas{display:block;width:100%;height:100%;object-fit:contain;background:#030405}#stage:fullscreen{background:#000}
-.empty{position:absolute;inset:0;display:grid;place-items:center;pointer-events:none}.emptybox{text-align:center;color:var(--muted);max-width:360px}.screenicon{width:58px;height:42px;border:2px solid #31394a;border-radius:8px;margin:0 auto 16px;position:relative}.screenicon:after{content:"";position:absolute;width:22px;height:2px;background:#31394a;bottom:-10px;left:16px}
+.empty{position:absolute;inset:0;display:grid;place-items:center;pointer-events:none}.empty[hidden]{display:none}.emptybox{text-align:center;color:var(--muted);max-width:360px}.screenicon{width:58px;height:42px;border:2px solid #31394a;border-radius:8px;margin:0 auto 16px;position:relative}.screenicon:after{content:"";position:absolute;width:22px;height:2px;background:#31394a;bottom:-10px;left:16px}
 .side{display:grid;grid-template-rows:auto auto 1fr;gap:14px;min-height:0}.card{background:linear-gradient(180deg,rgba(20,25,35,.96),rgba(14,18,25,.96));border:1px solid var(--line);border-radius:16px;padding:17px}.label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.09em}.pin{font:600 32px ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:7px;margin:9px 0 5px}.status{margin-top:9px;color:#cbd4e2;line-height:1.45}.hint{font-size:12px;color:var(--muted);line-height:1.5;margin-top:8px}.metric{display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid #202633}.metric:last-child{border-bottom:0}.value{color:#dfe6f1}.badge{display:inline-flex;align-items:center;gap:7px;padding:6px 10px;border-radius:999px;background:#101d1a;color:#9ae8cb;border:1px solid #1e4438;font-size:12px}
 #auth{display:none}
 @media(max-width:900px){body{grid-template-columns:1fr}aside{display:none}.workspace{grid-template-columns:1fr}.side{display:none}}
@@ -33,7 +33,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 4
 <main>
   <header>
     <div class="title"><h1>Réception NeoStation</h1><p>Diffuse ton écran iPhone vers ce PC avec une latence minimale.</p></div>
-    <div class="actions"><button id="full">Plein écran</button><button id="stop">Déconnecter</button><button id="ready" class="primary">Activer NeoPlay</button></div>
+    <div class="actions"><button id="full">Plein écran</button><button id="stop">Déconnecter</button><button id="ready" class="primary">Réactiver</button></div>
   </header>
   <section class="workspace">
     <div class="player">
@@ -43,7 +43,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 4
     <div class="side">
       <div class="card"><div class="label">Code d’association</div><div id="pin" class="pin">------</div><div class="hint">Valide 5 minutes. Il change après chaque session.</div></div>
       <div class="card"><div class="label">État</div><div class="badge"><span class="dot"></span>Prêt</div><div id="status" class="status">Initialisation du récepteur local…</div></div>
-      <div class="card"><div class="label">Session</div><div class="metric"><span>Transport</span><span class="value">LAN sécurisé par code</span></div><div class="metric"><span>Vidéo</span><span class="value">H.264 faible latence</span></div><div class="metric"><span>Audio</span><span class="value">PCM synchronisé</span></div><div class="hint">NeoPlay reste local au réseau. Aucun compte ni relais Internet n’est nécessaire pour la session Windows.</div></div>
+      <div class="card"><div class="label">Session</div><div class="metric"><span>Transport</span><span class="value">LAN sécurisé par code</span></div><div class="metric"><span>Vidéo</span><span class="value">H.264 faible latence · mode stable</span></div><div class="metric"><span>Audio</span><span class="value">AAC synchronisé</span></div><div class="hint">NeoPlay reste local au réseau. Aucun compte ni relais Internet n’est nécessaire pour la session Windows.</div></div>
     </div>
   </section>
 </main>
