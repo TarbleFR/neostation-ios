@@ -7,7 +7,7 @@ const say = text => { status.textContent = text; if (emptyState) emptyState.hidd
 // Two engines. `frames` (v2): WebCodecs pictures and PCM on one sample-accurate
 // audio clock, never a seek. `segments` (v1): MediaSource fMP4, the validated
 // fallback for browsers without WebCodecs.
-const framesCapable = typeof VideoDecoder !== 'undefined' && typeof EncodedVideoChunk !== 'undefined' && typeof AudioWorkletNode !== 'undefined' && typeof AudioContext !== 'undefined';
+const framesCapable = new URLSearchParams(location.search).get('stable') !== '1' && typeof VideoDecoder !== 'undefined' && typeof EncodedVideoChunk !== 'undefined' && typeof AudioWorkletNode !== 'undefined' && typeof AudioContext !== 'undefined';
 const segmentsCapable = typeof MediaSource !== 'undefined' && MediaSource.isTypeSupported('video/mp4; codecs="avc1.42E02A, mp4a.40.2"');
 let socket, engine = null, audioContext = null, workletReady = null, diagnostics = null, lastDiagnostics = null;
 const debug = { error: null, engines: 0, stats: () => engine?.stats() ?? null, diagnostics: () => diagnostics?.export() ?? lastDiagnostics, get audioNode() { return engine?.audioNode ?? null; }, get mode() { return engine?.mode ?? null; }, get audio() { return audioContext ? { state: audioContext.state, sampleRate: audioContext.sampleRate, baseLatency: audioContext.baseLatency, outputLatency: audioContext.outputLatency } : null; } };
