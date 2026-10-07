@@ -5,6 +5,7 @@
 #include <future>
 #include <stdexcept>
 #include <thread>
+#include <type_traits>
 #include <vector>
 
 using u8 = std::uint8_t;
@@ -81,15 +82,33 @@ struct spu_llvm_compile_context {};
 struct spu_llvm_compile_scope { spu_llvm_compile_scope(spu_llvm_compile_context&, bool) {} };
 #include "SPURetryFirstAttempt.inc"
 
+struct fixture_cfg_bool
+{
+	bool m_value;
+#include "SPUConfigBoolAccessors.inc"
+};
+static_assert(!std::is_convertible_v<fixture_cfg_bool, bool>);
+
+static bool production_precompile_discovered(bool enabled, bool cache_enabled,
+	bool known_metadata_empty, bool targeted_warmup, bool build_existing_cache = true)
+{
+	struct { struct { fixture_cfg_bool llvm_precompilation, spu_cache; } core; }
+		g_cfg{{{enabled}, {cache_enabled}}};
+	struct { bool known_empty; bool empty() const { return known_empty; } } func_list{known_metadata_empty};
+#include "SPUPrecompilePolicyCall.inc"
+	return spu_precompilation_enabled;
+}
+
 int main()
 {
 	using namespace rpcs3::spu;
 	// Cache presence must not discard known new modules for the targeted title.
-	assert(precompile_discovered(true, true, true, false));
-	assert(precompile_discovered(true, true, false, true));
-	assert(!precompile_discovered(true, true, false, false));
-	assert(!precompile_discovered(false, true, false, true));
-	assert(!precompile_discovered(true, false, true, true));
+	assert(production_precompile_discovered(true, true, true, false));
+	assert(production_precompile_discovered(true, true, false, true));
+	assert(!production_precompile_discovered(true, true, false, true, false));
+	assert(!production_precompile_discovered(true, true, false, false));
+	assert(!production_precompile_discovered(false, true, false, true));
+	assert(!production_precompile_discovered(true, false, true, true));
 	assert(warmup_worker_count(12, 0, true) == 2);
 	assert(warmup_worker_count(12, 1, true) == 1);
 	assert(warmup_worker_count(1, 12, true) == 1);

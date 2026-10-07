@@ -15,6 +15,14 @@ args = parser.parse_args()
 core = args.source.resolve()
 llvm = (core / 'rpcs3/Emu/Cell/SPULLVMRecompiler.cpp').read_text()
 common = (core / 'rpcs3/Emu/Cell/SPUCommonRecompiler.cpp').read_text()
+config = (core / 'Utilities/Config.h').read_text()
+# Compile the real call site with cfg::_bool's real explicit conversion/get
+# accessors. Testing the policy with plain bools misses the iOS integration ABI.
+policy_start = common.index('const bool spu_precompilation_enabled = rpcs3::spu::precompile_discovered(')
+policy_end = common.index(';', policy_start) + 1
+config_bool = config.index('class _bool final : public _base')
+access_start = config.index('\t\texplicit operator bool() const', config_bool)
+access_end = config.index('\n\t\tvoid from_default()', access_start)
 # The fixture executes the actual production preamble, including the complete
 # duplicate/failed-claim wait handling, stopping only where LLVM IR begins.
 start = llvm.index('\t\tconst u32 start0 = _func.entry_point;', llvm.index('virtual spu_function_t compile('))
@@ -32,6 +40,8 @@ with tempfile.TemporaryDirectory(prefix='rpcs3-spu-warmup-') as temporary:
     out = Path(temporary)
     (out / 'SPUCompileClaim.inc').write_text(claim)
     (out / 'SPURetryFirstAttempt.inc').write_text(retry_first_attempt)
+    (out / 'SPUPrecompilePolicyCall.inc').write_text(common[policy_start:policy_end])
+    (out / 'SPUConfigBoolAccessors.inc').write_text(config[access_start:access_end])
     exe = out / 'warmup'
     command = [*compiler, '-std=c++20', '-O1', '-g', '-Wall', '-Wextra', '-Werror',
                '-pthread', '-DRPCS3_IOS', '-I', str(core), '-I', str(out),

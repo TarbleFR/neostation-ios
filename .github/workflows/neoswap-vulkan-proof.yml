@@ -38,13 +38,21 @@ jobs:
           urllib.request.urlretrieve('https://github.com/KhronosGroup/MoltenVK/releases/download/v1.4.2/MoltenVK-macos.tar',archive)
           assert hashlib.sha256(archive.read_bytes()).hexdigest()=='f95765a6229cb7b915990a2890ce12ebe36a730b021545d3d52ae69ce4c4024e'
           subprocess.run(['tar','-xf',str(archive),'-C',str(work)],check=True)
-          inputs=['native/neoswap-donation/VulkanDonationProbe.h','native/neoswap-donation/ipc_macos_probe.mm','native/neoswap-donation/run_ipc_macos_probe.sh','native/neoswap-donation/Pool.cpp','packages/neo_swap/ios/Classes/NeoSwap.cpp']
+          inputs=['native/neoswap-donation/VulkanDonationProbe.h','native/neoswap-donation/RetirementProof.h','native/neoswap-donation/ipc_macos_probe.mm','native/neoswap-donation/run_ipc_macos_probe.sh','native/neoswap-donation/Pool.cpp','packages/neo_swap/ios/Classes/NeoSwap.cpp','build-utils/validate_neoswap_vulkan_evidence.py','test/neoswap_vulkan_evidence_test.py','test/neoswap_retirement_proof_test.cpp']
           identity={'source':os.environ['GITHUB_SHA'],'moltenVK':'1.4.2','moltenVKSHA256':hashlib.sha256(archive.read_bytes()).hexdigest(),'canonicalPatchSHA256':pins['patch_sha256'],'productionImportSHA256':pins['files_sha256']['rpcs3/ios/NeoSwapVulkanBuffer.h'],'inputsSHA256':{p:hashlib.sha256(pathlib.Path(p).read_bytes()).hexdigest() for p in inputs},'realIPhoneValidated':False,'realRPCS3GameplayValidated':False}
           pathlib.Path('build/neoswap-vulkan/identity.json').write_text(json.dumps(identity,indent=2)+'\n')
           with open(os.environ['GITHUB_ENV'],'a') as f:
               f.write('NEOSWAP_RPCS3_SOURCE='+str(source)+'\n')
               f.write('NEOSWAP_MOLTENVK_ROOT='+str(work/'MoltenVK'/'MoltenVK')+'\n')
           PY
+      - name: Verify bounded FAST retirement and retained-loan rejection
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/retirement-include"
+          ln -s "$GITHUB_WORKSPACE/native/neoswap-donation" "$RUNNER_TEMP/retirement-include/Donation"
+          xcrun clang++ -std=c++20 -O1 -g -Wall -Wextra -Werror -pthread -DNEOSWAP_DONATION=1 -I"$RUNNER_TEMP/retirement-include" -Ipackages/neo_swap/ios/Classes packages/neo_swap/ios/Classes/NeoSwap.cpp test/neoswap_retirement_proof_test.cpp -o "$RUNNER_TEMP/neoswap-retirement-proof"
+          "$RUNNER_TEMP/neoswap-retirement-proof"
       - name: Exercise actual donor loans through Vulkan and verify GPU writes and retirement
         shell: bash
         env:
@@ -64,6 +72,8 @@ jobs:
           assert gpu['productionRPCS3ImportPath'] is True and gpu['productionHostBroker'] is True,gpu
           assert gpu['realIPhoneValidated'] is False and gpu['realRPCS3GameplayValidated'] is False,gpu
           PY
+          python3 test/neoswap_vulkan_evidence_test.py
+          python3 build-utils/validate_neoswap_vulkan_evidence.py build/neoswap-vulkan/report.json --bytes 134217728
       - uses: actions/upload-artifact@v4
         if: always()
         with:

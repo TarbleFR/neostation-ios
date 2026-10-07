@@ -1,6 +1,7 @@
 import { mp4Mime, MAX_BUFFERED, displayLimits, KIND, parseConfig, parseVideo, parseAudio } from './protocol.mjs';
 import { audioTime, isLive, choose, overflow } from './presenter.mjs';
 import { ReceiverDiagnostics } from './diagnostics.mjs';
+import { noReorderDescription } from './h264-sps.mjs';
 const video = document.querySelector('#video'), canvas = document.querySelector('#canvas'), status = document.querySelector('#status');
 const say = text => { status.textContent = text; };
 // Two engines. `frames` (v2): WebCodecs pictures and PCM on one sample-accurate
@@ -32,11 +33,11 @@ async function ensureAudio() {
   return audioContext;
 }
 // ---- v2: frames engine ------------------------------------------------------
-function createFramesEngine() {
+function createFramesEngine(senderNeverReorders) {
   let decoder = null, config = null, node = null, waitKey = true, acknowledged = false, raf = 0, closed = false;
   const queue = []; // decoded VideoFrames waiting for presentation, oldest first
   const clock = { pts: null, updatedAt: 0, lastPts: null, running: false, latencyUs: 0, fillSeconds: 0, targetSeconds: 0.08, ratio: 1, stats: null };
-  const counters = { pictures: 0, decoded: 0, presented: 0, freeRun: 0, droppedLate: 0, droppedQueue: 0, pcmPackets: 0, keyRequests: 0, decodeErrors: 0, recoveries: 0, reconfigures: 0, discontinuities: 0 };
+  const counters = { pictures: 0, decoded: 0, presented: 0, freeRun: 0, droppedLate: 0, droppedQueue: 0, pcmPackets: 0, keyRequests: 0, decodeErrors: 0, recoveries: 0, reconfigures: 0, discontinuities: 0, spsRestrictions: 0 };
   let settings = null, lastKeyRequest = 0;
   const context = canvas.getContext('2d', { alpha: false, desynchronized: true });
   video.hidden = true; canvas.hidden = false;
@@ -83,7 +84,11 @@ function createFramesEngine() {
   }
   async function configure(packet) {
     const next = parseConfig(packet);
-    const candidate = { codec: next.codec, codedWidth: next.width, codedHeight: next.height, description: next.avcC, optimizeForLatency: true, hardwareAcceleration: 'prefer-hardware' };
+    // Only new native senders promise that every encoder enforces this VT property.
+    // Legacy senders (including Build410) leave their description untouched.
+    const description = noReorderDescription(next.avcC, { senderNeverReorders });
+    if (description !== next.avcC) counters.spsRestrictions++;
+    const candidate = { codec: next.codec, codedWidth: next.width, codedHeight: next.height, description, optimizeForLatency: true, hardwareAcceleration: 'prefer-hardware' };
     const support = await VideoDecoder.isConfigSupported(candidate);
     if (!support.supported) { candidate.hardwareAcceleration = 'no-preference'; if (!(await VideoDecoder.isConfigSupported(candidate)).supported) throw new Error(`Codec unavailable: ${next.codec}`); }
     if (closed) return;
@@ -200,19 +205,19 @@ document.querySelector('#ready').onclick = () => {
   const auth = document.querySelector('#auth').dataset.token;
   socket = new WebSocket(`ws://${location.host}/v1/view?token=${auth}`); socket.binaryType = 'arraybuffer';
   socket.onopen = report;
-  let chain = Promise.resolve();
+  let chain = Promise.resolve(), senderNeverReorders = false;
   socket.onmessage = event => {
     try {
       if (typeof event.data === 'string') {
         const message = JSON.parse(event.data);
-        if (message.type === 'state') { document.querySelector('#pin').textContent = message.connected ? '' : message.pin; say(message.connected ? 'Receiving…' : 'Select this PC in NeoPlay. PIN valid for five minutes.'); }
-        if (message.type === 'ended') closeMedia(); return;
+        if (message.type === 'state') { senderNeverReorders = message.connected === true && message.noFrameReordering === true; document.querySelector('#pin').textContent = message.connected ? '' : message.pin; say(message.connected ? 'Receiving…' : 'Select this PC in NeoPlay. PIN valid for five minutes.'); }
+        if (message.type === 'ended') { senderNeverReorders = false; closeMedia(); } return;
       }
       const packet = new Uint8Array(event.data);
       // A new fMP4 initialization restarts MediaSource. A later frames configuration
       // (a link tier change) reconfigures the running frames engine in place: its
       // sound and clock continue; only a protocol change builds a new engine.
-      if (packet[0] === KIND.INIT || (packet[0] === KIND.CONFIG && engine?.mode !== 'frames')) { closeMedia(); diagnostics = new ReceiverDiagnostics(); engine = packet[0] === KIND.CONFIG ? createFramesEngine() : createSegmentsEngine(); }
+      if (packet[0] === KIND.INIT || (packet[0] === KIND.CONFIG && engine?.mode !== 'frames')) { closeMedia(); diagnostics = new ReceiverDiagnostics(); engine = packet[0] === KIND.CONFIG ? createFramesEngine(senderNeverReorders) : createSegmentsEngine(); }
       if (!engine) return;
       const current = engine, currentDiagnostics = diagnostics, receivedAt = performance.now();
       currentDiagnostics.received(packet, receivedAt);

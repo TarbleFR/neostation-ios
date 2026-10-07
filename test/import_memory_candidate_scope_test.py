@@ -216,6 +216,7 @@ PRODUCTION_FILES = {
     'native/neoswap-donation/DonorLedger.h',
     'native/neoswap-donation/Info.plist',
     'native/neoswap-donation/MetalDonationProbe.h',
+    'native/neoswap-donation/RetirementProof.h',
     'native/neoswap-donation/VulkanDonationProbe.h',
     'native/neoswap-donation/NeoSwapDonor.entitlements',
     'native/neoswap-donation/NeoSwapDonorIPC.h',
@@ -394,6 +395,7 @@ SUPPORT_FILES = {
     'test/neoswap_demand_test.cpp',
     'test/neoswap_evidence_lifecycle_test.py',
     'test/neoswap_vulkan_evidence_test.py',
+    'test/neoswap_retirement_proof_test.cpp',
     'test/neoswap_donor_contract_test.py',
     'test/neoswap_donor_ledger_test.cpp',
     'test/neoswap/Flutter/Flutter.h',
@@ -488,9 +490,11 @@ SUPPORT_FILES |= {
 # expansion from git status or a generated hash list is permitted.
 PRODUCTION_FILES |= {
     'lib/services/rpcs3_game_profile_service.dart',
+    'lib/services/rpcs3_internal_service.dart',
     'packages/neo_swap/ios/Classes/NeoSwap.h',
     'packages/neo_swap/ios/Classes/NeoSwapPreparation.h',
     'tools/neoplay-receiver/diagnostics.mjs',
+    'tools/neoplay-receiver/h264-sps.mjs',
 }
 SUPPORT_FILES |= {
     'docs/neoplay/RECEIVER-VALIDATION.md',
@@ -504,6 +508,7 @@ SUPPORT_FILES |= {
     'test/rpcs3_neoswap_build_comparison_test.py',
     'tools/compare_rpcs3_neoswap_builds.py',
     'tools/neoplay-receiver/test/diagnostics.test.mjs',
+    'tools/neoplay-receiver/test/h264-sps.test.mjs',
     'tools/neoplay-receiver/test/player-diagnostics.test.mjs',
 }
 

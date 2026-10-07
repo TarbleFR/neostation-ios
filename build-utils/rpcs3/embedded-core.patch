@@ -3790,7 +3790,7 @@ index 0000000..665988a
 +}
 +}
 diff --git a/rpcs3/Emu/Cell/SPUCommonRecompiler.cpp b/rpcs3/Emu/Cell/SPUCommonRecompiler.cpp
-index d451a94..b4ad7ab 100644
+index d451a94..011fe3b 100644
 --- a/rpcs3/Emu/Cell/SPUCommonRecompiler.cpp
 +++ b/rpcs3/Emu/Cell/SPUCommonRecompiler.cpp
 @@ -1,5 +1,6 @@
@@ -4266,7 +4266,7 @@ index d451a94..b4ad7ab 100644
 +	constexpr bool targeted_warmup = false;
 +#endif
 +	const bool spu_precompilation_enabled = rpcs3::spu::precompile_discovered(
-+		g_cfg.core.llvm_precompilation, g_cfg.core.spu_cache, func_list.empty(), targeted_warmup && build_existing_cache);
++		g_cfg.core.llvm_precompilation.get(), g_cfg.core.spu_cache.get(), func_list.empty(), targeted_warmup && build_existing_cache);
  
  	if (spu_precompilation_enabled)
  	{

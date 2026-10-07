@@ -12,13 +12,13 @@ const token = () => randomBytes(24).toString('hex');
 export async function createReceiver({port = 17642, host = '0.0.0.0', advertise = true, name = `NeoPlay — ${hostname()}`} = {}) {
   const viewerToken = token(), receiverId = token();
   let pin = String(randomInt(100000, 1000000)), pinExpires = Date.now() + 300000;
-  let sender = null, viewer = null, init = null, limits = displayLimits(), ready = false, grant = null;
+  let sender = null, viewer = null, init = null, limits = displayLimits(), ready = false, grant = null, senderNoFrameReordering = false;
   const attempts = new Map();
   const wss = new WebSocketServer({noServer: true, maxPayload: MAX_PACKET, perMessageDeflate: false});
   const json = (res, status, value) => { res.writeHead(status, {'Content-Type':'application/json', 'Cache-Control':'no-store'}); res.end(JSON.stringify(value)); };
   const send = (socket, value) => { if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(value)); };
   const resetPin = () => { pin = String(randomInt(100000, 1000000)); pinExpires = Date.now() + 300000; };
-  const uiState = () => ({type:'state', pin, expires:pinExpires, connected: !!sender, name});
+  const uiState = () => ({type:'state', pin, expires:pinExpires, connected: !!sender, noFrameReordering: !!sender && senderNoFrameReordering, name});
   const server = http.createServer(async (req, res) => {
     try {
       const url = new URL(req.url, 'http://localhost');
@@ -36,11 +36,11 @@ export async function createReceiver({port = 17642, host = '0.0.0.0', advertise 
         let value; try { value = JSON.parse(body); } catch { return json(res, 400, {error:'json'}); }
         if (value.v !== VERSION || now > pinExpires || !same(value.pin, pin)) return json(res, 403, {error:'pairing'});
         if (!ready || sender) return json(res, 409, {error:'receiver_not_ready'});
-        grant = {token:token(), address, until:now+30000};
+        grant = {token:token(), address, until:now+30000, noFrameReordering:value.noFrameReordering === true};
         return json(res, 200, {v:VERSION, token:grant.token, ...limits});
       }
       if (!local(req.socket.remoteAddress) || !['localhost','127.0.0.1','[::1]'].some(h => req.headers.host === `${h}:${server.address().port}`)) return json(res, 403, {error:'local_ui_only'});
-      const assets = {'/':'index.html', '/player.mjs':'player.mjs', '/presenter.mjs':'presenter.mjs', '/protocol.mjs':'protocol.mjs', '/audio-ring.mjs':'audio-ring.mjs', '/audio-worklet.mjs':'audio-worklet.mjs', '/diagnostics.mjs':'diagnostics.mjs'};
+      const assets = {'/':'index.html', '/player.mjs':'player.mjs', '/presenter.mjs':'presenter.mjs', '/protocol.mjs':'protocol.mjs', '/audio-ring.mjs':'audio-ring.mjs', '/audio-worklet.mjs':'audio-worklet.mjs', '/diagnostics.mjs':'diagnostics.mjs', '/h264-sps.mjs':'h264-sps.mjs'};
       if (req.method === 'GET' && url.pathname === '/favicon.ico') { res.writeHead(204, {'Cache-Control':'max-age=86400'}); return res.end(); } // browsers ask; no 404 in the page
       if (req.method !== 'GET' || !assets[url.pathname]) return json(res, 404, {error:'not_found'});
       let data = await readFile(new URL(assets[url.pathname], import.meta.url), 'utf8');
@@ -71,7 +71,7 @@ export async function createReceiver({port = 17642, host = '0.0.0.0', advertise 
         });
         ws.on('close', () => { if (viewer === ws) { viewer = null; ready = false; sender?.close(1000, 'viewer_closed'); } });
       } else {
-        sender = ws; grant = null; init = null; send(ws, {type:'ready', v:VERSION, ...limits}); send(viewer, uiState());
+        sender = ws; senderNoFrameReordering = grant.noFrameReordering; grant = null; init = null; send(ws, {type:'ready', v:VERSION, ...limits}); send(viewer, uiState());
         ws.on('message', (data, binary) => {
           try {
             if (!binary) throw new Error('Binary media required');
@@ -81,7 +81,7 @@ export async function createReceiver({port = 17642, host = '0.0.0.0', advertise 
             viewer.send(data, {binary:true});
           } catch { ws.close(1008, 'media_or_backpressure'); }
         });
-        ws.on('close', () => { if (sender === ws) { sender = null; init = null; resetPin(); send(viewer, {type:'ended'}); send(viewer, uiState()); } });
+        ws.on('close', () => { if (sender === ws) { sender = null; senderNoFrameReordering = false; init = null; resetPin(); send(viewer, {type:'ended'}); send(viewer, uiState()); } });
       }
     });
   });

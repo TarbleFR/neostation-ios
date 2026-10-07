@@ -6,6 +6,14 @@ import XCTest
 // only when playing, and `keyframe` (a viewer behind its decoder) asks for a
 // key picture.
 final class NeoPlayTransportMessageTests: XCTestCase {
+    func testPairingAddsTheGuardedEncoderPromiseWithoutChangingVersionOrPin() throws {
+        let data = try NPWindowsTransport.pairingBody(pin: "001234")
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertEqual(object["v"] as? Int, 1)
+        XCTAssertEqual(object["pin"] as? String, "001234")
+        XCTAssertEqual(object["noFrameReordering"] as? Bool, true)
+        XCTAssertEqual(Set(object.keys), ["v", "pin", "noFrameReordering"])
+    }
     func testReadyPublishesTheReceiverProtocolAndCeilingOnce() {
         let transport = NPWindowsTransport()
         var ready: [NPSize] = []

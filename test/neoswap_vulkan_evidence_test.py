@@ -24,6 +24,11 @@ REPORT = {
         'importedBytes': TARGET, 'donatedLiveBytesDuringGPU': TARGET,
         'gpuWrittenBytes': TARGET, 'rendererBudgetDuringGPU': TARGET,
         'retiredLiveBytes': 0, 'rendererBudgetAfterRetirement': 0,
+        'retirementQueuedLoans': 5, 'retirementQueuedBytes': TARGET, 'retirementCompletedLoans': 5,
+        'retirementPendingLoans': 0, 'retirementMaintenancePasses': 1, 'retirementMaintenanceLimit': 5,
+        'retirementFailureCount': 0, 'retirementElapsedUs': 400,
+        'retiredPoolLiveBytes': 0, 'retiredPoolLiveBlocks': 0,
+        'retiredHostLiveBytes': 0, 'retiredDonatedLiveBytes': 0,
         'donorResidentAfterGPUBytes': TARGET, 'donorCompressedAfterGPUBytes': 0,
         'bufferCount': 5, 'hostNonvolatileDeltaBytes': 0, 'hostFootprintDeltaBytes': 2*1024**2,
     },
@@ -51,6 +56,13 @@ class EvidenceTests(unittest.TestCase):
             ('gpu', 'hostFootprintDeltaBytes', 64*1024**2),
             ('gpu', 'realIPhoneValidated', True), ('gpu', 'realRPCS3GameplayValidated', True),
             ('gpu', 'importedBytes', True), ('gpu', 'productionHostBroker', False),
+            ('gpu', 'retirementQueuedLoans', 0), ('gpu', 'retirementCompletedLoans', 4),
+            ('gpu', 'retirementQueuedBytes', TARGET//2), ('gpu', 'retirementPendingLoans', 1),
+            ('gpu', 'retirementMaintenancePasses', 0), ('gpu', 'retirementMaintenancePasses', 6),
+            ('gpu', 'retirementMaintenanceLimit', 6), ('gpu', 'retirementElapsedUs', 2_000_001),
+            ('gpu', 'retirementFailureCount', True), ('gpu', 'retiredPoolLiveBytes', 4096),
+            ('gpu', 'retiredPoolLiveBlocks', 1), ('gpu', 'retiredHostLiveBytes', 4096),
+            ('gpu', 'retiredDonatedLiveBytes', 4096),
         ]
         for section, key, value in cases:
             with self.subTest(key=key, value=value):
@@ -59,6 +71,23 @@ class EvidenceTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     module.validate(report, TARGET)
 
+    def test_missing_retirement_observations_cannot_pass(self):
+        for key in ('retirementQueuedLoans', 'retirementQueuedBytes', 'retirementCompletedLoans',
+                    'retirementPendingLoans', 'retirementMaintenancePasses', 'retirementMaintenanceLimit',
+                    'retirementFailureCount', 'retirementElapsedUs', 'retiredPoolLiveBytes',
+                    'retiredPoolLiveBlocks', 'retiredHostLiveBytes', 'retiredDonatedLiveBytes'):
+            with self.subTest(key=key):
+                report = copy.deepcopy(REPORT)
+                del report['vulkanDonation'][key]
+                with self.assertRaises(ValueError):
+                    module.validate(report, TARGET)
+
+    def test_measured_transient_failure_can_complete_within_bound(self):
+        report = copy.deepcopy(REPORT)
+        report['vulkanDonation']['retirementFailureCount'] = 1
+        report['vulkanDonation']['retirementMaintenancePasses'] = 2
+        self.assertTrue(module.validate(report, TARGET)['passed'])
+
     def test_128mib_compatibility(self):
         report = copy.deepcopy(REPORT)
         target = 128*1024**2
@@ -66,9 +95,11 @@ class EvidenceTests(unittest.TestCase):
             report[key] = target
         report['verifiedChunkCount'] = 2
         for key in ('importedBytes', 'donatedLiveBytesDuringGPU', 'gpuWrittenBytes',
-                    'rendererBudgetDuringGPU', 'donorResidentAfterGPUBytes'):
+                    'rendererBudgetDuringGPU', 'donorResidentAfterGPUBytes', 'retirementQueuedBytes'):
             report['vulkanDonation'][key] = target
         report['vulkanDonation']['bufferCount'] = 2
+        report['vulkanDonation']['retirementQueuedLoans'] = 2
+        report['vulkanDonation']['retirementCompletedLoans'] = 2
         self.assertTrue(module.validate(report, target)['passed'])
 
 if __name__ == '__main__':

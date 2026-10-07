@@ -30,12 +30,18 @@ final class NPWindowsTransport {
         config.waitsForConnectivity = false; config.urlCache = nil
         session = URLSession(configuration: config)
     }
+    // An additive promise, not a new wire version: NPFrameEncoder refuses to
+    // start if VideoToolbox rejects AllowFrameReordering=false. Older senders
+    // omit it, so receivers must preserve their original SPS unchanged.
+    static func pairingBody(pin: String) throws -> Data {
+        try JSONSerialization.data(withJSONObject: ["v": 1, "pin": pin, "noFrameReordering": true])
+    }
     func connect(host: String, port: Int, pin: String) {
         guard host.hasSuffix(".local.") || host.hasSuffix(".local"), port > 0, port <= 65535 else { onError?(.network); return }
         var components = URLComponents(); components.scheme = "http"; components.host = host; components.port = port; components.path = "/v1/pair"
         guard let url = components.url else { onError?(.network); return }
         var request = URLRequest(url: url); request.httpMethod = "POST"; request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try? JSONSerialization.data(withJSONObject: ["v": 1, "pin": pin])
+        request.httpBody = try? Self.pairingBody(pin: pin)
         session.dataTask(with: request) { [weak self] data, response, error in
             guard let self else { return }
             self.queue.async {

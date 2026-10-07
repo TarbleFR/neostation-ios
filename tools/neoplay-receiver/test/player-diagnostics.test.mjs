@@ -35,9 +35,11 @@ test('page diagnostics survive reconfiguration and stop, then reset on a new str
   await import('../player.mjs');
   elements.ready.onclick(); const socket = sockets[0]; socket.onopen();
   const send = packet => socket.onmessage({ data: packet.buffer });
+  const promisedState = value => socket.onmessage({ data: JSON.stringify({ type: 'state', connected: true, noFrameReordering: value }) });
+  const realConfig = () => Uint8Array.from([...configPacket().subarray(0, 10), ...Buffer.from('0164001fffe100142764001fac5230280f6c05a8101011856bdef80801000428fe09cb', 'hex')]);
   const settle = () => new Promise(resolve => setImmediate(resolve));
   const snapshot = () => { for (const fn of intervals.values()) fn(); return window.neoplayDebug.diagnostics().samples.at(-1); };
-  send(configPacket()); send(videoPacket(0, true)); send(audioPacket(0, 480)); await settle();
+  send(realConfig()); send(videoPacket(0, true)); send(audioPacket(0, 480)); await settle();
   for (const [id, fn] of animations) { animations.delete(id); fn(); }
   const first = snapshot();
   assert.equal(first.receive.video, 1); assert.equal(first.playback.presented, 1); assert.equal(first.receive.pcm, 1);
@@ -45,6 +47,7 @@ test('page diagnostics survive reconfiguration and stop, then reset on a new str
   assert.match(elements.status.textContent, /Receiving · frames/); assert.match(elements.status.textContent, /video 1\/1 · PCM 1/);
   assert.match(elements.status.textContent, /rx .* Mbps/); assert.match(elements.status.textContent, /underruns 0 PCM frames/);
   assert.equal(first.receive.segments, 0);
+  assert.equal(first.playback.spsRestrictions, 0, 'old sender without negotiated promise is unchanged');
   send(configPacket(320, 240)); send(audioPacket(10_000, 480)); await settle();
   const changed = snapshot();
   assert.equal(changed.receive.configurations, 2); assert.equal(changed.receive.pcm, 2); assert.equal(changed.playback.reconfigures, 1);
@@ -54,8 +57,13 @@ test('page diagnostics survive reconfiguration and stop, then reset on a new str
   // An ended stream cannot revive through a queued asynchronous receive.
   send(configPacket()); send(audioPacket(0, 480)); socket.onmessage({ data: JSON.stringify({ type: 'ended' }) }); await settle();
   assert.equal(window.neoplayDebug.mode, null); assert.equal(intervals.size, 0);
-  send(configPacket()); send(audioPacket(0, 480)); await settle();
+  promisedState(true); send(realConfig()); send(audioPacket(0, 480)); await settle();
   const restarted = snapshot();
   assert.equal(restarted.receive.configurations, 1); assert.equal(restarted.receive.pcm, 1); assert.equal(restarted.receive.video, 0);
+  assert.equal(restarted.playback.spsRestrictions, 1, 'explicit sender promise enables missing restriction');
+  send(realConfig()); await settle(); assert.equal(snapshot().playback.spsRestrictions, 2, 'promise covers later tier configuration');
+  socket.onmessage({ data: JSON.stringify({ type: 'ended' }) });
+  promisedState(undefined); send(realConfig()); await settle();
+  assert.equal(snapshot().playback.spsRestrictions, 0, 'promise cannot leak to next legacy session');
   socket.close(); assert.equal(intervals.size, 0);
 });

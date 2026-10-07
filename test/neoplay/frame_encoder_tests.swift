@@ -1,5 +1,7 @@
 import XCTest
 import AVFoundation
+import CryptoKit
+import VideoToolbox
 @testable import NPCheck
 
 // NeoPlay v2 frame protocol: one packet per picture out of VideoToolbox, raw PCM.
@@ -7,6 +9,43 @@ import AVFoundation
 // an iOS encoder produces can be replayed through the receiver on Windows.
 final class NeoPlayFrameEncoderTests: XCTestCase {
     struct Packet: Codable { let kind: Int; let end: Double; let data: String }
+    func testRequiredNoReorderingFailureInvalidatesSessionAndAllowsRetry() throws {
+        var attempted: [String] = [], invalidations = 0
+        var created: VTCompressionSession?
+        XCTAssertThrowsError(try NPFrameEncoder(source: NPSize(width: 640, height: 480), display: NPSize(width: 640, height: 480), cap: NPPolicy.legacyCap,
+            setProperty: { session, key, value in
+                created = session; attempted.append(key as String)
+                if CFEqual(key, kVTCompressionPropertyKey_AllowFrameReordering) {
+                    XCTAssertTrue(CFEqual(value, kCFBooleanFalse))
+                    return kVTPropertyNotSupportedErr
+                }
+                return VTSessionSetProperty(session, key: key, value: value)
+            }, invalidateSession: { session in
+                invalidations += 1
+                XCTAssertTrue(created.map { CFEqual($0, session) } ?? false)
+                VTCompressionSessionInvalidate(session)
+            })) { error in
+                XCTAssertEqual(error as? NPError, .encoder)
+            }
+        XCTAssertEqual(attempted.last, kVTCompressionPropertyKey_AllowFrameReordering as String, "the required property follows every optional encoder setting")
+        XCTAssertEqual(invalidations, 1, "failed setup closes its created session exactly once")
+        let retry = try NPFrameEncoder(source: NPSize(width: 640, height: 480), display: NPSize(width: 640, height: 480))
+        retry.cancel()
+    }
+    func testOptionalPropertyFailureStillEnforcesNoReordering() throws {
+        var optionalRejected = false, noReorderingAccepted = false, invalidations = 0
+        let encoder = try NPFrameEncoder(source: NPSize(width: 640, height: 480), display: NPSize(width: 640, height: 480), cap: NPPolicy.legacyCap,
+            setProperty: { session, key, value in
+                if CFEqual(key, kVTCompressionPropertyKey_MaxFrameDelayCount) { optionalRejected = true; return kVTPropertyNotSupportedErr }
+                let status = VTSessionSetProperty(session, key: key, value: value)
+                if CFEqual(key, kVTCompressionPropertyKey_AllowFrameReordering) { noReorderingAccepted = status == noErr && CFEqual(value, kCFBooleanFalse) }
+                return status
+            }, invalidateSession: { session in invalidations += 1; VTCompressionSessionInvalidate(session) })
+        defer { encoder.cancel() }
+        XCTAssertTrue(optionalRejected)
+        XCTAssertTrue(noReorderingAccepted)
+        XCTAssertEqual(invalidations, 0, "successful setup retains its session for encoding")
+    }
     func testFrameEncoderEmitsConfigThenKeyPictureThenPicturesAndPCM() throws {
         let encoder = try NPFrameEncoder(source: NPSize(width: 640, height: 480), display: NPSize(width: 1920, height: 1080))
         let lock = NSLock(); var packets: [Data] = []; var failure: NPError?
@@ -76,7 +115,13 @@ final class NeoPlayFrameEncoderTests: XCTestCase {
             // A later configuration is paced like the picture that follows it (its own `end` is 0 otherwise).
             return Packet(kind: kind, end: end, data: packet.base64EncodedString())
         }
-        try JSONEncoder().encode(fixture).write(to: directory.appendingPathComponent("frames.json"))
+        let fixtureData = try JSONEncoder().encode(fixture)
+        try fixtureData.write(to: directory.appendingPathComponent("frames.json"))
+        // Only the newly guarded production encoders can emit this capability;
+        // bind it to these exact bytes so an old fixture cannot inherit it.
+        let digest = SHA256.hash(data: fixtureData).map { String(format: "%02x", $0) }.joined()
+        let manifest: [String: Any] = ["schema": 1, "noFrameReordering": true, "fixtureSha256": digest]
+        try JSONSerialization.data(withJSONObject: manifest, options: .sortedKeys).write(to: directory.appendingPathComponent("frames-manifest.json"))
     }
 }
 

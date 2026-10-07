@@ -65,7 +65,6 @@ NSObject* const FlutterMethodNotImplemented = nil;
 @property(nonatomic, assign) uint64_t donorEpoch;
 @property(nonatomic, strong) NSMutableIndexSet* donorPendingIndexes;
 @property(nonatomic, strong) NSMutableArray<NSNumber*>* donorPendingMaximums;
-@property(nonatomic, strong) NSDate* donorFallbackUntil;
 - (void)donorChanged:(NeoSwapDonorSession*)session index:(NSUInteger)index error:(NSError*)error;
 - (NSDictionary*)snapshot:(NSString*)event;
 - (void)advanceDonors;
@@ -228,7 +227,6 @@ NSString* resultText(Result result) {
   _plugin.donorEpoch = epoch;
   _plugin.donorPendingIndexes = [NSMutableIndexSet indexSet];
   _plugin.donorPendingMaximums = [@[@0, @0] mutableCopy];
-  _plugin.donorFallbackUntil = NSDate.distantPast;
   NSDictionary* priorError = @{@"domain":@"NeoSwapDonation", @"code":@3116,
       @"description":@"Prior generation failed its ledger verification"};
   _plugin.donorErrors = [@{@"0":priorError, @"1":priorError} mutableCopy];
@@ -916,6 +914,8 @@ def main() -> int:
               'realIPhoneValidated':False, 'physicalIphoneValidated':False}
     identifier: str | None = None
     campaign_started = time.time()
+    campaign_log_start = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(campaign_started))
+    report['campaignStartedUnix'] = campaign_started
     try:
         if sys.platform != 'darwin':
             raise RuntimeError('A real Apple Simulator runner is required; this proof is not mocked or skipped')
@@ -956,24 +956,26 @@ def main() -> int:
         report['runnerError'] = str(exception)
         print(str(exception), file=sys.stderr)
         if identifier:
-            # Preserve actual donor startup failures before deleting our device.
+            # Preserve actual host and donor startup failures before deleting our device.
             # Only reports named for this harness and produced during this run
             # are copied; successful page/ledger assertions remain mandatory.
             crash_roots = [Path.home() / 'Library/Logs/DiagnosticReports',
                            Path.home() / 'Library/Developer/CoreSimulator/Devices' /
                            identifier / 'data/Library/Logs/CrashReporter']
             for root in crash_roots:
-                for crash in sorted(root.glob('NeoSwapDonor*')):
+                for crash in sorted([*root.glob('NeoSwapDonor*'), *root.glob('NeoSwapSimulator*')]):
                     try:
                         if (crash.is_file() and crash.suffix in ('.ips', '.crash') and
                                 crash.stat().st_mtime >= campaign_started):
                             output.mkdir(parents=True, exist_ok=True)
                             shutil.copyfile(crash, output / crash.name)
-                            report.setdefault('donorCrashReports', []).append(crash.name)
+                            key = 'hostCrashReports' if crash.name.startswith('NeoSwapSimulator') else 'donorCrashReports'
+                            report.setdefault(key, []).append(crash.name)
                     except OSError as crash_error:
                         report.setdefault('crashCollectionErrors', []).append(str(crash_error))
             try:
-                logs = run(['xcrun', 'simctl', 'spawn', identifier, 'log', 'show', '--last', '2m',
+                report['simulatorLogStart'] = campaign_log_start
+                logs = run(['xcrun', 'simctl', 'spawn', identifier, 'log', 'show', '--start', campaign_log_start,
                             '--info', '--debug', '--style', 'compact', '--predicate',
                             '(process IN {"NeoSwapDonor", "NeoSwapSimulator"}) OR '
                             '((process IN {'
@@ -982,6 +984,9 @@ def main() -> int:
                             f'eventMessage CONTAINS[c] "{BUNDLE}" OR '
                             'eventMessage CONTAINS[c] "FBS" OR eventMessage CONTAINS[c] "denied"))'],
                            capture=True, timeout=40)
+                output.mkdir(parents=True, exist_ok=True)
+                (output / 'simulator.log').write_text(logs)
+                report['simulatorLogFile'] = 'simulator.log'
                 report['simulatorLogs'] = logs[-30000:]
             except subprocess.SubprocessError as log_error:
                 report['simulatorLogError'] = str(log_error)
@@ -989,12 +994,13 @@ def main() -> int:
             # CrashReporter can finish after the immediate request failure.
             # Collect again after log retrieval, while our device still exists.
             for root in crash_roots:
-                for crash in sorted(root.glob('NeoSwapDonor*')):
+                for crash in sorted([*root.glob('NeoSwapDonor*'), *root.glob('NeoSwapSimulator*')]):
                     try:
                         if (crash.is_file() and crash.suffix in ('.ips', '.crash') and
                                 crash.stat().st_mtime >= campaign_started):
                             shutil.copyfile(crash, output / crash.name)
-                            names = report.setdefault('donorCrashReports', [])
+                            key = 'hostCrashReports' if crash.name.startswith('NeoSwapSimulator') else 'donorCrashReports'
+                            names = report.setdefault(key, [])
                             if crash.name not in names:
                                 names.append(crash.name)
                     except OSError as crash_error:

@@ -53,8 +53,10 @@ class SyntaxGateTests(unittest.TestCase):
             self.assertEqual(calls[0][0], 'cmake')
             self.assertEqual(len(calls), len(gate.UNITS) + 1)
 
-    def test_cold_source_consumer_and_no_exception_upscaler_are_required_early(self):
-        self.assertTrue({'VKProgramPipeline.cpp', 'fsr_pass.cpp', 'SourceClient.cpp', 'cellVdec.cpp'} <= gate.UNITS)
+    def test_modified_spu_performance_and_cold_consumers_are_required_early(self):
+        self.assertTrue({'SPUCommonRecompiler.cpp', 'SPULLVMRecompiler.cpp',
+                         'RPCS3IOSPerformance.cpp', 'VKProgramPipeline.cpp',
+                         'fsr_pass.cpp', 'SourceClient.cpp', 'cellVdec.cpp'} <= gate.UNITS)
 
     def test_missing_translation_units_are_an_error(self):
         with tempfile.TemporaryDirectory() as temp:

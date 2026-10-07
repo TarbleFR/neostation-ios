@@ -5,12 +5,21 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import { once } from 'node:events';
+import { dirname, join } from 'node:path';
 import { WebSocket } from 'ws';
 import { chromium } from 'playwright';
 import { createReceiver } from './server.mjs';
 const fixtureBytes = await readFile(process.argv[2]);
 const fixture = JSON.parse(fixtureBytes.toString('utf8'));
 const fixtureSha256 = createHash('sha256').update(fixtureBytes).digest('hex');
+let noFrameReordering = false;
+if (Array.isArray(fixture) && fixture[0]?.kind === 3) {
+  try {
+    const manifest = JSON.parse(await readFile(join(dirname(process.argv[2]), 'frames-manifest.json'), 'utf8'));
+    assert.equal(manifest.schema, 1); assert.equal(manifest.fixtureSha256, fixtureSha256, 'no-reorder guarantee must belong to these exact fixture bytes');
+    noFrameReordering = manifest.noFrameReordering === true;
+  } catch (error) { if (error.code !== 'ENOENT') throw error; } // older senders make no guarantee
+}
 const receiver = await createReceiver({port:0, host:'127.0.0.1', advertise:false});
 let browser, sender;
 try {
@@ -35,7 +44,7 @@ try {
     window.probeTimer = setInterval(() => { const bytes = new Float32Array(analyser.fftSize); analyser.getFloatTimeDomainData(bytes); const rms = Math.sqrt(bytes.reduce((sum,v) => sum+v*v,0)/bytes.length); window.peakRms = Math.max(window.peakRms,rms); },50);
     window.probeAudio.resume();
   });
-  const response = await fetch(`http://127.0.0.1:${receiver.port}/v1/pair`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({v:1,pin:receiver.pin})});
+  const response = await fetch(`http://127.0.0.1:${receiver.port}/v1/pair`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({v:1,pin:receiver.pin,noFrameReordering})});
   assert.equal(response.status,200); const grant = await response.json();
   sender = new WebSocket(`ws://127.0.0.1:${receiver.port}/v1/sender`,{headers:{Authorization:`Bearer ${grant.token}`}});
   let acknowledged = false, senderClosed = null;
@@ -96,6 +105,7 @@ try {
     assert.equal(totals.video, fixture.filter(part => part.kind === 4).length);
     assert.equal(totals.pcm, fixture.filter(part => part.kind === 5).length);
     assert.equal(totals.segments, 0, 'v2 has no legacy fMP4 segments');
+    if (!noFrameReordering) assert.equal(diagnostics.samples.at(-1).playback.spsRestrictions, 0, 'legacy senders never get an inferred no-reorder promise');
   } else {
     assert.equal(totals.segments, fixture.filter(part => !part.initial).length);
     assert.equal(totals.video, 0); assert.equal(totals.pcm, 0);
@@ -104,7 +114,7 @@ try {
   assert.equal((await (await fetch(`http://127.0.0.1:${receiver.port}/v1/info`)).json()).available,true);
   assert.deepEqual(failures,[]);
   await mkdir('test-output',{recursive:true});
-  const report = {fixtureSha256,codeCommit:process.env.GITHUB_SHA || process.env.NEOPLAY_SOURCE_SHA || null,platform:process.platform,browser:await browser.version(),fixture:process.argv[2],...measured,acknowledged,audioRenderedSilently:true,physicalIPhone:false,physicalChromecast:false};
+  const report = {fixtureSha256,noFrameReordering,spsRestrictions:diagnostics.samples.at(-1).playback.spsRestrictions ?? 0,codeCommit:process.env.GITHUB_SHA || process.env.NEOPLAY_SOURCE_SHA || null,platform:process.platform,browser:await browser.version(),fixture:process.argv[2],...measured,acknowledged,audioRenderedSilently:true,physicalIPhone:false,physicalChromecast:false};
   await writeFile(framesFixture ? 'test-output/playback-frames.json' : 'test-output/playback.json', JSON.stringify(report,null,2));
   await writeFile(framesFixture ? 'test-output/receiver-frames-diagnostics.json' : 'test-output/receiver-segments-diagnostics.json', JSON.stringify(diagnostics,null,2));
   console.log(JSON.stringify(report));

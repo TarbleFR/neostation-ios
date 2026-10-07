@@ -15,6 +15,7 @@ import 'package:rpcs3_internal_bridge/rpcs3_internal_bridge.dart';
 import 'logger_service.dart';
 import 'local_dev_vpn_route_service.dart';
 import 'pairing_file_service.dart';
+import 'rpcs3_game_profile_service.dart';
 import 'rpcs3_library_service.dart';
 
 enum Rpcs3RuntimePhase {
@@ -449,6 +450,10 @@ class Rpcs3InternalService {
         completionPending = false;
       }
 
+      // Library discovery may precede Core loading. Publish its local serial
+      // recommendations once here, after helper completion, before becoming
+      // ready; this does not mutate global or explicit per-game user settings.
+      await Rpcs3GameProfileService.publishDetectedProfilesForReadyRuntime();
       _jitPrepared = true;
       _initialized = true;
       _emit(

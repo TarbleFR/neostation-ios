@@ -96,3 +96,24 @@ test('a v2 sender whose first packet is not a configuration is refused', async t
   const ready = message(sender); await once(sender,'open'); await ready;
   const closed = once(sender,'close'); sender.send(Buffer.from(videoPacket(0,true))); const [code] = await closed; assert.equal(code,1008);
 });
+test('only an explicit authenticated sender promise reaches the viewer and it resets on disconnect', async t => {
+  const receiver = await createReceiver({port:0,host:'127.0.0.1',advertise:false}); t.after(() => receiver.close());
+  const base = `http://127.0.0.1:${receiver.port}`, wsbase = `ws://127.0.0.1:${receiver.port}`;
+  const viewer = new WebSocket(wsbase+'/v1/view?token='+receiver.viewerToken); t.after(() => viewer.terminate());
+  const state = message(viewer); await once(viewer,'open'); assert.equal(JSON.parse((await state).data).noFrameReordering, false);
+  viewer.send(JSON.stringify({type:'display',frames:true,supported:true}));
+  await new Promise(resolve => setTimeout(resolve,25));
+  const nextState = () => new Promise(resolve => {
+    const listen = data => { const value = JSON.parse(data); if(value.type === 'state') { viewer.off('message', listen); resolve(value); } };
+    viewer.on('message', listen);
+  });
+  for (const promise of [true, undefined, 'true']) {
+    const response = await fetch(base+'/v1/pair',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({v:1,pin:receiver.pin,noFrameReordering:promise})});
+    assert.equal(response.status,200); const grant = await response.json(), connected = nextState();
+    const sender = new WebSocket(wsbase+'/v1/sender',{headers:{Authorization:`Bearer ${grant.token}`}}); t.after(() => sender.terminate());
+    await once(sender,'open'); const received = await connected;
+    assert.equal(received.connected,true); assert.equal(received.noFrameReordering,promise === true);
+    const disconnected = nextState(), closed = once(sender,'close'); sender.close(); await closed;
+    assert.equal((await disconnected).noFrameReordering,false);
+  }
+});

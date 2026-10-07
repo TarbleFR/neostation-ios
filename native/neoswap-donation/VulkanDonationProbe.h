@@ -5,6 +5,7 @@
 #include "Pool.h"
 #include "NeoSwap.h"
 #include "NeoSwapHost.h"
+#include "RetirementProof.h"
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -263,15 +264,31 @@ static NSDictionary* runVulkanDonationProbe(NeoSwapDonorSession* session, uint64
   evidence[@"vulkanHostNonvolatileDeltaBytes"] = @(nonvolatile);
   evidence[@"vulkanHostFootprintDeltaBytes"] = @(physicalDelta);
   require(nonvolatile < MiB && physicalDelta < 64 * MiB, "Vulkan imported pages charged substantial memory to the host");
+  evidence[@"stage"] = @"vulkan_retirement";
+  NeoSwapFastStats beforeRetirement{};
+  require(NeoSwap_FastSnapshot(&beforeRetirement) == NEOSWAP_OK,
+          "Vulkan retirement could not snapshot FAST ownership");
   for (auto& buffer : buffers) { vkDestroyBuffer(device, buffer.handle, nullptr); buffer.memory.reset(); }
   require(vk::trackedBytes == 0 && vk::trackedAllocations.empty(), "Vulkan retirement retained renderer budget entries");
-  require(NeoSwap_LiveBytes(NEOSWAP_RPCS3) == 0 && NeoSwap_HostSnapshot(&host) == NEOSWAP_OK &&
-          host.owner_donated_live_bytes[NEOSWAP_RPCS3] == 0, "Vulkan retirement retained live donation loans");
+  const auto retirement = prove_fast_retirement(buffers.size(), target, beforeRetirement);
+  // Record failed drains as well as successful ones. The final strict leak
+  // assertion stays mandatory; waiting never substitutes for actual ownership.
+  NSDictionary* retirementEvidence = @{
+      @"retirementQueuedLoans":@(retirement.queued_loans), @"retirementQueuedBytes":@(retirement.queued_bytes),
+      @"retirementCompletedLoans":@(retirement.completed_loans), @"retirementPendingLoans":@(retirement.pending_loans),
+      @"retirementMaintenancePasses":@(retirement.passes), @"retirementMaintenanceLimit":@(retirement.maximum_passes),
+      @"retirementFailureCount":@(retirement.failures), @"retirementElapsedUs":@(retirement.elapsed_us),
+      @"retiredPoolLiveBytes":@(retirement.pool_live_bytes), @"retiredPoolLiveBlocks":@(retirement.pool_live_blocks),
+      @"retiredHostLiveBytes":@(retirement.host_live_bytes), @"retiredDonatedLiveBytes":@(retirement.donated_live_bytes)};
+  evidence[@"vulkanRetirement"] = retirementEvidence;
+  require(retirement.passed && NeoSwap_LiveBytes(NEOSWAP_RPCS3) == 0 &&
+          NeoSwap_HostSnapshot(&host) == NEOSWAP_OK && host.owner_donated_live_bytes[NEOSWAP_RPCS3] == 0,
+          "Vulkan retirement retained live donation loans");
   pool_donor_lost(snapshot.generation, 0, snapshot.generation, 0);
   require(bool(pool_collect_lost()), "Vulkan donor mappings could not be retired");
   vkDestroyFence(device, fence, nullptr); vkDestroyCommandPool(device, commandPool, nullptr);
   vkDestroyDevice(device, nullptr); vkDestroyInstance(instance, nullptr);
-  return @{@"passed":@YES, @"device":[NSString stringWithUTF8String:properties.deviceName],
+  NSMutableDictionary* result = [@{@"passed":@YES, @"device":[NSString stringWithUTF8String:properties.deviceName],
       @"importedBytes":@(imported), @"donatedLiveBytesDuringGPU":@(target), @"retiredLiveBytes":@0,
       @"bufferCount":@(buffers.size()), @"gpuWrittenBytes":@(imported), @"gpuToCpuAliasVerified":@YES,
       @"productionRPCS3ImportPath":@YES, @"productionHostBroker":@YES,
@@ -282,5 +299,7 @@ static NSDictionary* runVulkanDonationProbe(NeoSwapDonorSession* session, uint64
       @"donorResidentAfterGPUBytes":@(finalDonor.donatedResidentBytes),
       @"donorCompressedAfterGPUBytes":@(finalDonor.donatedCompressedBytes),
       @"hostNonvolatileDeltaBytes":@(nonvolatile), @"hostFootprintDeltaBytes":@(physicalDelta),
-      @"realRPCS3GameplayValidated":@NO, @"realIPhoneValidated":@NO};
+      @"realRPCS3GameplayValidated":@NO, @"realIPhoneValidated":@NO} mutableCopy];
+  [result addEntriesFromDictionary:retirementEvidence];
+  return result;
 }

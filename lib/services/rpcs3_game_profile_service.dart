@@ -274,6 +274,12 @@ abstract final class Rpcs3GameProfileService {
     unawaited(_refreshAndRepublish());
   }
 
+  /// Flush library recommendations after the existing runtime owner has
+  /// initialized the Core and completed JIT handoff. No network refresh is
+  /// started here; earlier publication may have found the Core still unloaded.
+  static Future<void> publishDetectedProfilesForReadyRuntime() =>
+      _publishDetected();
+
   static Future<void> _publishDetected() async {
     try {
       final profiles = await Future.wait(_detectedSerials.map(resolveProfile));
@@ -287,12 +293,12 @@ abstract final class Rpcs3GameProfileService {
       );
       if (report['success'] != true) {
         _log.i(
-          'RPCS3 GameDB publication deferred until launch: '
+          'RPCS3 GameDB publication unavailable: '
           '${report['message'] ?? 'Core not ready'}',
         );
       }
     } catch (error) {
-      _log.i('RPCS3 GameDB publication deferred until launch: $error');
+      _log.i('RPCS3 GameDB publication unavailable: $error');
     }
   }
 

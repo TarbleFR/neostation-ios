@@ -1,4 +1,4 @@
-"""Host400 preserves unrelated runtime with audited menu, metrics and owned swap deltas."""
+"""Preserve unrelated runtime across reviewed menu, stream and post410 swap deltas."""
 from pathlib import Path
 import json
 import hashlib
@@ -42,10 +42,18 @@ BUILD410_STREAM_POSTIMAGES = {
     'packages/neoplay_bridge/ios/Classes/NPPolicy.swift': 'd7c15740f20af31a2ab3e6f0220eeb2165534b3afc97ee799064f322b83b6200',
     'packages/neoplay_bridge/ios/Classes/NPWindowsTransport.swift': '49459ae9a7ec85b4a2fee0ff607f56214a28c02a78ede247e5f730e5a7298fd4',
 }
+# Only the enforced no-reordering encoder property and its additive pairing
+# promise supersede these two historical Build410 files. The receiver must
+# leave old senders' SPS untouched when that promise is absent.
+POST410_STREAM_POSTIMAGES = {
+    'packages/neoplay_bridge/ios/Classes/NPFrameEncoder.swift': 'd50fda666c9dc07d1b8fa797330fffdc1b25743d9dbaf49b600e96f4c3af8247',
+    'packages/neoplay_bridge/ios/Classes/NPWindowsTransport.swift': '6f7393e812c8799cffa652c7bb4b8eae2732238a862c5d00d45ed9a5a20c12b8',
+}
 REVIEWED_RPCS3_HOST_POSTIMAGES = {
-    # Build409 postimage: relay-or-donor CPU buffer admission for every title
-    # on top of the authorized swap merge; menu callback and source binding below.
-    'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm': '60295414f6121337484df3b2cfc819a0d100c3bcff22bd9de16b1c0a0a1ca58d',
+    # Reviewed post410 host: 16 MiB/0 ms readiness sample, early donor campaign
+    # notification and explicit donor/relay/ordinary diagnostics. These four
+    # bounded regions leave menu, JIT, source binding and metrics ownership intact.
+    'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm': '12da5b074ab98d10c9b2abbf325ba5e2ad414c303725ce2acbef48dae5f36ac1',
     'packages/rpcs3_internal_bridge/ios/Classes/RPCS3PerformanceSnapshot.h': 'badde59ea1202e288e48bd8c318d61fde82b764815a83484da37db075be69c79',
 }
 APPROVED_RPCS3_MENU_FILES = frozenset({
@@ -126,6 +134,33 @@ APPROVED_BUILD409_FILES = frozenset({
     'packages/rpcs3_internal_bridge/ios/Classes/RPCS3InGameLocalization.mm',
     'packages/rpcs3_internal_bridge/ios/Classes/RPCS3PerformanceOverlay.mm',
 })
+# Maintainer-authorized work after the already packaged Build410. The baseline
+# and exact new postimages make this a narrow scope extension, not permission
+# to modify other donors, profiles, helpers or native emulators. Build410's
+# packaged identity and the native NeoPlay source contract remain unchanged.
+POST410_BASE = '301ff56a63291c1229fba4c5d4f345e124fc0caa'
+POST410_BASE_HOST_SHA256 = '60295414f6121337484df3b2cfc819a0d100c3bcff22bd9de16b1c0a0a1ca58d'
+REVIEWED_POST410_POSTIMAGES = {
+    # Three regional GOW3 IDs and offline republication of already detected
+    # profiles after the existing owner's Core/JIT completion, before ready.
+    # No launcher settings mutation, network refresh, retry or second attach.
+    'lib/services/rpcs3_game_profile_service.dart': 'cfb1dd18bb114355f88836d1611620f3431bc0af3bb318752b468e54c3a31d84',
+    'lib/services/rpcs3_internal_service.dart': '683dd34422949a3bd8345c9dcfff9f32adbb3c86e2cf0bd36916ca2bf7a7cc27',
+    # Explicit busy result and nonblocking donor acquisition; no other pool edits.
+    'native/neoswap-donation/Broker.h': 'f551f55fb5e77e5594fb0ef8e3de28331b1e8c4c308ee761cda2aaded98fb6b3',
+    'native/neoswap-donation/Broker.cpp': '9bb63972f01b1c10ce4de4063697e84cfead1233338c21f6943e9ddc255edd4d',
+    'native/neoswap-donation/Pool.h': 'b3cdc091404fbd08872d6bb6b6f630e0d0f2227738c767f8b01aa2ad75be5693',
+    'native/neoswap-donation/Pool.cpp': '782523881be27c64bcf2afd22014d9a0d2c8bb31c7933653a73bf73fc23e6d5c',
+    # Incremental preparation lifecycle and additive ABI-v1 FAST request flag.
+    'packages/neo_swap/ios/Classes/NeoSwapPreparation.h': '5836825d2c195fe08d3f8c56c5a10fe13af295110911404a0eb81f9249a40116',
+    'packages/neo_swap/ios/Classes/NeoSwap.h': '88b334240200a68775aef35f1f5d632e04b8fcc43e504d42f65096760c7c292c',
+    # Standalone Vulkan proof supplies the app's missing maintenance ticks;
+    # success still requires every queued FAST loan and host/pool byte retired.
+    'native/neoswap-donation/VulkanDonationProbe.h': '0d03f19b97f73909392399def58cbccdc3ca9fbcd6d7bd99c7095567d380320b',
+    'native/neoswap-donation/RetirementProof.h': '40299400ff8269f95dd5de13d9221b581965206d13ccf0650821593fe5f53dcd',
+}
+APPROVED_POST410_FILES = frozenset(REVIEWED_POST410_POSTIMAGES)
+
 def original(path, revision=BASE):
     return subprocess.check_output(['git', 'show', revision + ':' + path], cwd=ROOT)
 
@@ -134,14 +169,22 @@ class Build398Integration(unittest.TestCase):
         protected = ['native', 'packages/neo_swap', 'packages/dolphin_internal_bridge', 'packages/armsx2_internal_bridge', 'packages/rpcs3_internal_bridge', 'packages/dusklight_internal_bridge', 'packages/kartpad_internal_bridge', 'packages/stikjit_bridge', 'lib/services', 'build-utils/rpcs3', '.github/workflows/ios-ci.yml', ':(exclude)native/import-memory-candidate.json']
         changed = set(subprocess.check_output(['git', 'diff', '--name-only', BASE, '--', *protected], cwd=ROOT).decode().splitlines())
         self.assertEqual(changed - APPROVED_RPCS3_MENU_FILES - APPROVED_MANAGED_SWAP_FILES
-                         - APPROVED_SWAP_INTEGRATION_FILES - APPROVED_ARMSX2_INTEGRATION_FILES - APPROVED_BUILD409_FILES, set(),
-                         'Only the explicitly reviewed menu, owned CPU swap module, authorized swap/ARMSX2 integrations and Build409 budget files may differ from Build396')
+                         - APPROVED_SWAP_INTEGRATION_FILES - APPROVED_ARMSX2_INTEGRATION_FILES
+                         - APPROVED_BUILD409_FILES - APPROVED_POST410_FILES, set(),
+                         'Only explicitly reviewed menu, swap/ARMSX2 integrations, Build409 budget and exact post410 postimages may differ from Build396')
         for path in sorted(APPROVED_ARMSX2_INTEGRATION_FILES):
             self.assertEqual((ROOT / path).read_bytes(), original(path, ARMSX2_INTEGRATION_SHA), path)
         for path in ('native/neoswap-storage/Store.h', 'native/neoswap-storage/Store.cpp',
                      'native/neoswap-storage/StorageABI.h', 'native/neoswap-storage/Client.h',
                      'native/neoswap-storage/ShaderCache.h', 'native/neoswap-storage/ShaderCache.cpp'):
             self.assertEqual((ROOT / path).read_bytes(), original(path), path)
+
+    def test_post410_scope_has_exact_reviewed_postimages_and_preserves_build410_baseline(self):
+        plugin = 'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm'
+        self.assertEqual(hashlib.sha256(original(plugin, POST410_BASE)).hexdigest(),
+                         POST410_BASE_HOST_SHA256, 'The packaged Build410 bridge is a separate immutable baseline')
+        for path, expected in REVIEWED_POST410_POSTIMAGES.items():
+            self.assertEqual(hashlib.sha256((ROOT / path).read_bytes()).hexdigest(), expected, path)
 
     def test_approved_menu_routing_preserves_core_abi_and_passes_input_behavior(self):
         for path in (
@@ -231,8 +274,14 @@ class Build398Integration(unittest.TestCase):
         self.assertEqual(actual_files, set(files), 'No unreviewed native bridge files may be added or removed')
         self.assertTrue(set(REVIEWED_NEOPLAY_DISCOVERY_POSTIMAGES).issubset(files))
         self.assertTrue(set(BUILD410_STREAM_POSTIMAGES).issubset(files))
+        self.assertTrue(set(POST410_STREAM_POSTIMAGES).issubset(BUILD410_STREAM_POSTIMAGES))
         for file in files:
             actual = (ROOT/file).read_bytes()
+            if file in POST410_STREAM_POSTIMAGES:
+                self.assertEqual(hashlib.sha256(original(file, POST410_BASE)).hexdigest(),
+                                 BUILD410_STREAM_POSTIMAGES[file], file + ': immutable Build410 postimage')
+                self.assertEqual(hashlib.sha256(actual).hexdigest(), POST410_STREAM_POSTIMAGES[file], file)
+                continue
             if file in BUILD410_STREAM_POSTIMAGES:
                 # The Build410 stream revision: exact reviewed postimage.
                 self.assertEqual(hashlib.sha256(actual).hexdigest(), BUILD410_STREAM_POSTIMAGES[file], file)
@@ -253,7 +302,12 @@ class Build398Integration(unittest.TestCase):
             self.assertEqual(actual, original(file, FEATURE), file)
         encoder = (ROOT / 'packages/neoplay_bridge/ios/Classes/NPFrameEncoder.swift').read_text()
         self.assertIn('final class NPFrameEncoder', encoder)
-        self.assertIn('kVTCompressionPropertyKey_AllowFrameReordering: false', encoder)
+        required_property = 'let reorderStatus = setProperty(session, kVTCompressionPropertyKey_AllowFrameReordering, kCFBooleanFalse)'
+        self.assertIn(required_property, encoder)
+        required_guard = encoder.split(required_property, 1)[1].split('VTCompressionSessionPrepareToEncodeFrames(session)', 1)[0]
+        self.assertIn('guard reorderStatus == noErr else {', required_guard)
+        self.assertIn('throw NPError.encoder', required_guard)
+        self.assertIn('defer { if !setupComplete { invalidateSession(session); self.session = nil } }', encoder)
         self.assertNotIn('NSLocalizedString', encoder)
         self.assertIn('func requestKeyFrame()', encoder)
         self.assertIn('created.sampleRateConverterQuality = AVAudioQuality.max.rawValue', encoder)
@@ -264,6 +318,8 @@ class Build398Integration(unittest.TestCase):
         self.assertIn('struct NPLinkAdapter', policy)
         self.assertIn('static let nativeCap = NPSize(width: 7680, height: 4320)', policy)
         transport = (ROOT / 'packages/neoplay_bridge/ios/Classes/NPWindowsTransport.swift').read_text()
+        self.assertIn('request.httpBody = try? Self.pairingBody(pin: pin)', transport)
+        self.assertIn('["v": 1, "pin": pin, "noFrameReordering": true]', transport)
         self.assertIn('Self.size(object, "maxWidth", "maxHeight", fallback: NPPolicy.legacyCap)', transport)
         self.assertIn('if kind == 4 && (bytesFull || packets.count >= Self.maxQueuedPackets) || (kind == 5 && audioQueued >= Self.maxQueuedAudio)', transport)
         self.assertIn('onShed?(1, kind); return', transport)
@@ -272,7 +328,9 @@ class Build398Integration(unittest.TestCase):
             self.assertIn(needle, (ROOT / 'tools/neoplay-receiver' / name).read_text(), name)
         workflow = (ROOT / '.github/workflows/neoplay-check.yml').read_text()
         self.assertIn('node playback-smoke.mjs ../../build/neoplay-fixtures/frames.json', workflow)
-        self.assertIn("'frames.json'} <= set(manifest['files'])", (ROOT / 'build-utils/neoplay/collect_fixtures.py').read_text())
+        collector = (ROOT / 'build-utils/neoplay/collect_fixtures.py').read_text()
+        self.assertIn("'frames.json', 'frames-manifest.json'} <= set(manifest['files'])", collector)
+        self.assertIn("assert frames_manifest == {'schema': 1, 'noFrameReordering': True, 'fixtureSha256': manifest['files']['frames.json']}", collector)
         self.assertIn('python3 test/neoplay_pod_graph_test.py', workflow)
         self.assertIn('build/neoplay-native/pod-graph.json', workflow)
     def test_discovery_restart_does_not_disconnect_or_start_a_cast_session(self):

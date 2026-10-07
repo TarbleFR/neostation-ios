@@ -47,21 +47,29 @@ final class NPFrameEncoder {
     // `origin` is the session timeline anchor (the first picture of the session):
     // an encoder recreated by a tier change keeps the same timeline, so the
     // receiver reconfigures in place and sound never restarts.
-    init(source: NPSize, display: NPSize, cap: NPSize, origin: CMTime? = nil) throws {
+    // The setup-only closures let the native harness exercise property rejection
+    // and cleanup with a real session. Production uses VideoToolbox directly.
+    init(source: NPSize, display: NPSize, cap: NPSize, origin: CMTime? = nil,
+         setProperty: (VTCompressionSession, CFString, CFTypeRef) -> OSStatus = { VTSessionSetProperty($0, key: $1, value: $2) },
+         invalidateSession: (VTCompressionSession) -> Void = { VTCompressionSessionInvalidate($0) }) throws {
         self.source = source
         self.origin = origin
         output = NPPolicy.encodeSize(source: source, display: display, cap: cap)
         var created: VTCompressionSession?
         let status = VTCompressionSessionCreate(allocator: nil, width: Int32(output.width), height: Int32(output.height), codecType: kCMVideoCodecType_H264,
             encoderSpecification: nil, imageBufferAttributes: nil, compressedDataAllocator: nil, outputCallback: nil, refcon: nil, compressionSessionOut: &created)
-        guard status == noErr, let session = created else { NPLog.record("frames.create", ["status": Int(status)]); throw NPError.encoder }
+        guard status == noErr, let session = created else {
+            if let created { invalidateSession(created) }
+            NPLog.record("frames.create", ["status": Int(status)]); throw NPError.encoder
+        }
         self.session = session
+        var setupComplete = false
+        defer { if !setupComplete { invalidateSession(session); self.session = nil } }
         let bitrate = NPPolicy.bitrate(for: output)
         let properties: [CFString: Any] = [
             kVTCompressionPropertyKey_RealTime: true,
             kVTCompressionPropertyKey_ProfileLevel: kVTProfileLevel_H264_High_AutoLevel,
             kVTCompressionPropertyKey_H264EntropyMode: kVTH264EntropyMode_CABAC,
-            kVTCompressionPropertyKey_AllowFrameReordering: false,          // no B-frames: decode order == display order
             kVTCompressionPropertyKey_MaxFrameDelayCount: 0,                // emit each picture as soon as it is encoded
             kVTCompressionPropertyKey_MaxKeyFrameInterval: 120,             // long GOP: bits go to detail, not to IDRs
             kVTCompressionPropertyKey_MaxKeyFrameIntervalDuration: 2,
@@ -71,8 +79,16 @@ final class NPFrameEncoder {
             kVTCompressionPropertyKey_AllowTemporalCompression: true,
         ]
         for (key, value) in properties {
-            let set = VTSessionSetProperty(session, key: key, value: value as CFTypeRef)
+            let set = setProperty(session, key, value as CFTypeRef)
             if set != noErr { NPLog.record("frames.property", ["key": key as String, "status": Int(set)]) } // tolerated: encoder-specific keys
+        }
+        // Required by the sender's noFrameReordering pairing promise. Apply it
+        // last, after profile/options: the receiver may fill in missing SPS VUI
+        // reorder metadata only when decode order is guaranteed to be display order.
+        let reorderStatus = setProperty(session, kVTCompressionPropertyKey_AllowFrameReordering, kCFBooleanFalse)
+        guard reorderStatus == noErr else {
+            NPLog.record("frames.property", ["key": kVTCompressionPropertyKey_AllowFrameReordering as String, "status": Int(reorderStatus), "required": true])
+            throw NPError.encoder
         }
         VTCompressionSessionPrepareToEncodeFrames(session)
         let attributes: [CFString: Any] = [kCVPixelBufferPixelFormatTypeKey: kCVPixelFormatType_32BGRA, kCVPixelBufferWidthKey: output.width,
@@ -80,7 +96,8 @@ final class NPFrameEncoder {
         var pool: CVPixelBufferPool?
         guard CVPixelBufferPoolCreate(kCFAllocatorDefault, nil, attributes as CFDictionary, &pool) == kCVReturnSuccess, let pool else { throw NPError.encoder }
         self.pool = pool
-        NPLog.record("encoder.config", ["cast": false, "width": output.width, "height": output.height, "protocol": 2, "bitrate": bitrate])
+        setupComplete = true
+        NPLog.record("encoder.config", ["cast": false, "width": output.width, "height": output.height, "protocol": 2, "bitrate": bitrate, "noFrameReordering": true])
     }
 
     private var isCancelled: Bool { lock.lock(); defer { lock.unlock() }; return cancelled }

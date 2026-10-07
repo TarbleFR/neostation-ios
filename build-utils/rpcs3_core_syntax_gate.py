@@ -10,7 +10,7 @@ import sys
 UNITS = {'JITIOS.cpp', 'JITASM.cpp', 'JITLLVM.cpp', 'PPUAnalyser.cpp',
          'PPUFunction.cpp', 'PPUThread.cpp', 'PPUTranslator.cpp',
          'SPUCommonRecompiler.cpp', 'SPULLVMRecompiler.cpp',
-         'BufferUtils.cpp', 'RSXFIFO.cpp', 'RPCS3IOS.cpp', 'buffer_object.cpp',
+         'BufferUtils.cpp', 'RSXFIFO.cpp', 'RPCS3IOS.cpp', 'RPCS3IOSPerformance.cpp', 'buffer_object.cpp',
          'VKProgramPipeline.cpp', 'fsr_pass.cpp', 'SourceClient.cpp', 'cellVdec.cpp'}
 
 def main(database: Path) -> None:

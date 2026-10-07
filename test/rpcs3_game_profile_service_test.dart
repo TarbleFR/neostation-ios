@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:neostation/services/rpcs3_game_profile_service.dart';
 
@@ -185,12 +186,24 @@ void main() {
     });
 
     test(
-      'launch path no longer mutates global or complete custom settings',
+      'launch delegates once to the runtime owner before boot without mutating settings',
       () {
         final launcher = File(
           'lib/services/rpcs3_launch_service.dart',
         ).readAsStringSync();
-        expect(launcher, contains('Rpcs3GameProfileService.applyForLaunch'));
+        // The single startup owner replaced the old launch-time profile
+        // mutation in e4aa0a53. Serial recommendations are published by the
+        // library; the Core applies them before explicit user overrides.
+        const prepare =
+            'await Rpcs3InternalService.ensureGameplayInitialized();';
+        const boot = 'return await Rpcs3InternalService.launchTitle(';
+        expect(prepare.allMatches(launcher), hasLength(1));
+        expect(boot.allMatches(launcher), hasLength(1));
+        expect(launcher.indexOf(prepare), lessThan(launcher.indexOf(boot)));
+        expect(
+          launcher,
+          isNot(contains('Rpcs3GameProfileService.applyForLaunch')),
+        );
         expect(launcher, isNot(contains('Rpcs3InternalBridge.setSetting(')));
         expect(
           launcher,
@@ -198,6 +211,97 @@ void main() {
         );
       },
     );
+
+    test('runtime publishes local profiles after successful helper completion', () {
+      final service = File(
+        'lib/services/rpcs3_internal_service.dart',
+      ).readAsStringSync();
+      final startup = service.substring(
+        service.indexOf('static Future<void> _initializeRuntime()'),
+        service.indexOf('/// A Universal attach'),
+      );
+      const publish =
+          'await Rpcs3GameProfileService.publishDetectedProfilesForReadyRuntime();';
+      expect(publish.allMatches(service), hasLength(1));
+      expect(
+        startup.indexOf(
+          'completionPending = false;',
+          startup.indexOf("if (completion['success'] != true)"),
+        ),
+        lessThan(startup.indexOf(publish)),
+      );
+      expect(
+        startup.indexOf(publish),
+        lessThan(startup.indexOf('_initialized = true;')),
+      );
+      expect(
+        startup.indexOf(publish),
+        lessThan(startup.indexOf('Rpcs3RuntimePhase.ready')),
+      );
+    });
+
+    test('offline publication survives a cold Core and omits inherited globals', () async {
+      const channel = MethodChannel('neostation/rpcs3_tuning');
+      final messenger = TestDefaultBinaryMessengerBinding
+          .instance.defaultBinaryMessenger;
+      final calls = <MethodCall>[];
+      final accepted = <Map<String, dynamic>>[];
+      var coreReady = false;
+      var networkRequests = 0;
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        calls.add(call);
+        expect(call.method, 'updateConfigDatabase');
+        if (!coreReady) {
+          return <String, dynamic>{'success': false, 'message': 'Core not ready'};
+        }
+        final arguments = call.arguments as Map;
+        accepted.add(
+          jsonDecode(arguments['content'] as String) as Map<String, dynamic>,
+        );
+        return <String, dynamic>{'success': true};
+      });
+      addTearDown(() {
+        messenger.setMockMethodCallHandler(channel, null);
+        Rpcs3GameProfileService.noteDetectedSerials(const <String>[]);
+      });
+      const serials = <String>[
+        'BCUS98111', 'BCES00510', 'BCES00799',
+        'BCJS37001', 'BCAS25003', 'BCKS15003',
+      ];
+      Rpcs3GameProfileService.noteDetectedSerials(<String>[
+        ...serials, 'ABCD123456789',
+      ]);
+      await HttpOverrides.runZoned(() async {
+        // The common publisher must retain the detected titles when library
+        // discovery happens before the Core is loaded.
+        await Rpcs3GameProfileService.publishDetectedProfilesForReadyRuntime();
+        expect(calls, hasLength(1));
+        expect(accepted, isEmpty);
+        coreReady = true;
+        await Rpcs3GameProfileService.publishDetectedProfilesForReadyRuntime();
+        expect(calls, hasLength(2));
+        expect(accepted, hasLength(1));
+        final games = accepted.single['games'] as Map<String, dynamic>;
+        expect(games.keys, unorderedEquals(serials));
+        for (final entry in games.values) {
+          final yaml = (entry as Map<String, dynamic>)['config'] as String;
+          expect(yaml, contains('LLVM Precompilation: true'));
+          expect(yaml, contains('SPU Block Size: Mega'));
+        }
+        Rpcs3GameProfileService.noteDetectedSerials(<String>['ABCD123456789']);
+        await Rpcs3GameProfileService.publishDetectedProfilesForReadyRuntime();
+        expect(
+          calls,
+          hasLength(2),
+          reason: 'an inherited-global-only set never overwrites the native database',
+        );
+        await Future<void>.delayed(Duration.zero);
+      }, createHttpClient: (_) {
+        networkRequests++;
+        throw StateError('ready publication must remain offline');
+      });
+      expect(networkRequests, 0);
+    });
 
     test('launch bypasses the native database for inherited-global serials', () {
       final source = File(

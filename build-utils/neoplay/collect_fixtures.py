@@ -16,7 +16,7 @@ manifest = {'commit': os.environ['GITHUB_SHA'], 'files': {}}
 for directory in directories:
     if not directory.is_relative_to(allowed) or directory.name != 'NeoPlayFixtures':
         raise ValueError('Unexpected fixture path')
-    for name in ('windows.json', 'windows.mp4', 'chromecast.json', 'chromecast.mp4', 'frames.json'):
+    for name in ('windows.json', 'windows.mp4', 'chromecast.json', 'chromecast.mp4', 'frames.json', 'frames-manifest.json'):
         source = directory / name
         if not source.is_file():
             continue
@@ -25,6 +25,8 @@ for directory in directories:
             raise ValueError('Conflicting fixtures for ' + name)
         shutil.copyfile(source, output / name)
         manifest['files'][name] = digest
-assert {'windows.json', 'windows.mp4', 'chromecast.json', 'chromecast.mp4', 'frames.json'} <= set(manifest['files']), manifest
+assert {'windows.json', 'windows.mp4', 'chromecast.json', 'chromecast.mp4', 'frames.json', 'frames-manifest.json'} <= set(manifest['files']), manifest
+frames_manifest = json.loads((output / 'frames-manifest.json').read_text(encoding='utf-8'))
+assert frames_manifest == {'schema': 1, 'noFrameReordering': True, 'fixtureSha256': manifest['files']['frames.json']}, frames_manifest
 (output / 'manifest.json').write_text(json.dumps(manifest, indent=2), encoding='utf-8')
 print(json.dumps(manifest))

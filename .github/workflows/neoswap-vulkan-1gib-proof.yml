@@ -5,12 +5,14 @@ on:
     paths:
       - '.github/workflows/neoswap-vulkan-1gib-proof.yml'
       - 'native/neoswap-donation/VulkanDonationProbe.h'
+      - 'native/neoswap-donation/RetirementProof.h'
       - 'native/neoswap-donation/ipc_macos_probe.mm'
       - 'native/neoswap-donation/run_ipc_macos_probe.sh'
       - 'native/neoswap-donation/NeoSwapDonorIPC.mm'
       - 'native/neoswap-donation/NeoSwapDonorRequestHandler.mm'
       - 'build-utils/validate_neoswap_vulkan_evidence.py'
       - 'test/neoswap_vulkan_evidence_test.py'
+      - 'test/neoswap_retirement_proof_test.cpp'
       - 'test/neoswap_donor_contract_test.py'
       - 'test/import_memory_candidate_scope_test.py'
       - 'native/import-memory-candidate.json'
@@ -53,7 +55,7 @@ jobs:
           urllib.request.urlretrieve('https://github.com/KhronosGroup/MoltenVK/releases/download/v1.4.2/MoltenVK-macos.tar',archive)
           assert hashlib.sha256(archive.read_bytes()).hexdigest()=='f95765a6229cb7b915990a2890ce12ebe36a730b021545d3d52ae69ce4c4024e'
           subprocess.run(['tar','-xf',str(archive),'-C',str(work)],check=True)
-          inputs=['native/neoswap-donation/VulkanDonationProbe.h','native/neoswap-donation/ipc_macos_probe.mm','native/neoswap-donation/run_ipc_macos_probe.sh','native/neoswap-donation/Pool.cpp','native/neoswap-donation/NeoSwapDonorIPC.mm','native/neoswap-donation/NeoSwapDonorRequestHandler.mm','packages/neo_swap/ios/Classes/NeoSwap.cpp','build-utils/validate_neoswap_vulkan_evidence.py','test/neoswap_vulkan_evidence_test.py','test/neoswap_donor_contract_test.py','test/import_memory_candidate_scope_test.py','native/import-memory-candidate.json']
+          inputs=['native/neoswap-donation/VulkanDonationProbe.h','native/neoswap-donation/RetirementProof.h','native/neoswap-donation/ipc_macos_probe.mm','native/neoswap-donation/run_ipc_macos_probe.sh','native/neoswap-donation/Pool.cpp','native/neoswap-donation/NeoSwapDonorIPC.mm','native/neoswap-donation/NeoSwapDonorRequestHandler.mm','packages/neo_swap/ios/Classes/NeoSwap.cpp','build-utils/validate_neoswap_vulkan_evidence.py','test/neoswap_vulkan_evidence_test.py','test/neoswap_retirement_proof_test.cpp','test/neoswap_donor_contract_test.py','test/import_memory_candidate_scope_test.py','native/import-memory-candidate.json']
           identity={'source':os.environ['GITHUB_SHA'],'moltenVK':'1.4.2','moltenVKSHA256':hashlib.sha256(archive.read_bytes()).hexdigest(),'canonicalPatchSHA256':pins['patch_sha256'],'productionImportSHA256':pins['files_sha256']['rpcs3/ios/NeoSwapVulkanBuffer.h'],'inputsSHA256':{p:hashlib.sha256(pathlib.Path(p).read_bytes()).hexdigest() for p in inputs},'realIPhoneValidated':False,'realRPCS3GameplayValidated':False}
           identity['targetBytes']=1073741824
           identity['coreInputSHA256']=core_input_hashes()
@@ -97,6 +99,14 @@ jobs:
               f.write('NEOSWAP_RPCS3_SOURCE='+str(source)+'\n')
               f.write('NEOSWAP_MOLTENVK_ROOT='+str(work/'MoltenVK'/'MoltenVK')+'\n')
           PY
+      - name: Verify bounded FAST retirement and retained-loan rejection
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/retirement-include"
+          ln -s "$GITHUB_WORKSPACE/native/neoswap-donation" "$RUNNER_TEMP/retirement-include/Donation"
+          xcrun clang++ -std=c++20 -O1 -g -Wall -Wextra -Werror -pthread -DNEOSWAP_DONATION=1 -I"$RUNNER_TEMP/retirement-include" -Ipackages/neo_swap/ios/Classes packages/neo_swap/ios/Classes/NeoSwap.cpp test/neoswap_retirement_proof_test.cpp -o "$RUNNER_TEMP/neoswap-retirement-proof"
+          "$RUNNER_TEMP/neoswap-retirement-proof"
       - name: Exercise actual donor loans through Vulkan and verify GPU writes and retirement
         shell: bash
         env:
