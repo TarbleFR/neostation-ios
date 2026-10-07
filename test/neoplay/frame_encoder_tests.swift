@@ -47,10 +47,20 @@ final class NeoPlayFrameEncoderTests: XCTestCase {
         XCTAssertEqual(invalidations, 0, "successful setup retains its session for encoding")
     }
     func testFrameEncoderEmitsConfigThenKeyPictureThenPicturesAndPCM() throws {
-        let encoder = try NPFrameEncoder(source: NPSize(width: 640, height: 480), display: NPSize(width: 1920, height: 1080))
+        let pcm = NPPCMSession()
+        defer { pcm.cancel() }
+        let encoder = try NPFrameEncoder(source: NPSize(width: 640, height: 480), display: NPSize(width: 1920, height: 1080), cap: NPPolicy.legacyCap, pcm: pcm)
         let lock = NSLock(); var packets: [Data] = []; var failure: NPError?
+        let recordPacket: (Data) -> Void = { packet in lock.lock(); packets.append(packet); lock.unlock() }
+        // Same ownership as NPCapture: the transport receives CONFIG before
+        // its shared PCM session opens; both video tiers use that same session.
+        let videoPacket: (Data) -> Void = { packet in
+            if packet.first == 3 { pcm.forwardConfiguration { recordPacket(packet); return true } }
+            else { recordPacket(packet) }
+        }
+        pcm.onPacket = recordPacket
         encoder.onError = { error in lock.lock(); failure = error; lock.unlock() }
-        encoder.onPacket = { packet in lock.lock(); packets.append(packet); lock.unlock() }
+        encoder.onPacket = videoPacket
         let helper = NeoPlayEncodedMediaTests()
         for frame in 0..<150 {
             let time = CMTime(value: Int64(frame + 300), timescale: 30)
@@ -60,13 +70,14 @@ final class NeoPlayFrameEncoderTests: XCTestCase {
         }
         Thread.sleep(forTimeInterval: 0.5)
         encoder.cancel()
+        let initialDrops = pcm.beforeOrigin + pcm.beforeConfiguration
         // Build410: a link tier change recreates the encoder on the same session
         // timeline (320x240 ceiling); the receiver must reconfigure in place and
         // keep playing sound across the second configuration.
-        let lower = try NPFrameEncoder(source: NPSize(width: 640, height: 480), display: NPSize(width: 1920, height: 1080), cap: NPSize(width: 320, height: 240), origin: encoder.sessionOrigin)
+        let lower = try NPFrameEncoder(source: NPSize(width: 640, height: 480), display: NPSize(width: 1920, height: 1080), cap: NPSize(width: 320, height: 240), pcm: pcm)
         XCTAssertEqual(lower.output, NPSize(width: 320, height: 240))
         lower.onError = { error in lock.lock(); failure = error; lock.unlock() }
-        lower.onPacket = { packet in lock.lock(); packets.append(packet); lock.unlock() }
+        lower.onPacket = videoPacket
         for frame in 150..<210 {
             let time = CMTime(value: Int64(frame + 300), timescale: 30)
             lower.append(try helper.makeVideo(frame: frame, time: time), video: true)
@@ -92,12 +103,25 @@ final class NeoPlayFrameEncoderTests: XCTestCase {
         print("NEOPLAY_FRAMES first=\(indexes.first ?? -1) last=\(indexes.last ?? -1) missing=\((0..<210).filter { !indexes.contains($0) })")
         // Every submitted picture comes out: cancel() flushes the pictures VideoToolbox still holds before invalidating the session.
         XCTAssertGreaterThanOrEqual(video.count, 206, "pictures in flight are flushed, not discarded, when an encoder is retired")
-        XCTAssertGreaterThanOrEqual(audio.count, 150) // sound before each encoder's first picture (its configuration) is dropped by design
+        XCTAssertGreaterThanOrEqual(audio.count, 150) // only initial startup can discard unplaceable sound
         XCTAssertEqual(video.first?[9], 1, "first picture is a key picture")
         XCTAssertEqual(pts, pts.sorted(), "one timeline across both encoders"); XCTAssertEqual(Set(pts).count, pts.count)
         XCTAssertGreaterThan(pts.last ?? 0, 6_500_000)
         let audioPts = audio.map { $0.subdata(in: 1..<9).reduce(UInt64(0)) { $0 << 8 | UInt64($1) } }
         XCTAssertEqual(audioPts, audioPts.sorted(), "sound never restarts at a tier change")
+        var nextPCM: UInt64?
+        var transitionFrames = 0
+        for (packet, timestamp) in zip(audio, audioPts) {
+            let frames = UInt64((packet.count - 9) / 4)
+            if let nextPCM { XCTAssertLessThanOrEqual(timestamp > nextPCM ? timestamp - nextPCM : nextPCM - timestamp, 25, "PCM must tile across the video tier change") }
+            nextPCM = timestamp + frames * 1_000_000 / 48000
+            if timestamp >= 5_000_000 - 25 { transitionFrames += Int(frames) }
+        }
+        XCTAssertEqual(transitionFrames, 60 * 1600, "all 60 audio inputs survive the new video's initial configuration delay")
+        XCTAssertEqual(pcm.beforeOrigin + pcm.beforeConfiguration, initialDrops, "only initial startup may drop unplaceable PCM")
+        XCTAssertEqual(audio.count + initialDrops, 210)
+        XCTAssertEqual(pcm.reanchors, 0)
+        print("NEOPLAY_PCM initialBeforeOrigin=\(pcm.beforeOrigin) initialBeforeConfiguration=\(pcm.beforeConfiguration) transitionFrames=\(transitionFrames) transitionDrops=0")
         // Every picture: 4-byte NAL lengths that tile the access unit exactly.
         for packet in video {
             var at = 10; var nals = 0
@@ -122,6 +146,86 @@ final class NeoPlayFrameEncoderTests: XCTestCase {
         let digest = SHA256.hash(data: fixtureData).map { String(format: "%02x", $0) }.joined()
         let manifest: [String: Any] = ["schema": 1, "noFrameReordering": true, "fixtureSha256": digest]
         try JSONSerialization.data(withJSONObject: manifest, options: .sortedKeys).write(to: directory.appendingPathComponent("frames-manifest.json"))
+    }
+}
+
+final class NeoPlayPCMSessionTests: XCTestCase {
+    func testInitialGateNeedsForwardedConfigurationAndCancelCannotReopenIt() throws {
+        let pcm = NPPCMSession(), helper = NeoPlayEncodedMediaTests()
+        let start = CMTime(value: 300, timescale: 30)
+        let sample = try helper.makeAudio(frame: 0, time: start)
+        var packets: [Data] = []
+        pcm.onPacket = { packets.append($0) }
+        pcm.append(sample)
+        XCTAssertEqual(pcm.beforeOrigin, 1)
+        XCTAssertEqual(pcm.relative(start, video: true), .zero)
+        pcm.append(sample)
+        pcm.forwardConfiguration { false } // retired/undelivered CONFIG
+        pcm.append(sample)
+        XCTAssertTrue(packets.isEmpty)
+        pcm.forwardConfiguration {
+            packets.append(Data([3])) // actual transport enqueue
+            pcm.append(sample) // concurrent audio cannot overtake that enqueue
+            XCTAssertEqual(packets.map { $0[0] }, [3])
+            return true
+        }
+        pcm.append(sample)
+        XCTAssertEqual(packets.map { $0[0] }, [3, 5])
+        XCTAssertEqual(pcm.beforeConfiguration, 3)
+        XCTAssertEqual(packets[1].subdata(in: 1..<9).reduce(UInt64(0)) { $0 << 8 | UInt64($1) }, 0)
+        pcm.cancel()
+        pcm.forwardConfiguration { XCTFail("cancelled session must not forward a late configuration"); return true }
+        pcm.append(sample)
+        XCTAssertEqual(packets.count, 2)
+
+        // A relaunch starts with a closed gate and a fresh timeline; a stale
+        // callback/cancel on the previous session cannot activate or close it.
+        let fresh = NPPCMSession(origin: CMTime(value: 600, timescale: 30))
+        var freshPackets: [Data] = []
+        fresh.onPacket = { freshPackets.append($0) }
+        let freshSample = try helper.makeAudio(frame: 0, time: CMTime(value: 600, timescale: 30))
+        fresh.append(freshSample)
+        XCTAssertTrue(freshPackets.isEmpty)
+        fresh.forwardConfiguration { true }
+        pcm.cancel()
+        fresh.append(freshSample)
+        XCTAssertEqual(freshPackets.count, 1)
+        XCTAssertEqual(freshPackets[0].subdata(in: 1..<9).reduce(UInt64(0)) { $0 << 8 | UInt64($1) }, 0)
+        fresh.cancel()
+    }
+
+    func testResampledPCMSurvivesRetirementNoVideoAndPendingReplacementConfiguration() throws {
+        let pcm = NPPCMSession(origin: CMTime(value: 10, timescale: 1))
+        defer { pcm.cancel() }
+        var packets: [Data] = []
+        pcm.onPacket = { packets.append($0) }
+        pcm.forwardConfiguration { true }
+        var video: NPFrameEncoder? = try NPFrameEncoder(source: NPSize(width: 640, height: 480), display: NPSize(width: 640, height: 480), cap: NPPolicy.legacyCap, pcm: pcm)
+        for index in 0..<12 {
+            if index == 4 { video?.cancel(flushVideo: false); video = nil }
+            if index == 8 {
+                // No video is submitted: this encoder cannot have emitted its
+                // new CONFIG, yet established audio must continue immediately.
+                video = try NPFrameEncoder(source: NPSize(width: 640, height: 480), display: NPSize(width: 640, height: 480), cap: NPSize(width: 320, height: 240), pcm: pcm)
+            }
+            let sample = try NeoPlayFrameEncoderConcurrencyTests.makeFloatAudio(frames: 1024, rate: 44100, time: CMTime(value: 441000 + Int64(index * 1024), timescale: 44100))
+            let before = packets.count
+            pcm.append(sample)
+            XCTAssertEqual(packets.count, before + 1, "PCM leaves inside append while the video encoder is absent or awaiting CONFIG")
+        }
+        video?.cancel(flushVideo: false)
+        var expected: UInt64?, totalFrames: UInt64 = 0
+        for packet in packets {
+            let pts = packet.subdata(in: 1..<9).reduce(UInt64(0)) { $0 << 8 | UInt64($1) }
+            let count = UInt64((packet.count - 9) / 4)
+            if let expected { XCTAssertLessThanOrEqual(pts > expected ? pts - expected : expected - pts, 25) }
+            expected = pts + count * 1_000_000 / 48000
+            totalFrames += count
+        }
+        XCTAssertEqual(pcm.reanchors, 0)
+        XCTAssertEqual(pcm.beforeOrigin + pcm.beforeConfiguration, 0)
+        XCTAssertGreaterThan(totalFrames, 12_000)
+        XCTAssertLessThanOrEqual(totalFrames, 13_375) // 12 * 1024 * 48000 / 44100, allowing converter priming
     }
 }
 

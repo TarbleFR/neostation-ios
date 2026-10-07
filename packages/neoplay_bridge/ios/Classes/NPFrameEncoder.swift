@@ -13,8 +13,8 @@ import VideoToolbox
 //  5 audio  : u64 pts µs, interleaved s16le PCM
 // Threads: video appends and cancel belong to the capture queue; audio appends
 // belong to the capture's audio queue so sound never waits behind a picture;
-// VideoToolbox calls back on its own thread. The shared words (origin,
-// configuration, key request, cancellation) live under one lock.
+// VideoToolbox calls back on its own thread. Configuration, key requests and
+// cancellation live under one lock; PCM has a separate session lifetime.
 final class NPFrameEncoder {
     let source: NPSize
     let output: NPSize
@@ -22,24 +22,21 @@ final class NPFrameEncoder {
     private let context = CIContext(options: [.cacheIntermediates: false])
     private var pool: CVPixelBufferPool?
     private let lock = NSLock()
-    private var origin: CMTime?          // lock
+    private let pcm: NPPCMSession
+    private let ownsPCM: Bool
     private var configuration: Data?     // lock
     private var needKey = true           // lock
     private var cancelled = false        // lock
     private var lastVideo = CMTime.invalid // capture queue
-    private let pcmFormat = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: 48000, channels: 2, interleaved: true)!
-    private var converter: AVAudioConverter?          // audio queue
-    private var converterInput: AVAudioFormat?        // audio queue
-    private var audioClock: (origin: Int64, frames: Int64)? // audio queue
-    private var counters = (audioPackets: 0, reanchors: 0, passthrough: 0, rendered: 0) // lock
-    var audioPackets: Int { lock.lock(); defer { lock.unlock() }; return counters.audioPackets }
-    var reanchors: Int { lock.lock(); defer { lock.unlock() }; return counters.reanchors }
+    private var counters = (passthrough: 0, rendered: 0) // lock
+    var audioPackets: Int { pcm.audioPackets }
+    var reanchors: Int { pcm.reanchors }
     var passthrough: Int { lock.lock(); defer { lock.unlock() }; return counters.passthrough } // pictures encoded without a CoreImage pass
     var rendered: Int { lock.lock(); defer { lock.unlock() }; return counters.rendered }       // pictures scaled or rotated through CoreImage
     // Sinks are read together with `cancelled` under the lock at every emission.
     var onPacket: ((Data) -> Void)?
     var onError: ((NPError) -> Void)?
-    private func deliver(_ packet: Data) { lock.lock(); let sink = cancelled ? nil : onPacket; lock.unlock(); sink?(packet) }
+    @discardableResult private func deliver(_ packet: Data) -> Bool { lock.lock(); let sink = cancelled ? nil : onPacket; lock.unlock(); guard let sink else { return false }; sink(packet); return true }
     private func fail(_ error: NPError) { lock.lock(); let sink = cancelled ? nil : onError; lock.unlock(); sink?(error) }
     private static let directFormats: Set<OSType> = [kCVPixelFormatType_32BGRA, kCVPixelFormatType_420YpCbCr8BiPlanarFullRange, kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange]
 
@@ -49,11 +46,12 @@ final class NPFrameEncoder {
     // receiver reconfigures in place and sound never restarts.
     // The setup-only closures let the native harness exercise property rejection
     // and cleanup with a real session. Production uses VideoToolbox directly.
-    init(source: NPSize, display: NPSize, cap: NPSize, origin: CMTime? = nil,
+    init(source: NPSize, display: NPSize, cap: NPSize, origin: CMTime? = nil, pcm: NPPCMSession? = nil,
          setProperty: (VTCompressionSession, CFString, CFTypeRef) -> OSStatus = { VTSessionSetProperty($0, key: $1, value: $2) },
          invalidateSession: (VTCompressionSession) -> Void = { VTCompressionSessionInvalidate($0) }) throws {
         self.source = source
-        self.origin = origin
+        self.pcm = pcm ?? NPPCMSession(origin: origin)
+        ownsPCM = pcm == nil
         output = NPPolicy.encodeSize(source: source, display: display, cap: cap)
         var created: VTCompressionSession?
         let status = VTCompressionSessionCreate(allocator: nil, width: Int32(output.width), height: Int32(output.height), codecType: kCMVideoCodecType_H264,
@@ -96,6 +94,7 @@ final class NPFrameEncoder {
         var pool: CVPixelBufferPool?
         guard CVPixelBufferPoolCreate(kCFAllocatorDefault, nil, attributes as CFDictionary, &pool) == kCVReturnSuccess, let pool else { throw NPError.encoder }
         self.pool = pool
+        if ownsPCM { self.pcm.onPacket = { [weak self] packet in _ = self?.deliver(packet) } }
         setupComplete = true
         NPLog.record("encoder.config", ["cast": false, "width": output.width, "height": output.height, "protocol": 2, "bitrate": bitrate, "noFrameReordering": true])
     }
@@ -105,20 +104,14 @@ final class NPFrameEncoder {
     func requestKeyFrame() { lock.lock(); needKey = true; lock.unlock() }
 
     // Timeline anchor: the first VIDEO sample of the session. Sound before it is dropped (a few milliseconds).
-    var sessionOrigin: CMTime? { lock.lock(); defer { lock.unlock() }; return origin }
-    private func relative(_ timestamp: CMTime, video isVideo: Bool) -> CMTime? {
-        lock.lock(); defer { lock.unlock() }
-        if origin == nil { guard isVideo else { return nil }; origin = timestamp }
-        guard let origin else { return nil }
-        let time = CMTimeSubtract(timestamp, origin)
-        return time >= .zero ? time : nil
-    }
+    var sessionOrigin: CMTime? { pcm.sessionOrigin }
 
     func append(_ sample: CMSampleBuffer, video isVideo: Bool) {
         guard !isCancelled else { return }
+        if !isVideo { pcm.append(sample); return }
         let timestamp = CMSampleBufferGetPresentationTimeStamp(sample)
-        guard timestamp.isNumeric, let time = relative(timestamp, video: isVideo) else { return }
-        if isVideo { appendVideo(sample, time: time) } else { appendAudio(sample, time: time) }
+        guard timestamp.isNumeric, let time = pcm.relative(timestamp, video: true) else { return }
+        appendVideo(sample, time: time)
     }
 
     private func appendVideo(_ sample: CMSampleBuffer, time: CMTime) {
@@ -162,7 +155,10 @@ final class NPFrameEncoder {
                 packet.append(contentsOf: Self.bigEndian(UInt32(48000))); packet.append(2); packet.append(avcC)
                 // The configuration is published only after its packet left: sound
                 // that sees it is always queued behind it.
-                deliver(packet)
+                // NPCapture owns the shared gate and opens it only after its
+                // live-generation check and actual transport enqueue.
+                if ownsPCM { pcm.forwardConfiguration { deliver(packet) } }
+                else { deliver(packet) }
                 lock.lock(); configuration = avcC; lock.unlock()
             }
         }
@@ -195,12 +191,72 @@ final class NPFrameEncoder {
         return avcC
     }
 
-    // ReplayKit app audio (any PCM layout) -> 48 kHz stereo s16 interleaved.
-    // Sound waits only for the configuration packet (the receiver drops PCM it
-    // cannot place); it never waits behind a picture.
-    private func appendAudio(_ sample: CMSampleBuffer, time: CMTime) {
-        lock.lock(); let configured = configuration != nil; lock.unlock()
-        guard configured, let format = CMSampleBufferGetFormatDescription(sample) else { return }
+    // Capture retires an unowned video encoder on its existing video queue.
+    // Its output identity has already been withdrawn, so flushing that tail
+    // would only discard pictures and block the independent PCM path.
+    // Standalone encoders retain flushing for their final submitted pictures.
+    func cancel(flushVideo: Bool = true) {
+        if flushVideo, let session { VTCompressionSessionCompleteFrames(session, untilPresentationTimeStamp: .invalid) }
+        lock.lock(); cancelled = true; onPacket = nil; onError = nil; lock.unlock()
+        if let session { VTCompressionSessionInvalidate(session) }
+        session = nil
+        if ownsPCM { pcm.cancel() }
+    }
+
+    private static func bigEndian<T: FixedWidthInteger>(_ value: T) -> [UInt8] { withUnsafeBytes(of: value.bigEndian, Array.init) }
+}
+
+// One PCM converter/clock per streaming session, independent of video tiers.
+// Append and cancel use NPCapture's existing audio queue; the lock protects
+// only origin, initial configuration, counters and the callback across queues.
+// No PCM is queued here: initial unplaceable samples are counted and discarded,
+// then every append is delivered synchronously, including video replacement.
+final class NPPCMSession {
+    private let lock = NSLock()
+    private var origin: CMTime?
+    private var configured = false
+    private var cancelled = false
+    private var sink: ((Data) -> Void)?
+    private let pcmFormat = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: 48000, channels: 2, interleaved: true)!
+    private var converter: AVAudioConverter?
+    private var converterInput: AVAudioFormat?
+    private var audioClock: (origin: Int64, frames: Int64)?
+    private var counters = (audioPackets: 0, reanchors: 0, beforeOrigin: 0, beforeConfiguration: 0)
+    init(origin: CMTime? = nil) { self.origin = origin }
+    var sessionOrigin: CMTime? { lock.lock(); defer { lock.unlock() }; return origin }
+    var audioPackets: Int { lock.lock(); defer { lock.unlock() }; return counters.audioPackets }
+    var reanchors: Int { lock.lock(); defer { lock.unlock() }; return counters.reanchors }
+    var beforeOrigin: Int { lock.lock(); defer { lock.unlock() }; return counters.beforeOrigin }
+    var beforeConfiguration: Int { lock.lock(); defer { lock.unlock() }; return counters.beforeConfiguration }
+    var onPacket: ((Data) -> Void)? {
+        get { lock.lock(); defer { lock.unlock() }; return sink }
+        set { lock.lock(); if !cancelled { sink = newValue }; lock.unlock() }
+    }
+    // `enqueue` must acknowledge actual transport acceptance. Retired video
+    // callbacks return false and cannot open a new session's initial gate.
+    func forwardConfiguration(_ enqueue: () -> Bool) {
+        lock.lock(); let live = !cancelled; lock.unlock()
+        guard live, enqueue() else { return }
+        lock.lock(); if !cancelled { configured = true }; lock.unlock()
+    }
+    func relative(_ timestamp: CMTime, video: Bool) -> CMTime? {
+        lock.lock(); defer { lock.unlock() }
+        guard !cancelled else { return nil }
+        if origin == nil {
+            guard video else { counters.beforeOrigin += 1; return nil }
+            origin = timestamp
+        }
+        guard let origin else { return nil }
+        let time = CMTimeSubtract(timestamp, origin)
+        return time >= .zero ? time : nil
+    }
+    func append(_ sample: CMSampleBuffer) {
+        let timestamp = CMSampleBufferGetPresentationTimeStamp(sample)
+        guard timestamp.isNumeric, let time = relative(timestamp, video: false) else { return }
+        lock.lock(); let ready = configured && !cancelled
+        if !ready && !cancelled { counters.beforeConfiguration += 1 }
+        lock.unlock()
+        guard ready, let format = CMSampleBufferGetFormatDescription(sample) else { return }
         let input = AVAudioFormat(cmAudioFormatDescription: format)
         if converter == nil || converterInput != input {
             guard let created = AVAudioConverter(from: input, to: pcmFormat) else { return }
@@ -237,20 +293,13 @@ final class NPFrameEncoder {
         packet.append(contentsOf: Self.bigEndian(UInt64(max(0, pts))))
         packet.append(UnsafeBufferPointer(start: UnsafeRawPointer(bytes).assumingMemoryBound(to: UInt8.self), count: Int(converted.frameLength) * 4))
         lock.lock(); counters.audioPackets += 1; lock.unlock()
-        deliver(packet)
+        lock.lock(); let destination = cancelled ? nil : sink; lock.unlock()
+        destination?(packet)
     }
 
-    // Called on the capture's audio queue (behind any in-flight sound append);
-    // pictures stop earlier because the capture dropped its reference first.
-    // Pictures still inside VideoToolbox are emitted before the session goes
-    // (a software encoder keeps several in flight; invalidating discards them):
-    // the harness sees every submitted picture, and a retired encoder's tail
-    // never reaches the link because the capture no longer owns it.
     func cancel() {
-        if let session { VTCompressionSessionCompleteFrames(session, untilPresentationTimeStamp: .invalid) }
-        lock.lock(); cancelled = true; onPacket = nil; onError = nil; lock.unlock()
-        if let session { VTCompressionSessionInvalidate(session) }
-        session = nil
+        lock.lock(); cancelled = true; configured = false; sink = nil; lock.unlock()
+        converter = nil; converterInput = nil; audioClock = nil
     }
 
     private static func bigEndian<T: FixedWidthInteger>(_ value: T) -> [UInt8] { withUnsafeBytes(of: value.bigEndian, Array.init) }

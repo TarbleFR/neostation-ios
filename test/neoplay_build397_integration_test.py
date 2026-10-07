@@ -42,11 +42,13 @@ BUILD410_STREAM_POSTIMAGES = {
     'packages/neoplay_bridge/ios/Classes/NPPolicy.swift': 'd7c15740f20af31a2ab3e6f0220eeb2165534b3afc97ee799064f322b83b6200',
     'packages/neoplay_bridge/ios/Classes/NPWindowsTransport.swift': '49459ae9a7ec85b4a2fee0ff607f56214a28c02a78ede247e5f730e5a7298fd4',
 }
-# Only the enforced no-reordering encoder property and its additive pairing
-# promise supersede these two historical Build410 files. The receiver must
-# leave old senders' SPS untouched when that promise is absent.
+# The enforced no-reordering property/pairing promise and session-owned PCM
+# supersede these three historical Build410 files. PCM survives video tier
+# replacement; the native suite checks initial CONFIG ordering and lifecycle.
+# The receiver leaves old senders' SPS untouched without the new promise.
 POST410_STREAM_POSTIMAGES = {
-    'packages/neoplay_bridge/ios/Classes/NPFrameEncoder.swift': 'd50fda666c9dc07d1b8fa797330fffdc1b25743d9dbaf49b600e96f4c3af8247',
+    'packages/neoplay_bridge/ios/Classes/NPCapture.swift': 'b3b553635df1beddf20d55a6534fa150d1dc52000436e053ae0ddafea4275d6f',
+    'packages/neoplay_bridge/ios/Classes/NPFrameEncoder.swift': '19ec5f47ae5474ea874ed676088e2fd2bffab9d908e04db2690e57051eceddaf',
     'packages/neoplay_bridge/ios/Classes/NPWindowsTransport.swift': '6f7393e812c8799cffa652c7bb4b8eae2732238a862c5d00d45ed9a5a20c12b8',
 }
 REVIEWED_RPCS3_HOST_POSTIMAGES = {

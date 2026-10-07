@@ -38,6 +38,12 @@ gain de FPS n’est déduit des tests de code.
    les nouveaux émetteurs garantissant explicitement l’absence de
    réordonnancement. L’encodeur refuse cette garantie si VideoToolbox rejette
    le réglage requis ; les anciens émetteurs conservent leurs SPS.
+   La conversion et l’horloge PCM ont maintenant la durée de vie du streaming,
+   indépendamment des encodeurs vidéo successifs. La configuration initiale
+   doit effectivement être transmise avant d’ouvrir l’audio. Les files et la
+   cible audio de 80 ms sont conservées ; les pertes avant cette première
+   configuration sont comptées séparément. Les nouveaux tests natifs doivent
+   encore valider cette dernière correction.
 
 ## Avant / après : mesures disponibles
 
@@ -92,7 +98,12 @@ ils ne constituent pas une garantie d’absence de défaut mémoire du système.
   présente dans l’application. Son adaptation conserve les assertions finales
   de zéro prêt et teste le retrait borné : 40 prêts, refus temporaire puis
   reprise, refus permanent avec conservation de la mémoire. Ces tests locaux
-  passent ; la nouvelle preuve native macOS doit encore être exécutée.
+  passent. Au passage `d9589fa209de26cce8c53ec2bc40f93b4d154836`, les
+  preuves natives macOS passent à 128 Mio et 1 Gio : respectivement deux et
+  cinq prêts soldés en un passage, zéro prêt restant côté broker et pool,
+  zéro backing disque. Les 10 µs de la sonde mesurent le drain des prêts,
+  pas la restitution de la mémoire physique au noyau. Runs `37595624348`
+  et `37595624322` ; aucune preuve iPhone n’en est déduite.
 - Au premier passage CI, l’analyse Dart et les 17 tests d’interface NeoPlay
   passent, ainsi que les encodeurs natifs, la lecture de leurs fixtures dans
   Windows Edge hébergé, les deux suites de stockage Linux/macOS et les preuves
@@ -101,8 +112,22 @@ ils ne constituent pas une garantie d’absence de défaut mémoire du système.
   sont conservées et la version adaptée passe localement. Le gate Flutter
   a aussi révélé une ancienne assertion imposant une mutation au lancement
   désormais interdite ; le contrat de démarrage unique la remplace. Les
-  nouveaux tests Flutter de publication après initialisation restent à exécuter
-  dans la CI.
+  nouveaux tests Flutter de publication après initialisation passent dans
+  le run `37595624359` du commit `d9589fa`. Les tests natifs du contrat
+  sans réordonnancement passent aussi (`37595624347`). Ces résultats ne
+  couvrent pas encore la correction PCM ajoutée après ce commit.
+- Donation réelle sur iOS 18.5 Simulator au commit `d9589fa` : deux processus
+  auxiliaires, quatre blocs de 16 Mio, soit 64 Mio effectivement prêtés et
+  vérifiés ; onze contrôles de cycle de vie, refus, callbacks tardifs et
+  nettoyage réussis. Les 26 empreintes source de l’artefact correspondent
+  au commit. Le harness pilote son propre calendrier ; cela ne valide pas
+  le warmup pendant God of War III sur téléphone.
+- Le run stockage `37595624315` du même commit échoue au lancement de
+  l’application de test Simulator : `simctl launch` dépasse 120 s après
+  compilation, boot et installation réussis. Les 46 fichiers concernés
+  sont identiques au passage précédent réussi. Aucun rapport applicatif
+  final n’est récupéré ; la cause du timeout reste indéterminée. Le prochain
+  passage conserve ce délai et toutes les assertions.
 - Sur le PC Windows physique, la même fixture `bb347665` passe de 28 à
   1 image tardive au même point du test, avec 134 → 191 images présentées.
   Le décodage matériel et la cible audio de 80 ms sont conservés. Le déficit
@@ -112,6 +137,14 @@ ils ne constituent pas une garantie d’absence de défaut mémoire du système.
   cushion, débit, empreintes et limites dans `neoplay/RECEIVER-VALIDATION.md`.
   Ce résultat est un rejeu de laboratoire et ne valide pas le grésillement
   sur iPhone. Les anciens flux, sans garantie explicite, ne sont pas modifiés.
+- Le diagnostic PCM isole ensuite neuf paquets manquants entre 5,0 et 5,3 s
+  au changement de qualité, dans les fixtures `bb347665` et `d9589fa`.
+  Le harness fournit ces échantillons, mais l’ancien encodeur les abandonne
+  en attendant sa nouvelle configuration vidéo. Un rejeu de l’anneau audio
+  de production reproduit 11 163 trames d’underrun (232,6 ms) ; fournir les
+  neuf paquets manquants dans un contrefactuel donne zéro underrun avec la
+  même cible de 80 ms. Ce contrefactuel établit la cause dans la fixture ;
+  ce n’est pas une mesure de la correction native ni du téléphone.
 - Stress mémoire macOS du premier passage : arrêt réel sur pression mémoire
   après 8 388 608 000 octets préparés et vérifiés (7,8125 Gio), avec
   3 866 279 936 octets résidents et 4 522 328 064 octets compressés.
@@ -142,7 +175,7 @@ démarrage, jeu, redimensionnement/plein écran, pause/reprise, arrêt et relanc
   `Broker.cpp`, `.h`.
 - Préparation : `NeoSwapPlugin.mm`, `NeoSwapPreparation.h`,
   `packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm`.
-- NeoPlay : `NPFrameEncoder.swift`, `NPWindowsTransport.swift`, tests Swift
+- NeoPlay : `NPCapture.swift`, `NPFrameEncoder.swift`, `NPWindowsTransport.swift`, tests Swift
   et collecte des fixtures ; `tools/neoplay-receiver/diagnostics.mjs`,
   `h264-sps.mjs`, `player.mjs`, `server.mjs`, `playback-smoke.mjs` et leurs tests.
 - Retrait GPU : `VulkanDonationProbe.h`, `RetirementProof.h`, validateur de

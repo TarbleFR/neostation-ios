@@ -19,6 +19,7 @@ final class NPCapture: NSObject, RPScreenRecorderDelegate {
     private var displayRevision = 0
     private var muxer: NPMuxer?
     private var encoder: NPFrameEncoder?
+    private var pcm: NPPCMSession? // session lifetime, independent of video tiers
     private var requested = false // main-thread state
     private var ownsRecorder = false
     private var pending = false
@@ -38,16 +39,16 @@ final class NPCapture: NSObject, RPScreenRecorderDelegate {
     private var watchdog: Timer?
     private var audioDropped = 0 // state lock
     private var videoDropped = 0 // state lock
-    private var sessionOrigin: CMTime? // capture queue: first picture of the session, shared by every encoder of it
     private var lastKeyRequest = Date.distantPast // main thread
     private var pathRecorded = false // capture queue
     static let keyRequestInterval: TimeInterval = 0.5
     private var cap: NPSize { NPPolicy.cap(tier: cast ? .half : tier, receiverMax: cast ? NPSize(width: 1280, height: 720) : receiverMax) }
     var diagnostics: [String: Any] {
-        state.lock(); let encoder = self.encoder, muxer = self.muxer, tier = self.tier, audioDropped = self.audioDropped, videoDropped = self.videoDropped; state.unlock()
+        state.lock(); let encoder = self.encoder, muxer = self.muxer, pcm = self.pcm, tier = self.tier, audioDropped = self.audioDropped, videoDropped = self.videoDropped; state.unlock()
         return ["tier": tier.rawValue, "audioDropped": audioDropped, "videoDropped": videoDropped,
                 "output": encoder.map { ["width": $0.output.width, "height": $0.output.height] } ?? muxer.map { ["width": $0.output.width, "height": $0.output.height] } ?? NSNull(),
-                "passthrough": encoder?.passthrough ?? 0, "audioPackets": encoder?.audioPackets ?? 0, "reanchors": encoder?.reanchors ?? 0]
+                "passthrough": encoder?.passthrough ?? 0, "audioPackets": pcm?.audioPackets ?? 0, "reanchors": pcm?.reanchors ?? 0,
+                "audioBeforeOrigin": pcm?.beforeOrigin ?? 0, "audioBeforeConfiguration": pcm?.beforeConfiguration ?? 0]
     }
     func start() {
         let recorder = RPScreenRecorder.shared()
@@ -55,7 +56,13 @@ final class NPCapture: NSObject, RPScreenRecorderDelegate {
         requested = true; pending = true; previousMicrophone = recorder.isMicrophoneEnabled; previousDelegate = recorder.delegate
         recorder.isMicrophoneEnabled = false; recorder.delegate = self
         let display = self.display, cast = self.cast, perFrame = self.frames && !self.cast
-        state.lock(); generation += 1; let token = generation; state.unlock()
+        let pcm = perFrame ? NPPCMSession() : nil
+        state.lock(); generation += 1; let token = generation; self.pcm = pcm; state.unlock()
+        pcm?.onPacket = { [weak self, weak pcm] packet in
+            guard let self, let pcm else { return }
+            self.state.lock(); let live = token == self.generation && self.pcm === pcm; self.state.unlock()
+            if live { self.onPacket?(packet) }
+        }
         queue.sync { activeDisplay = display; lastSampleAt = Date() }
         recorder.startCapture(handler: { [weak self] sample, kind, error in
             guard let self else { return }
@@ -65,9 +72,9 @@ final class NPCapture: NSObject, RPScreenRecorderDelegate {
                 guard self.audioSlots.wait(timeout: .now()) == .success else { self.state.lock(); self.audioDropped += 1; let count = self.audioDropped; self.state.unlock(); if count % 100 == 1 { NPLog.record("audio.dropped", ["count": count]) }; return }
                 self.audioQueue.async {
                     defer { self.audioSlots.signal() }
-                    self.state.lock(); let live = token == self.generation, encoder = self.encoder, muxer = self.muxer; self.state.unlock()
+                    self.state.lock(); let live = token == self.generation, pcm = self.pcm, muxer = self.muxer; self.state.unlock()
                     guard live else { return }
-                    if perFrame { encoder?.append(sample, video: false) } else { muxer?.append(sample, video: false) }
+                    if perFrame { pcm?.append(sample) } else { muxer?.append(sample, video: false) }
                 }
                 return
             }
@@ -82,30 +89,30 @@ final class NPCapture: NSObject, RPScreenRecorderDelegate {
                     if perFrame {
                         if self.encoder?.source != size {
                             self.retire(encoder: self.encoder, muxer: nil)
-                            let encoder = try NPFrameEncoder(source: size, display: self.activeDisplay, cap: self.cap, origin: self.sessionOrigin)
+                            guard let pcm else { return }
+                            let encoder = try NPFrameEncoder(source: size, display: self.activeDisplay, cap: self.cap, pcm: pcm)
                             self.state.lock(); self.encoder = encoder; self.state.unlock()
                             encoder.onError = { [weak self] error in DispatchQueue.main.async { if self?.requested == true { self?.onError?(error) } } }
-                            // Sound is forwarded at once from the audio queue (its own serial order,
-                            // the transport queue serializes the rest). Pictures and configuration
-                            // come from VideoToolbox's thread and hop to the capture queue.
+                            // Keep configuration and pictures ordered with video
+                            // replacement on the capture queue. The shared PCM gate
+                            // opens only after CONFIG actually enters the transport.
                             encoder.onPacket = { [weak self, weak encoder] packet in
-                                guard let self else { return }
-                                if packet.first == 5 {
-                                    self.state.lock(); let live = token == self.generation && self.encoder === encoder; self.state.unlock()
-                                    if live { self.onPacket?(packet) }
-                                    return
-                                }
+                                guard let self, let encoder else { return }
                                 guard self.outputSlots.wait(timeout: .now()) == .success else { DispatchQueue.main.async { self.onError?(.backpressure) }; return }
                                 self.queue.async {
                                     defer { self.outputSlots.signal() }
-                                    self.state.lock(); let live = token == self.generation && self.encoder === encoder; self.state.unlock()
+                                    self.state.lock(); let live = token == self.generation && self.encoder === encoder && self.pcm === pcm; self.state.unlock()
                                     guard live else { return }
-                                    self.onPacket?(packet)
+                                    if packet.first == 3 {
+                                        pcm.forwardConfiguration {
+                                            guard let sink = self.onPacket else { return false }
+                                            sink(packet); return true
+                                        }
+                                    } else { self.onPacket?(packet) }
                                 }
                             }
                         }
                         self.encoder?.append(sample, video: true)
-                        if self.sessionOrigin == nil { self.sessionOrigin = self.encoder?.sessionOrigin }
                         if !self.pathRecorded, let encoder = self.encoder, encoder.passthrough > 0 || encoder.rendered > 0 {
                             self.pathRecorded = true
                             let orientation = (CMGetAttachment(sample, key: RPVideoSampleOrientationKey as CFString, attachmentModeOut: nil) as? NSNumber)?.int32Value ?? 1
@@ -136,7 +143,7 @@ final class NPCapture: NSObject, RPScreenRecorderDelegate {
         }, completionHandler: { [weak self] error in
             DispatchQueue.main.async {
                 guard let self else { return }; self.pending = false
-                if error != nil { NPLog.error("capture.start", error); let notify = self.requested; self.requested = false; self.restoreRecorder(); if notify { self.onError?(.capture) }; self.onStopped?(); return }
+                if error != nil { NPLog.error("capture.start", error); let notify = self.requested; self.requested = false; self.cancelMediaSession(); self.restoreRecorder(); if notify { self.onError?(.capture) }; self.onStopped?(); return }
                 self.ownsRecorder = true
                 guard self.requested else { self.stop(); return }
                 self.onStarted?()
@@ -176,14 +183,14 @@ final class NPCapture: NSObject, RPScreenRecorderDelegate {
         let now = Date(); guard now.timeIntervalSince(lastKeyRequest) >= Self.keyRequestInterval else { return }; lastKeyRequest = now
         state.lock(); let encoder = self.encoder; state.unlock(); encoder?.requestKeyFrame()
     }
-    // The capture queue drops its reference first (no further picture reaches the
-    // old encoder), then the cancel runs on the audio queue behind any sound
-    // append still in flight: AVAssetWriter and VideoToolbox never see an append
-    // racing their cancellation.
+    // The capture queue owns video retirement; its withdrawn encoder never
+    // flushes discarded pictures on the PCM queue. Cast's AVAssetWriter still
+    // cancels on the audio queue behind any sound append using that muxer.
     private func retire(encoder: NPFrameEncoder?, muxer: NPMuxer?) {
         state.lock(); if encoder != nil { self.encoder = nil }; if muxer != nil { self.muxer = nil }; state.unlock()
         guard encoder != nil || muxer != nil else { return }
-        audioQueue.async { encoder?.cancel(); muxer?.cancel() }
+        encoder?.cancel(flushVideo: false)
+        if let muxer { audioQueue.async { muxer.cancel() } }
     }
     private func restartEncodersIfOutputChanges(reason: String, detail: [String: Any]) {
         if let encoder = self.encoder, NPPolicy.encodeSize(source: encoder.source, display: activeDisplay, cap: cap) != encoder.output {
@@ -195,11 +202,15 @@ final class NPCapture: NSObject, RPScreenRecorderDelegate {
     }
     func stop() {
         requested = false; watchdog?.invalidate(); watchdog = nil
-        state.lock(); generation += 1; state.unlock()
-        queue.async { self.retire(encoder: self.encoder, muxer: self.muxer); self.sessionOrigin = nil; self.pathRecorded = false }
+        cancelMediaSession()
         if pending { return } // The late start completion stops its own recorder before another session can start.
         guard ownsRecorder else { onStopped?(); return }; ownsRecorder = false
         RPScreenRecorder.shared().stopCapture { [weak self] _ in DispatchQueue.main.async { self?.restoreRecorder(); self?.onStopped?() } }
+    }
+    private func cancelMediaSession() {
+        state.lock(); generation += 1; let pcm = self.pcm; self.pcm = nil; state.unlock()
+        audioQueue.async { pcm?.cancel() }
+        queue.async { self.retire(encoder: self.encoder, muxer: self.muxer); self.pathRecorded = false }
     }
     private func restoreRecorder() { let recorder = RPScreenRecorder.shared(); if recorder.delegate === self { recorder.delegate = previousDelegate; previousDelegate = nil; recorder.isMicrophoneEnabled = previousMicrophone } }
     func screenRecorder(_ screenRecorder: RPScreenRecorder, didStopRecordingWith previewViewController: RPPreviewViewController?, error: Error?) { if requested { onError?(.capture) } }
