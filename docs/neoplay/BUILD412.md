@@ -36,10 +36,23 @@ et de l'analyse des journaux iPhone de Build 411 du 7 octobre 2026.
 ## Mécanisme retenu (hypothèse, à prouver sur l'appareil)
 
 Avec « Accurate SPU Reservations » (défaut du cœur, non surchargé jusqu'ici),
-chaque PUTLLC qui change des données et chaque PUTLLUC prend `vm::writer_lock`,
-qui pose `cpu_flag::memory` sur les deux threads PPU et attend qu'ils soient
-garés ; les sept threads SPU spinnent pendant ce temps. Le cache de textures,
-Write Color Buffers et NeoSwap ne touchent jamais ces bits.
+chaque PUTLLC qui change des données (chemin lourd) et chaque STORE128/PUTLLUC
+prend `vm::writer_lock` exclusif, comme le stwcx PPU et `reservation_op`. Le
+verrou pose `cpu_flag::memory` sur les threads PPU en cours d'exécution
+inscrits dans `g_locks` (zéro, un ou deux selon l'instant), attend qu'ils
+atteignent un point de contrôle, puis ces PPU restent immobilisés dans
+`passive_lock` jusqu'à la libération de tous les bits exclusifs, c'est-à-dire
+pendant toute la durée de maintien. En mode relâché, le PUTLLC à lane unique
+passe par un `range_lock` partagé et n'immobilise personne. Le cache de
+textures, Write Color Buffers et NeoSwap ne prennent jamais ce verrou
+directement (protections par `mprotect` hôte, fautes d'accès et flushs RSX) ;
+deux chemins indirects restent non mesurés en 411 (repli `writer_lock` du
+gestionnaire de fautes, slot `range_lock` SPU tenu pendant un flush synchrone).
+Nuance établie par la revue contradictoire des journaux 411 : la chute de fps
+précède d'environ quinze secondes la tempête de verrous, qui coïncide avec la
+rafale de compilations SPU et les allocations VRAM. Le convoi de verrous est
+donc un amplificateur mesuré (jusqu'à 1,5 s d'attente PPU par seconde), pas la
+cause première démontrée ; l'attribution `wl_*` de cette build sert à trancher.
 
 ## Changements de cette build
 
