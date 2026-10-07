@@ -12,7 +12,7 @@ BASE = '3ccde925351b3e59985ba466e013e87a857d6ad0'
 MANIFEST_PATH = 'native/import-memory-candidate.json'
 manifest = json.loads((ROOT / MANIFEST_PATH).read_text())
 assert manifest['baseline'] == BASE
-assert manifest['target_build'] == 411
+assert manifest['target_build'] == 412
 assert manifest['swap_research']['branch'] == 'swap'
 assert manifest['swap_research']['scope'] == 'RPCS3 only'
 # Build409: relay owner 1 serves identifiable host allocations of the same
@@ -461,6 +461,7 @@ SUPPORT_FILES |= {
     'docs/neoplay/BUILD397.md',
     'docs/neoplay/BUILD410.md',
     'docs/neoplay/BUILD411.md',
+    'docs/neoplay/BUILD412.md',
     'docs/neoplay/README.md',
     'docs/neoplay/companion-validation-2026-10-02.json',
     'docs/neoplay/validation-2026-10-02.json',
@@ -693,6 +694,25 @@ IPA_WORKFLOW_BUILD411_LINES = (
 # The historical ARMSX2/Build410 postimage remains fully checked. These exact
 # acceptance-test additions are the only current workflow delta at this stage;
 # a new Core artifact pin is added only after its build succeeds.
+# Build412 candidate lines, applied on top of the Build411 lines (7 October
+# 2026, God of War III cycle): the build number, the required previous
+# packaged build (411, run 37605768644 on 8c63c682, artifact Build-411) and its
+# retention wording, the instrumented RPCS3 Core (run 37620034517 on afb33454:
+# writer-lock attribution and rsx::thread accounting, inputs the Build411 Core
+# no longer matches) and the Build412 notes. Each pair applies exactly once.
+def _build412_line(line):
+    for old, new in (('Build 411', 'Build 412'), ("'411'", "'412'"), ('build411', 'build412'), ('(411)', '(412)'),
+                     ('Build-411-', 'Build-412-'), ('BUILD411', 'BUILD412'), ('Build411', 'Build412'),
+                     ('Build 410', 'Build 411'), ('Build-410-', 'Build-411-'), ('Build410', 'Build411'),
+                     ('37541424599', '37605768644'),
+                     ('f5478b036878e5727a035086faff97d0581931cf', '8c63c682946b7ad736d5391086016399100c4bd9'),
+                     ('d9589fa209de26cce8c53ec2bc40f93b4d154836', 'afb33454db50236485bd5ec963a722dcb5f65610'),
+                     ("'37595624383'", "'37620034517'")):
+        line = line.replace(old, new)
+    return line
+IPA_WORKFLOW_BUILD412_LINES = tuple((new, _build412_line(new)) for _old, new in IPA_WORKFLOW_BUILD411_LINES)
+assert all(old != new for old, new in IPA_WORKFLOW_BUILD412_LINES)
+assert IPA_WORKFLOW_BUILD412_LINES[-1][1] == '          cp docs/neoplay/BUILD412.md build/private-test/Notes-NeoPlay-Build412.md\n'
 IPA_WORKFLOW_RUNTIME_PREPARATION_LINES = (
     ('            test/native/rpcs3_spu_branch_analyzer_test.cpp \\\n',
      '            test/native/rpcs3_spu_branch_analyzer_test.cpp \\\n'
@@ -708,6 +728,9 @@ for path in ARMSX2_INTEGRATION_FILES:
             text = text.replace(old, new, 1)
         for old, new in IPA_WORKFLOW_BUILD411_LINES:
             assert text.count(old) == 1, 'Build411 IPA workflow line expected once: ' + old
+            text = text.replace(old, new, 1)
+        for old, new in IPA_WORKFLOW_BUILD412_LINES:
+            assert text.count(old) == 1, 'Build412 IPA workflow line expected once: ' + old
             text = text.replace(old, new, 1)
         for old, new in IPA_WORKFLOW_RUNTIME_PREPARATION_LINES:
             assert text.count(old) == 1, 'Runtime acceptance workflow line expected once: ' + old
@@ -853,8 +876,10 @@ for workflow_path in ('.github/workflows/neoswap-ipa.yml', '.github/workflows/io
         # accessors); the Build409 Core no longer matches these patched inputs.
         # Its inputs are byte-identical at every later host commit, which
         # neo_swap_core_pin_test verifies against the pinned commit.
-        assert re.findall(r'(?m)^      RPCS3_CORE_HOST_SHA: (.+)$', workflow) == ['d9589fa209de26cce8c53ec2bc40f93b4d154836']
-        assert re.findall(r'(?m)^      RPCS3_CORE_RUN_ID: (.+)$', workflow) == ["'37595624383'"]
+        # Build412 Core: afb33454 adds writer-lock attribution and rsx::thread
+        # accounting to the profiler; its inputs no longer match the Build411 Core.
+        assert re.findall(r'(?m)^      RPCS3_CORE_HOST_SHA: (.+)$', workflow) == ['afb33454db50236485bd5ec963a722dcb5f65610']
+        assert re.findall(r'(?m)^      RPCS3_CORE_RUN_ID: (.+)$', workflow) == ["'37620034517'"]
         assert "assert result['head_sha']==os.environ['RPCS3_CORE_HOST_SHA']" in workflow
         assert "assert result['conclusion']=='success'" in workflow
         assert 'validate_core_input_identity(identity)' in workflow

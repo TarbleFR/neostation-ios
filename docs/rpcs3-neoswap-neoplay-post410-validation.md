@@ -245,3 +245,11 @@ La ligne unique du cœur « Found Vulkan-compatible GPU: … running on driver
 recopiée dans les jalons durables sous `renderer_detected`. Le journal de
 diagnostic redémarre à 2 Mio pendant une longue session, ce qui explique
 l'absence de cette attestation MoltenVK dans l'export reçu le 7 octobre.
+
+## Candidate Build 412 (7 octobre 2026, God of War III)
+
+Voir `docs/neoplay/BUILD412.md` pour les mesures des journaux Build 411, le
+mécanisme retenu (writer lock exclusif des PUTLLC/PUTLLUC avec réservations
+précises), les changements (Core `afb33454` run `37620034517`, exports
+SPUPROF/RANGELOCKPROF, jalons durables, maintien de 30 fps, profil GoW3) et le
+protocole de mesure. Rien n'est validé sur iPhone dans cette candidate.

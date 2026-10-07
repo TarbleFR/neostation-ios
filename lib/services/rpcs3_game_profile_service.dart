@@ -39,6 +39,10 @@ class Rpcs3GameProfile {
           'Core',
           'LLVM Precompilation',
         ],
+        'advanced.accurate_spu_reservations' => const <String>[
+          'Core',
+          'Accurate SPU Reservations',
+        ],
         'emulator.max_llvm_threads' => const <String>[
           'Core',
           'Max LLVM Compile Threads',
@@ -160,6 +164,19 @@ abstract final class Rpcs3GameProfileService {
     'cpu.spu_block_size': 'Mega',
     'cpu.spu_xfloat_accuracy': 'Approximate',
     'cpu.preferred_spu_threads': '0',
+    // Build 411 iPhone logs (7 October 2026): in heavy scenes the PPU threads
+    // were blocked 0.85 to 1.5 s per second behind the exclusive writer lock
+    // that every data-changing SPU PUTLLC and every PUTLLUC takes while
+    // "Accurate SPU Reservations" (Core default true) is on; the SPU threads
+    // spin until both PPUs park. The relaxed path keeps the range-lock and
+    // reservation protocol (single-lane CAS, direct SPURS stores) and bypasses
+    // no DMA lock. Hypothesis measured on the next run by RANGELOCKPROF
+    // wl_putllc/wl_store128 and the PPU range-wait time, not proven here.
+    'advanced.accurate_spu_reservations': 'false',
+    // The maintainer's target is a constant, measured 30 fps: the limiter
+    // stops the light scenes from spending CPU on 55 fps and the performance
+    // summary reports the hold ratio against this target.
+    'gpu.frame_limit': '30',
     'gpu.resolution_scale': '75',
     'gpu.shader_mode': 'Async Recompiler (multi-threaded)',
     'gpu.multithreaded_rsx': 'true',

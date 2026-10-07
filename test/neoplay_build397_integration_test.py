@@ -157,7 +157,9 @@ REVIEWED_POST410_POSTIMAGES = {
     # Three regional GOW3 IDs and offline republication of already detected
     # profiles after the existing owner's Core/JIT completion, before ready.
     # No launcher settings mutation, network refresh, retry or second attach.
-    'lib/services/rpcs3_game_profile_service.dart': 'cfb1dd18bb114355f88836d1611620f3431bc0af3bb318752b468e54c3a31d84',
+    # Build412 (7 October 2026): God of War III profile adds Accurate SPU
+    # Reservations false and Frame limit 30 as measured hypotheses; nothing else.
+    'lib/services/rpcs3_game_profile_service.dart': '628b961602c6456cb0051cb88ddd0a4247cd48a775adbe2766a242718308bcfb',
     'lib/services/rpcs3_internal_service.dart': '683dd34422949a3bd8345c9dcfff9f32adbb3c86e2cf0bd36916ca2bf7a7cc27',
     # Explicit busy result and nonblocking donor acquisition; no other pool edits.
     'native/neoswap-donation/Broker.h': 'f551f55fb5e77e5594fb0ef8e3de28331b1e8c4c308ee761cda2aaded98fb6b3',
@@ -263,19 +265,19 @@ class Build398Integration(unittest.TestCase):
         self.assertIn('version: 0.0.2+399', pubspec)
     def test_full_ipa_requires_previous_build_and_both_exact_evidence_suites(self):
         text = (ROOT/'.github/workflows/neoswap-ipa.yml').read_text()
-        self.assertIn('neostation-neoswap-neoplay-build411', text)
+        self.assertIn('neostation-neoswap-neoplay-build412', text)
         self.assertNotIn('group: neostation-neoswap-private\n', text)
-        self.assertIn('run_id = 37541424599', text)
+        self.assertIn('run_id = 37605768644', text)
         self.assertIn("run['conclusion'] == 'success'", text)
-        self.assertIn('f5478b036878e5727a035086faff97d0581931cf', text)
-        self.assertIn("expected = 'NeoStation-NeoSwap-NeoPlay-Build-410-' + expected_sha", text)
+        self.assertIn('8c63c682946b7ad736d5391086016399100c4bd9', text)
+        self.assertIn("expected = 'NeoStation-NeoSwap-NeoPlay-Build-411-' + expected_sha", text)
         self.assertIn("'neoplay-check.yml',", text)
         self.assertIn('head_sha={sha}', text)
-        self.assertLess(text.index('Require completed Build 410'), text.index('Wait for exact-SHA validation workflows'))
-        self.assertIn('cp docs/neoplay/BUILD411.md build/private-test/Notes-NeoPlay-Build411.md', text)
-        # The post-410 Core: its patched inputs no longer match the Build409 Core pin.
-        self.assertIn("RPCS3_CORE_HOST_SHA: d9589fa209de26cce8c53ec2bc40f93b4d154836", text)
-        self.assertIn("RPCS3_CORE_RUN_ID: '37595624383'", text)
+        self.assertLess(text.index('Require completed Build 411'), text.index('Wait for exact-SHA validation workflows'))
+        self.assertIn('cp docs/neoplay/BUILD412.md build/private-test/Notes-NeoPlay-Build412.md', text)
+        # The Build412 Core (writer-lock attribution): its inputs no longer match the Build411 Core pin.
+        self.assertIn("RPCS3_CORE_HOST_SHA: afb33454db50236485bd5ec963a722dcb5f65610", text)
+        self.assertIn("RPCS3_CORE_RUN_ID: '37620034517'", text)
         self.assertIn('needs: wait-evidence', text)
         self.assertIn("xcode-version: '26.3'", text)
         self.assertLess(text.index('python3 build-utils/configure_neoplay_ios.py'), text.index('pod install --project-directory=ios'))
@@ -367,10 +369,11 @@ class Build398Integration(unittest.TestCase):
         self.assertIn('failure = nil', request)
     def test_candidate_identity_remains_honest(self):
         data = json.loads((ROOT/'native/import-memory-candidate.json').read_text())
-        self.assertEqual(data['target_build'], 411)
-        self.assertEqual(data['neoplay_integration']['previous_build_run_id'], 37541424599)
+        self.assertEqual(data['target_build'], 412)
+        self.assertEqual(data['neoplay_integration']['previous_build_run_id'], 37605768644)
         self.assertTrue(any(entry.startswith('Build410:') for entry in data['scope']))
         self.assertTrue(any(entry.startswith('Build411:') for entry in data['scope']))
+        self.assertTrue(any(entry.startswith('Build412:') for entry in data['scope']))
         self.assertEqual(data['neoplay_integration']['frames_protocol_source'], FRAMES)
         self.assertEqual(data['neoplay_integration']['preserved_neoswap_base'], BASE)
         self.assertEqual(data['neoplay_integration']['source'], FEATURE)

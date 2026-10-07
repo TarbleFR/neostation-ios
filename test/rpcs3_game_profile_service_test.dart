@@ -60,6 +60,10 @@ void main() {
           final profile = Rpcs3GameProfileService.profileForSerial(serial)!;
           expect(profile.settings['cpu.spu_block_size'], 'Mega');
           expect(profile.settings['cpu.preferred_spu_threads'], '0');
+          // Build 412: relaxed SPU reservations and the 30 fps limiter are
+          // measured hypotheses against the Build 411 writer-lock stalls.
+          expect(profile.settings['advanced.accurate_spu_reservations'], 'false');
+          expect(profile.settings['gpu.frame_limit'], '30');
           expect(profile.settings['gpu.resolution_scale'], '75');
           expect(
             profile.settings['gpu.shader_mode'],
@@ -179,7 +183,12 @@ void main() {
       expect(yaml, contains('RSX FIFO Read Cache: 4 KiB'));
       expect(yaml, contains('GETLLAR Mobile Backoff: Enabled'));
       expect(yaml, contains('God of War III MLAA Bypass: Enabled'));
-      expect(yaml, isNot(contains('Accurate SPU Reservations: false')));
+      // Build 412 replaces the former "never relax reservations" contract: the
+      // Build 411 logs attribute the heavy-scene PPU stalls to the exclusive
+      // writer lock of accurate PUTLLC/PUTLLUC; the relaxed upstream path is
+      // applied as a measured hypothesis together with the 30 fps limiter.
+      expect(yaml, contains('Accurate SPU Reservations: false'));
+      expect(yaml, contains('Frame limit: 30'));
       expect(yaml, contains('Shader Precision: Ultra'));
       expect(yaml, contains('Write Color Buffers: true'));
       expect(yaml, isNot(contains('Audio:')));
