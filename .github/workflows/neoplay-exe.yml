@@ -25,12 +25,13 @@ jobs:
         working-directory: tools/neoplay-receiver
         run: |
           node build-executable.mjs
-          ./dist/NeoPlay-Receiver-0.4.0.exe --smoke-test
+          ./dist/NeoPlay-Receiver-0.4.1.exe --smoke-test
+          ./dist/NeoPlay-Receiver-0.4.1.exe --port-conflict-test
       - uses: actions/upload-artifact@v4
         with:
-          name: NeoPlay-Receiver-0.4.0-${{ github.sha }}
+          name: NeoPlay-Receiver-0.4.1-${{ github.sha }}
           path: |
-            tools/neoplay-receiver/dist/NeoPlay-Receiver-0.4.0.exe
+            tools/neoplay-receiver/dist/NeoPlay-Receiver-0.4.1.exe
             tools/neoplay-receiver/dist/build.json
           if-no-files-found: error
           retention-days: 30
