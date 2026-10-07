@@ -46,16 +46,43 @@ typedef enum {
     NEOSWAP_FLAG_HIGH_PRIORITY = 2
 } NeoSwapFlags;
 
-extern "C" {
+// Static memory pool for tracking allocations
+static std::vector<NeoSwapMemoryBlock> g_memory_pool;
 
-// Initialize the NeoSwap system with 7GB target allocation
-NeoSwapError NeoSwapInitialize() {
-    if (g_initialized.load()) {
-        return NEOSWAP_SUCCESS;
+// Define missing types and constants
+typedef enum {
+    NEOSWAP_SUCCESS = 0,
+    NEOSWAP_ERROR_NOT_INITIALIZED = -1,
+    NEOSWAP_ERROR_INVALID_ARGUMENT = -2,
+    NEOSWAP_ERROR_UNKNOWN = -3
+} NeoSwapError;
+
+    // Use vm_allocate for iOS memory management (mach_vm functions not available in all iOS versions)
+    vm_address_t address = 0;
+    kern_return_t kr = vm_allocate(mach_task_self(), &address, size, VM_FLAGS_ANYWHERE);
+    
+    if (kr != KERN_SUCCESS) {
+        return nullptr;
     }
     
-    // Set maximum allocatable memory to 7GB (7 * 1024 * 1024 * 1024 bytes)
-    g_max_allocatable_memory = 7ULL * 1024 * 1024 * 1024;
+    // Apply flags to avoid jetsam and improve performance
+    if (flags & NEOSWAP_FLAG_NO_CACHE) {
+        // For iOS, we use vm_attributes_set instead of mach_vm_attributes_set
+        kr = vm_attributes_set(mach_task_self(), address, size, VM_ATTRIBUTE_NO_CACHE);
+        if (kr != KERN_SUCCESS) {
+            // Log but continue - not critical for allocation
+            NSLog(@"Failed to set no-cache attribute: %d", kr);
+        }
+    }
+    
+    if (flags & NEOSWAP_FLAG_HIGH_PRIORITY) {
+        // For iOS, we use vm_set_memory_priority instead of mach_vm_set_memory_priority
+        kr = vm_set_memory_priority(mach_task_self(), address, size, VM_MEMORY_PRIORITY_HIGH);
+        if (kr != KERN_SUCCESS) {
+            // Log but continue - not critical for allocation
+            NSLog(@"Failed to set memory priority: %d", kr);
+        }
+    }
     
     // Initialize the memory pool
     g_memory_pool.clear();
@@ -90,22 +117,22 @@ void* NeoSwapAllocate(size_t size, NeoSwapFlags flags) {
         if (kr != KERN_SUCCESS) {
             // Log but continue - not critical for allocation
             NSLog(@"Failed to set no-cache attribute: %d", kr);
-        }
-    }
+// Get current memory statistics
+NeoSwapStats NeoSwapGetStats() {
+    NeoSwapStats stats = {};
     
-    if (flags & NEOSWAP_FLAG_HIGH_PRIORITY) {
-        // For iOS, we use vm_set_memory_priority instead of mach_vm_set_memory_priority
-        kr = vm_set_memory_priority(mach_task_self(), address, size, VM_MEMORY_PRIORITY_HIGH);
-        if (kr != KERN_SUCCESS) {
-            // Log but continue - not critical for allocation
-            NSLog(@"Failed to set memory priority: %d", kr);
-        }
-    }
+    // For iOS, we need to use sysconf to get physical memory
+    long pages = sysconf(_SC_PHYS_PAGES);
+    long page_size = sysconf(_SC_PAGE_SIZE);
+    stats.total_memory = (uint64_t)pages * (uint64_t)page_size;
     
-    // Track the allocation
-    NeoSwapMemoryBlock block;
-    block.address = (void*)address;
-    block.size = size;
+    stats.allocated_memory = g_allocated_memory.load();
+    stats.max_allocatable_memory = g_max_allocatable_memory.load();
+    stats.available_memory = g_max_allocatable_memory.load() - g_allocated_memory.load();
+    stats.target_allocation_size = 7ULL * 1024 * 1024 * 1024;
+    
+    return stats;
+}
     block.is_cached = !(flags & NEOSWAP_FLAG_NO_CACHE);
     block.priority = (flags & NEOSWAP_FLAG_HIGH_PRIORITY) ? 1 : 0;
     
@@ -130,22 +157,28 @@ void NeoSwapFree(void* ptr) {
             if (kr == KERN_SUCCESS) {
                 g_allocated_memory -= it->size;
                 g_memory_pool.erase(it);
-                return;
-            }
+// Set memory priority for specific allocations
+NeoSwapError NeoSwapSetPriority(void* ptr, int priority) {
+    if (!ptr || !g_initialized.load()) {
+        return NEOSWAP_ERROR_NOT_INITIALIZED;
+    }
+    
+    // Find the allocation and set its priority
+    for (auto& block : g_memory_pool) {
+        if (block.address == ptr) {
+            block.priority = priority;
+            
+            // Apply to VM
+            kern_return_t kr = vm_set_memory_priority(mach_task_self(), 
+                (vm_address_t)ptr, block.size, 
+                (priority > 0) ? VM_MEMORY_PRIORITY_HIGH : VM_MEMORY_PRIORITY_NORMAL);
+            
+            return (kr == KERN_SUCCESS) ? NEOSWAP_SUCCESS : NEOSWAP_ERROR_UNKNOWN;
         }
     }
+    
+    return NEOSWAP_ERROR_INVALID_ARGUMENT;
 }
-
-// Get current memory statistics
-NeoSwapStats NeoSwapGetStats() {
-    NeoSwapStats stats = {};
-    
-    // For iOS, we need to use sysconf to get physical memory
-    long pages = sysconf(_SC_PHYS_PAGES);
-    long page_size = sysconf(_SC_PAGE_SIZE);
-    stats.total_memory = (uint64_t)pages * (uint64_t)page_size;
-    
-    stats.allocated_memory = g_allocated_memory.load();
     stats.max_allocatable_memory = g_max_allocatable_memory.load();
     stats.available_memory = g_max_allocatable_memory.load() - g_allocated_memory.load();
     stats.target_allocation_size = 7ULL * 1024 * 1024 * 1024;
