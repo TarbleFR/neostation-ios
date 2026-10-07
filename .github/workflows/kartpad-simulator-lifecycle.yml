@@ -1,20 +1,19 @@
 name: KartPad UIKit lifecycle harness
 run-name: KartPad UIKit lifecycle harness • ${{ github.sha }}
+# Every IPA candidate needs this evidence at its exact commit; other pushes
+# are skipped unless they touch KartPad (tagged commits).
 on:
   workflow_dispatch:
   push:
     branches: [experimental]
-    paths:
-      - .github/workflows/kartpad-simulator-lifecycle.yml
-      - test/kartpad_simulator_probe.mm
-      - native/kartpad/core/DonorSessionReset.h
 permissions:
   contents: read
   actions: read
 jobs:
   simulator:
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[neoswap-ipa]') || contains(github.event.head_commit.message, '[kartpad') }}
     runs-on: macos-15
-    timeout-minutes: 40
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
         with:
@@ -22,25 +21,19 @@ jobs:
       - uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: '16.4'
-      # Run 36322395443 (KartPadCore-3934ac9d) was purged from GitHub on
-      # 7 October 2026. Use the donor Core rebuilt from this exact revision.
-      - name: Fetch the validated donor built from this exact revision
-        timeout-minutes: 25
+      # The KartPadCore-3934ac9d run (36322395443) was purged on 7 October 2026
+      # and its official KartPad source IPA is no longer published. The
+      # published NeoStation 0.0.1 IPA embeds that exact artifact; restore it
+      # with every byte checked against the pinned identity.
+      - name: Restore the pinned KartPad donor Core
+        timeout-minutes: 10
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          for attempt in $(seq 1 90); do
-            RUN_ID="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/kartpad-donor-core.yml/runs?head_sha=$GITHUB_SHA&per_page=5" --jq '.workflow_runs[0].id // empty')"
-            if [ -n "$RUN_ID" ] && [ "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID" --jq '.status')" = completed ]; then
-              test "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID" --jq '.conclusion')" = success
-              gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --name "KartPadCore-$GITHUB_SHA" --dir donor
-              exit 0
-            fi
-            sleep 15
-          done
-          echo "KartPad donor Core for $GITHUB_SHA did not complete" >&2
-          exit 1
+          mkdir -p evidence "$RUNNER_TEMP/kartpad-donor-ipa"
+          gh release download 0.0.1 --repo "$GITHUB_REPOSITORY" --pattern NeoStation.ipa --dir "$RUNNER_TEMP/kartpad-donor-ipa"
+          python3 build-utils/restore_kartpad_donor_from_ipa.py "$RUNNER_TEMP/kartpad-donor-ipa/NeoStation.ipa" donor > evidence/donor-restore.json
       - name: Build isolated simulator test app
         shell: bash
         run: |
@@ -50,8 +43,8 @@ jobs:
           python3 build-utils/kartpad/validate_donor_artifact.py donor > evidence/donor-validation.json
           cp donor/identity.json evidence/donor-identity.json
           python3 - <<'PY'
-          import json, os
-          assert json.load(open('donor/identity.json'))['host_commit']==os.environ['GITHUB_SHA']
+          import json
+          assert json.load(open('donor/identity.json'))['host_commit']=='3934ac9d333247d5374b9fb7d71f8ef49bbcd79e'
           PY
           APP="$PWD/probe/Probe.app"
           ditto donor/KartPadRuntime.framework "$APP/Frameworks/KartPadRuntime.framework"

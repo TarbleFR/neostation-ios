@@ -1,21 +1,16 @@
 name: KartPad real Flutter and SDL lifecycle
+# Every IPA candidate needs this evidence at its exact commit; other pushes
+# are skipped unless they touch KartPad (tagged commits).
 on:
   workflow_dispatch:
   push:
     branches: [experimental]
-    paths:
-      - .github/workflows/kartpad-flutter-lifecycle.yml
-      - test/kartpad_flutter_probe.*
-      - test/kartpad_menu_probe.swift
-      - test/embed_kartpad_probe.py
-      - native/kartpad/core/UIKitEventPump.h
-      - native/kartpad/donor/DonorSessionControl.inc
-      - build-utils/kartpad/patch_donor_session_bridge.py
 permissions:
   contents: read
   actions: read
 jobs:
   flutter-sdl:
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[neoswap-ipa]') || contains(github.event.head_commit.message, '[kartpad') }}
     strategy:
       fail-fast: false
       matrix:
@@ -41,33 +36,25 @@ jobs:
           flutter-version: '3.47.2'
           channel: stable
           cache: true
-      - name: Fetch the validated donor built from this exact revision
-        timeout-minutes: 15
+      # The KartPadCore-3934ac9d run (36322395443) was purged on 7 October 2026
+      # and its official KartPad source IPA is no longer published. The
+      # published NeoStation 0.0.1 IPA embeds that exact artifact; restore it
+      # with every byte checked against the pinned identity.
+      - name: Restore the pinned KartPad donor Core
+        timeout-minutes: 10
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          mkdir -p evidence
-          for attempt in $(seq 1 55); do
-            RUN_ID="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/kartpad-donor-core.yml/runs?head_sha=$GITHUB_SHA&per_page=5" --jq '.workflow_runs[0].id // empty')"
-            if [ -n "$RUN_ID" ]; then
-              STATUS="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID" --jq '.status')"
-              if [ "$STATUS" = completed ]; then
-                CONCLUSION="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID" --jq '.conclusion')"
-                test "$CONCLUSION" = success
-                gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --name "KartPadCore-$GITHUB_SHA" --dir donor
-                echo "$RUN_ID" > evidence/donor-run.txt
-                break
-              fi
-            fi
-            sleep 15
-          done
+          mkdir -p evidence "$RUNNER_TEMP/kartpad-donor-ipa"
+          gh release download 0.0.1 --repo "$GITHUB_REPOSITORY" --pattern NeoStation.ipa --dir "$RUNNER_TEMP/kartpad-donor-ipa"
+          python3 build-utils/restore_kartpad_donor_from_ipa.py "$RUNNER_TEMP/kartpad-donor-ipa/NeoStation.ipa" donor > evidence/donor-restore.json
           test -f donor/identity.json
           python3 build-utils/kartpad/validate_donor_artifact.py donor > evidence/donor-validation.json
           cp donor/identity.json evidence/donor-identity.json
           python3 - <<'PY'
-          import json,os
-          assert json.load(open('donor/identity.json'))['host_commit']==os.environ['GITHUB_SHA']
+          import json
+          assert json.load(open('donor/identity.json'))['host_commit']=='3934ac9d333247d5374b9fb7d71f8ef49bbcd79e'
           PY
       - name: Build real Flutter host probe
         shell: bash

@@ -516,6 +516,12 @@ SUPPORT_FILES |= {
     'test/neoplay/local_audio_tests.swift',
 }
 SUPPORT_FILES |= {
+    # Build412: inputs purged from GitHub on 7 October 2026 (see the IPA
+    # workflow lines below): restored KartPad donor and exact-commit harnesses.
+    '.github/workflows/kartpad-simulator-lifecycle.yml',
+    '.github/workflows/kartpad-flutter-lifecycle.yml',
+    'build-utils/restore_kartpad_donor_from_ipa.py',
+    'test/kartpad_donor_restore_test.py',
     'docs/neoplay/RECEIVER-VALIDATION.md',
     'docs/rpcs3-neoswap-measurement-captures.md',
     'docs/rpcs3-neoswap-neoplay-post410-validation.md',
@@ -767,6 +773,36 @@ IPA_WORKFLOW_BUILD412_PREVIOUS_RECORD_LINES = (
      '          while True:\n'
      '              run = fetch_run()\n'),
 )
+# 7 October 2026: every workflow run before 11:51 UTC was deleted from GitHub
+# and the artifacts of those runs can no longer be downloaded (HTTP 404).
+# Build412 therefore takes the Build 350 native donor from its published
+# copy (release 0.0.1, same SHA-256 e1017b96), restores the byte-identical
+# KartPadCore-3934ac9d from it (its official source IPA is no longer
+# published), runs the KartPad UIKit and Flutter lifecycle harnesses at the
+# exact candidate commit, and pins ARMSX2 and Dusklight Cores rebuilt from
+# unchanged inputs at 899d3c44. Every content check after each download is kept.
+IPA_WORKFLOW_BUILD412_PURGED_INPUT_LINES = (
+    ("              'neoplay-check.yml',\n          )\n          sha = os.environ['GITHUB_SHA']",
+     "              'neoplay-check.yml',\n              # KartPad lifecycle evidence is produced at the exact candidate\n              # commit: the pinned 27 September runs were purged on 7 October.\n              'kartpad-simulator-lifecycle.yml',\n              'kartpad-flutter-lifecycle.yml',\n          )\n          sha = os.environ['GITHUB_SHA']"),
+    ('      - name: Download validated native session and CoreAudio evidence\n        uses: actions/download-artifact@v4\n        with:\n          # Pin successful attempt 3 of 4 October 2026 (same head d3e558fa): the\n          # attempt 2 artifact pinned until Build 408 no longer exists on the run.\n          # These probe artifacts are retained 7 days (next expiry 11 October 2026).\n          artifact-ids: 11317253121\n          merge-multiple: true\n          run-id: 36322565781\n          github-token: ${{ secrets.GITHUB_TOKEN }}\n          path: build/kartpad-lifecycle-evidence\n',
+     '      - name: Download validated native session and CoreAudio evidence\n        shell: bash\n        env:\n          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}\n        run: |\n          set -euo pipefail\n          # Run 36322565781 (d3e558fa) and its artifacts were purged on\n          # 7 October 2026. The harness now runs at this exact candidate commit\n          # with the byte-identical restored KartPadCore-3934ac9d donor.\n          RUN_ID="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/kartpad-simulator-lifecycle.yml/runs?head_sha=$GITHUB_SHA&per_page=10" --jq \'[.workflow_runs[] | select(.conclusion == "success")][0].id // empty\')"\n          test -n "$RUN_ID"\n          gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --name "KartPad-UIKit-probe-$GITHUB_SHA" --dir build/kartpad-lifecycle-evidence\n'),
+    ("          evidence=Path('build/kartpad-lifecycle-evidence')\n          assert (evidence/'source.txt').read_text().strip() == 'd3e558fad05feeb0838b4d3d80fc854546eaf0a4'",
+     "          import os\n          evidence=Path('build/kartpad-lifecycle-evidence')\n          assert (evidence/'source.txt').read_text().strip() == os.environ['GITHUB_SHA']"),
+    ('      - name: Download exact iOS 18 Flutter guest-stack evidence\n        uses: actions/download-artifact@v4\n        with:\n          artifact-ids: 11318055730\n          merge-multiple: true\n          run-id: 36322395458\n          github-token: ${{ secrets.GITHUB_TOKEN }}\n          path: build/kartpad-readiness-evidence/iOS-18\n\n      - name: Download exact iOS 27 Flutter guest-stack evidence\n        uses: actions/download-artifact@v4\n        with:\n          artifact-ids: 11318566834\n          merge-multiple: true\n          run-id: 36322395458\n          github-token: ${{ secrets.GITHUB_TOKEN }}\n          path: build/kartpad-readiness-evidence/iOS-27\n',
+     '      - name: Download exact iOS 18 and iOS 27 Flutter guest-stack evidence\n        shell: bash\n        env:\n          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}\n        run: |\n          set -euo pipefail\n          # Run 36322395458 (3934ac9d) and its artifacts were purged on\n          # 7 October 2026; the probes run at this exact candidate commit.\n          RUN_ID="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/kartpad-flutter-lifecycle.yml/runs?head_sha=$GITHUB_SHA&per_page=10" --jq \'[.workflow_runs[] | select(.conclusion == "success")][0].id // empty\')"\n          test -n "$RUN_ID"\n          for system in iOS-18 iOS-27; do\n            gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --name "KartPad-Flutter-probe-$system-$GITHUB_SHA" --dir "build/kartpad-readiness-evidence/$system"\n          done\n'),
+    ("          python3 - <<'PY'\n          import json\n          from pathlib import Path\n          def cycles(rows, fiber=False):",
+     "          python3 - <<'PY'\n          import json, os\n          from pathlib import Path\n          def cycles(rows, fiber=False):"),
+    ("              assert (evidence/'source.txt').read_text().strip()=='3934ac9d333247d5374b9fb7d71f8ef49bbcd79e'\n              identity=json.loads((evidence/'donor-identity.json').read_text())",
+     "              assert (evidence/'source.txt').read_text().strip()==os.environ['GITHUB_SHA']\n              identity=json.loads((evidence/'donor-identity.json').read_text())"),
+    ('      - name: Download validated Build 350 native donor\n        uses: actions/download-artifact@v4\n        with:\n          # Build 270 was pruned from Actions history after the stable Build\n          # 350 baseline was accepted. Pin the exact retained Build 350 IPA;\n          # only its native Core and UI resources are used, never its JIT framework.\n          artifact-ids: 10932894067\n          run-id: 36323843067\n          github-token: ${{ secrets.GITHUB_TOKEN }}\n          path: build/native-donor\n',
+     '      - name: Download validated Build 350 native donor\n        shell: bash\n        env:\n          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}\n        run: |\n          set -euo pipefail\n          # Artifact 10932894067 (run 36323843067) was purged on 7 October 2026.\n          # The same Build 350 IPA is published as release 0.0.1; require its\n          # exact SHA-256. Only its native Core and UI resources are used,\n          # never its JIT framework.\n          mkdir -p build/native-donor\n          gh release download 0.0.1 --repo "$GITHUB_REPOSITORY" --pattern NeoStation.ipa --dir build/native-donor\n          echo "e1017b96842ec970be3ed0cd981083ee945d069cf76e689a4ca3c81339299b46  build/native-donor/NeoStation.ipa" | shasum -a 256 -c -\n'),
+    ("      - name: Download validated KartPad Core candidate\n        if: ${{ env.KARTPAD_CANDIDATE == '1' }}\n        uses: actions/download-artifact@v4\n        with:\n          name: KartPadCore-${{ env.KARTPAD_CORE_HOST_SHA }}\n          run-id: ${{ env.KARTPAD_CORE_RUN_ID }}\n          github-token: ${{ secrets.GITHUB_TOKEN }}\n          path: dist/kartpad-native\n",
+     "      - name: Download validated KartPad Core candidate\n        if: ${{ env.KARTPAD_CANDIDATE == '1' }}\n        shell: bash\n        run: |\n          set -euo pipefail\n          # KartPadCore-3934ac9d (run 36322395443) was purged on 7 October 2026\n          # and its official source IPA is no longer published. The verified\n          # Build 350 donor IPA embeds that exact artifact; restore it byte for\n          # byte against the pinned identity checked again below.\n          python3 test/kartpad_donor_restore_test.py\n          python3 build-utils/restore_kartpad_donor_from_ipa.py build/native-donor/NeoStation.ipa dist/kartpad-native\n"),
+    ("      ARMSX2_CORE_HOST_SHA: f4bdeb5e25f7622118a5c8ba23d8fc538e07ba07\n      ARMSX2_CORE_RUN_ID: '37164423042'\n",
+     "      ARMSX2_CORE_HOST_SHA: 899d3c44f8f465c8da0d93c763817ffca519c00c\n      ARMSX2_CORE_RUN_ID: '37641466835'\n"),
+    ("      DUSKLIGHT_CORE_HOST_SHA: 94ed2d91e1547e1879fab214b6ef082b642dff84\n      DUSKLIGHT_CORE_RUN_ID: '36720032937'\n",
+     "      DUSKLIGHT_CORE_HOST_SHA: 899d3c44f8f465c8da0d93c763817ffca519c00c\n      DUSKLIGHT_CORE_RUN_ID: '37641472546'\n"),
+)
 IPA_WORKFLOW_RUNTIME_PREPARATION_LINES = (
     ('            test/native/rpcs3_spu_branch_analyzer_test.cpp \\\n',
      '            test/native/rpcs3_spu_branch_analyzer_test.cpp \\\n'
@@ -791,6 +827,9 @@ for path in ARMSX2_INTEGRATION_FILES:
             text = text.replace(old, new, 1)
         for old, new in IPA_WORKFLOW_RUNTIME_PREPARATION_LINES:
             assert text.count(old) == 1, 'Runtime acceptance workflow line expected once: ' + old
+            text = text.replace(old, new, 1)
+        for old, new in IPA_WORKFLOW_BUILD412_PURGED_INPUT_LINES:
+            assert text.count(old) == 1, 'Build412 purged-input workflow line expected once: ' + old
             text = text.replace(old, new, 1)
         reviewed = text.encode('utf-8')
     assert (ROOT / path).read_bytes() == reviewed, 'Reviewed ARMSX2 integration changed: ' + path
@@ -920,8 +959,13 @@ for workflow_path in ('.github/workflows/neoswap-ipa.yml', '.github/workflows/io
                 'KARTPAD_CORE_HOST_SHA', 'KARTPAD_CORE_RUN_ID'):
         pattern = r'(?m)^      ' + key + r': (.+)$'
         assert re.findall(pattern, workflow) == re.findall(pattern, old_workflow), (workflow_path, key)
-    assert re.findall(r'(?m)^      ARMSX2_CORE_HOST_SHA: (.+)$', workflow) == ['f4bdeb5e25f7622118a5c8ba23d8fc538e07ba07']
-    assert re.findall(r'(?m)^      ARMSX2_CORE_RUN_ID: (.+)$', workflow) == ["'37164423042'"]
+    # Build412 (neoswap-ipa only): the f4bdeb5e Core artifact was purged on
+    # 7 October 2026; the Core rebuilt at 899d3c44 has unchanged inputs.
+    armsx2_pin = (('899d3c44f8f465c8da0d93c763817ffca519c00c', "'37641466835'")
+                  if workflow_path == '.github/workflows/neoswap-ipa.yml'
+                  else ('f4bdeb5e25f7622118a5c8ba23d8fc538e07ba07', "'37164423042'"))
+    assert re.findall(r'(?m)^      ARMSX2_CORE_HOST_SHA: (.+)$', workflow) == [armsx2_pin[0]]
+    assert re.findall(r'(?m)^      ARMSX2_CORE_RUN_ID: (.+)$', workflow) == [armsx2_pin[1]]
     assert 'Download pinned ARMSX2 2.6 Core' in workflow
     assert "identity['abi_version'] == source['abi_version'] == 6" in workflow
     pattern = r'(?m)^      DUSKLIGHT_CORE_HOST_SHA: (.+)$'
@@ -941,8 +985,10 @@ for workflow_path in ('.github/workflows/neoswap-ipa.yml', '.github/workflows/io
         assert "assert result['conclusion']=='success'" in workflow
         assert 'validate_core_input_identity(identity)' in workflow
         assert "assert identity['neoswap_source_archive_abi'] == 1" in workflow
-        assert re.findall(pattern, workflow) == ['94ed2d91e1547e1879fab214b6ef082b642dff84']
-        assert re.findall(r'(?m)^      DUSKLIGHT_CORE_RUN_ID: (.+)$', workflow) == ["'36720032937'"]
+        # Build412: the 94ed2d91 Dusklight artifact was purged on 7 October
+        # 2026; the Core rebuilt at 899d3c44 has unchanged inputs.
+        assert re.findall(pattern, workflow) == ['899d3c44f8f465c8da0d93c763817ffca519c00c']
+        assert re.findall(r'(?m)^      DUSKLIGHT_CORE_RUN_ID: (.+)$', workflow) == ["'37641472546'"]
         assert "identity['source_release'] == pins['release'] == 'v2.0.3'" in workflow
         assert "result['head_sha'] == os.environ['DUSKLIGHT_CORE_HOST_SHA']" in workflow
         assert "identity['submodules'] == pins['submodules']" in workflow
