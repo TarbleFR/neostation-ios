@@ -47,6 +47,8 @@ BUILD410_STREAM_POSTIMAGES = {
 # replacement; the native suite checks initial CONFIG ordering and lifecycle.
 # The receiver leaves old senders' SPS untouched without the new promise.
 POST410_STREAM_POSTIMAGES = {
+    # Build411: restore the reviewed Windows local-output attenuation lifecycle.
+    'packages/neoplay_bridge/ios/Classes/NPController.swift': '5544f66f9cb6594b6c1f3f13a2d00dedbcdc858b6359d0913fb33a2d71a33c33',
     'packages/neoplay_bridge/ios/Classes/NPCapture.swift': 'b3b553635df1beddf20d55a6534fa150d1dc52000436e053ae0ddafea4275d6f',
     'packages/neoplay_bridge/ios/Classes/NPFrameEncoder.swift': '19ec5f47ae5474ea874ed676088e2fd2bffab9d908e04db2690e57051eceddaf',
     'packages/neoplay_bridge/ios/Classes/NPWindowsTransport.swift': '6f7393e812c8799cffa652c7bb4b8eae2732238a862c5d00d45ed9a5a20c12b8',
