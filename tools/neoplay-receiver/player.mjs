@@ -238,4 +238,4 @@ window.addEventListener('beforeunload', () => socket?.close());
 
 // Open the local viewer immediately so NeoStation iOS can pair without an extra desktop click.
 // A real click on Ready remains useful later to unlock browser audio if Chromium requests a user gesture.
-queueMicrotask(() => document.querySelector('#ready')?.click());
+queueMicrotask(() => { const ready = document.querySelector('#ready'); if (typeof ready?.click === 'function') ready.click(); });
