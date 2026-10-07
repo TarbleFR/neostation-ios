@@ -7,6 +7,13 @@ revendiquée ; les preuves sont celles de la CI (harnais natif sur Simulateur,
 récepteur Node, lecture Edge sur Windows, preuves macOS NeoSwap) et du
 Simulateur iOS pour les donneurs.
 
+## Identité de l'IPA privée emballée
+
+- Commit `8c63c682946b7ad736d5391086016399100c4bd9` (branche `experimental`), workflow `neoswap-ipa.yml` run `37605768644`, artefact `NeoStation-NeoSwap-NeoPlay-Build-411-8c63c682946b7ad736d5391086016399100c4bd9` (id `11477080885`, expiration 2026-10-10T10:46Z).
+- `NeoStation.ipa` SHA-256 `da40c7a774d4bf3e9766111e5e69b7d1a69ad1b5c3d4d67e0833015944d9c8ec` (144 Mo). Cœur RPCS3 emballé : identité `host_commit d9589fa2`, run `37595624383`.
+- Preuves du même commit : `neoplay-check` run `37605768625` (harnais natif 28 tests, fixture à trois encodeurs 240/240 images, 231 paquets PCM, 144 000 puis 96 000 trames PCM pavées aux deux changements, zéro perte de transition ; lecture Edge avec redimensionnement en cours de flux : 1 moteur, 1 nœud audio, 3 configurations, 2 reconfigurations, `underruns` 0, `gaps` 0, `jumps` 0, `skips` 0, 221 images présentées sur 240, PCM audible) ; preuves Vulkan 128 Mio (`37605768764`) et 1 Gio (`37605768657`, attente de registre mesurée 1 501 ms) ; les neuf workflows de preuve de l'IPA verts.
+- Hors chemin IPA : le check recherche (`37605768654`) a expiré une troisième fois au lancement Simulator du deuxième profil (`simctl launch`, 120 s) ; le harnais borne désormais ce lancement à 300 s avec une relance unique après arrêt du processus bloqué, assertions inchangées.
+
 ## Son NeoPlay : plus de coupure au changement de qualité
 
 Défaut mesuré après la 410 : au changement de palier vidéo, l'ancien encodeur

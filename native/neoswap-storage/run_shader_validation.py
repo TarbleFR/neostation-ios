@@ -37,7 +37,17 @@ def simulator_service(work, out, sources, research_mode=None):
         execute(['xcrun','simctl','boot',identifier],out,'shader-simulator-boot')
         execute(['xcrun','simctl','bootstatus',identifier,'-b'],out,'shader-simulator-bootstatus',timeout=180)
         execute(['xcrun','simctl','install',identifier,str(app)],out,'shader-simulator-install')
-        execute(['xcrun','simctl','launch',identifier,bundle],out,'shader-simulator-launch')
+        # Hosted runners launch this app in about 30 s after a fresh boot; the second
+        # fresh device of a job wedged its first launch past 120 s three times
+        # (runs 37595624315, 37597395203, 37605768654) with every assertion
+        # untouched. Bound the launch by the observed cost and relaunch once
+        # after terminating a wedged attempt; a second hang still fails.
+        try:
+            execute(['xcrun','simctl','launch',identifier,bundle],out,'shader-simulator-launch',timeout=300)
+        except subprocess.TimeoutExpired:
+            print('shader-simulator-launch: timed out after 300 s; terminating and relaunching once',flush=True)
+            subprocess.run(['xcrun','simctl','terminate',identifier,bundle],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+            execute(['xcrun','simctl','launch',identifier,bundle],out,'shader-simulator-launch-retry',timeout=300)
         directory=Path(subprocess.check_output(['xcrun','simctl','get_app_container',identifier,bundle,'data'],text=True).strip())
         report=directory/'Documents/shader-service-runtime.json'
         deadline=time.monotonic()+90
