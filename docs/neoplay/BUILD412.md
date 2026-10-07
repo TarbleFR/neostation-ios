@@ -68,7 +68,12 @@ cause première démontrée ; l'attribution `wl_*` de cette build sert à tranch
 - Profil GoW3 (six identifiants) : `Accurate SPU Reservations: false` et
   `Frame limit: 30`. Ce sont des hypothèses mesurées, pas des correctifs
   démontrés.
-- Overlay : deux séries seulement, RAM utilisée par l'appareil et NeoSwap.
+- Overlay : deux séries seulement, RAM utilisée par l'appareil et NeoSwap. La
+  courbe appareil est l'empreinte physique du processus RPCS3 (registre noyau,
+  pages compressées comprises) plus la mémoire NeoSwap comptabilisée dans ses
+  micro-processus ; le compteur résident, qui contient déjà les alias des pages
+  prêtées, n'est plus additionné à cette mémoire (double comptage corrigé avant
+  l'empaquetage, écart potentiel de l'ordre du gigaoctet quand le relais est actif).
 
 ## Protocole de mesure sur iPhone
 

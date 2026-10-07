@@ -138,12 +138,12 @@ struct Sample {
                           host:(const NeoSwapHostStats*)host
                 relayLiveBytes:(uint64_t)relayLiveBytes
                  relayMeasured:(BOOL)relayMeasured
-          processResidentBytes:(uint64_t)processResidentBytes
+         processFootprintBytes:(uint64_t)processFootprintBytes
                      timestamp:(double)timestampMs {
   NSAssert(NSThread.isMainThread, @"RPCS3 performance UI must run on the main thread");
   if (self.hidden || !std::isfinite(timestampMs)) return;
   (void)client;
-  const auto point = NeoSwapMemoryGraph(host, relayLiveBytes, relayMeasured, processResidentBytes);
+  const auto point = NeoSwapMemoryGraph(host, relayLiveBytes, relayMeasured, processFootprintBytes);
   [self showPoint:point];
   if (_sampleCount) {
     Sample& sample = _samples[(_sampleStart + _sampleCount - 1) % kCapacity];

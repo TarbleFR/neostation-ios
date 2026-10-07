@@ -22,11 +22,13 @@ int main() {
     graphHost.relay_loan_live_bytes = 268435456;
     auto point = NeoSwapMemoryGraph(&graphHost, 1020788736, true, 2264317952);
     assert(point.allocatedValid && point.allocated == 1072168960);
-    assert(point.residentValid && point.resident == 2264317952);
+    assert(point.footprintValid && point.footprint == 2264317952);
     // Host contribution: relay host loans plus donor loans, never guest pages.
     assert(point.hostLoansValid && point.hostLoans == 268435456 + 51380224);
-    // Device RAM (7 October 2026): the resident counter merged with the
+    // Device RAM (7 October 2026): the task physical footprint merged with the
     // microprocess backing; the overlay draws this and the host contribution.
+    // The footprint excludes donor/relay pages charged to their microprocesses,
+    // so adding the backing never counts a mapped alias twice.
     assert(point.deviceRamValid && point.deviceRam == 2264317952ULL + 1072168960ULL);
     {
       const auto unmeasured = NeoSwapMemoryGraph(&graphHost, 1, false, 2264317952);
@@ -51,7 +53,7 @@ int main() {
     assert(!NeoSwapMemoryGraph(&graphHost, UINT64_MAX, true, 1).allocatedValid);
     graphHost = {};
     point = NeoSwapMemoryGraph(&graphHost, 0, true, 0);
-    assert(point.allocatedValid && point.allocated == 0 && !point.residentValid);
+    assert(point.allocatedValid && point.allocated == 0 && !point.footprintValid);
     assert(!point.deviceRamValid && point.deviceRam == 0);
   }
   NeoSwapHostStats host = {};
@@ -114,5 +116,5 @@ int main() {
   assert(NeoSwapUsage(1ULL << 20, &client, &host) == NeoSwapUsageStatus::active);
   host.file_ready_owner_mask = 1u << NEOSWAP_RPCS3;
   assert(NeoSwapUsage(0, &client, &host) == NeoSwapUsageStatus::waiting);
-  puts("PASS: device RAM merges resident pages with measured microprocess backing; live buffers take precedence; configured RPCS3 file owner or verified donors establish readiness with zero virtual reserve; missing, rejected, small, released and disabled states remain distinct");
+  puts("PASS: device RAM merges the task physical footprint with measured microprocess backing; live buffers take precedence; configured RPCS3 file owner or verified donors establish readiness with zero virtual reserve; missing, rejected, small, released and disabled states remain distinct");
 }

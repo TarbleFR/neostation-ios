@@ -66,7 +66,8 @@ REVIEWED_RPCS3_HOST_POSTIMAGES = {
     # milestones as renderer_detected (MoltenVK attestation). Nothing else.
     # Plus: SPUPROF/RANGELOCKPROF forwarded like COREPROF; boot_policy and
     # gow3_mlaa_bypass milestones; host_cpu_topology milestone at game boot.
-    'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm': 'db75c15cfa1746068e65dc56589f265a85a1ce9e8b522a9212433d676e6a3687',
+    # Build412 graph: RPCS3ProcessFootprintBytes feeds the overlay's device RAM line.
+    'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm': '0b04bf77f642f3b4d8e8bc800d412a991b9ccdb77a258cefd8edac67df239a05',
     'packages/rpcs3_internal_bridge/ios/Classes/RPCS3PerformanceSnapshot.h': 'badde59ea1202e288e48bd8c318d61fde82b764815a83484da37db075be69c79',
 }
 APPROVED_RPCS3_MENU_FILES = frozenset({
@@ -145,6 +146,10 @@ APPROVED_BUILD409_FILES = frozenset({
     'packages/neo_swap/ios/Classes/NeoSwapRelayService.h',
     'packages/rpcs3_internal_bridge/ios/Classes/NeoSwapUsagePolicy.h',
     'packages/rpcs3_internal_bridge/ios/Classes/RPCS3InGameLocalization.mm',
+    # Build412: the overlay takes the task physical footprint instead of the
+    # resident counter (donor/relay aliases are resident here but charged to
+    # their microprocesses); selector renamed accordingly.
+    'packages/rpcs3_internal_bridge/ios/Classes/RPCS3PerformanceOverlay.h',
     'packages/rpcs3_internal_bridge/ios/Classes/RPCS3PerformanceOverlay.mm',
 })
 # Maintainer-authorized work after the already packaged Build410. The baseline

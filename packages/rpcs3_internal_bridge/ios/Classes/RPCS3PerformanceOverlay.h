@@ -18,12 +18,15 @@ NS_ASSUME_NONNULL_BEGIN
                    timestamp:(double)timestampMs;
 - (void)reset;
 // Two separate measures: unique active donor/relay backing and the host task
-// resident counter. No capacity, target, disk bytes or aliases are added.
+// physical footprint (kernel ledger of this process, compressed pages
+// included, donor/relay pages charged to their microprocesses excluded). The
+// overlay merges them into the device RAM line without counting an alias
+// twice. No capacity, target, disk bytes or aliases are added.
 - (void)appendNeoSwapWithClient:(const NeoSwapClientStats* _Nullable)client
                           host:(const NeoSwapHostStats* _Nullable)host
                 relayLiveBytes:(uint64_t)relayLiveBytes
                  relayMeasured:(BOOL)relayMeasured
-          processResidentBytes:(uint64_t)processResidentBytes
+         processFootprintBytes:(uint64_t)processFootprintBytes
                      timestamp:(double)timestampMs;
 @end
 

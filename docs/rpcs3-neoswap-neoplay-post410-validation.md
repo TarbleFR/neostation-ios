@@ -215,10 +215,13 @@ démarrage, jeu, redimensionnement/plein écran, pause/reprise, arrêt et relanc
 À la demande du mainteneur, l'overlay ne trace plus la RAM des micro-processus
 comme série distincte. Deux séries restent :
 
-- « RAM utilisée par l'appareil » (orange) : pages résidentes du processus RPCS3
-  additionnées à la mémoire NeoSwap comptabilisée dans ses micro-processus
-  (prêts donneurs et relais mesuré). Sans mesure du relais, la ligne retombe sur
-  le seul compteur résident ; la somme sature à `UINT64_MAX`.
+- « RAM utilisée par l'appareil » (orange) : empreinte physique du processus
+  RPCS3 (`phys_footprint`, pages compressées comprises) additionnée à la mémoire
+  NeoSwap comptabilisée dans ses micro-processus (prêts donneurs et relais
+  mesuré). Le compteur résident n'est pas utilisé : les pages prêtées y sont déjà
+  présentes sous forme d'alias mappés, alors que le registre noyau les impute aux
+  micro-processus (la sonde de donation vérifie cette exclusion). Sans mesure du
+  relais, la ligne retombe sur la seule empreinte ; la somme sature à `UINT64_MAX`.
 - « Fourni par NeoSwap » (vert) : prêts hôtes du relais et des donneurs, comme
   avant, désormais aussi tracé dans le graphique.
 

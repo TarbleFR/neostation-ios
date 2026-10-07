@@ -273,9 +273,18 @@ class DonorContractTests(unittest.TestCase):
         self.assertIn('@"stage":@"global_budget_refused_growth"', plugin)
         self.assertIn('bytes > neostation::donation::max_chunk_bytes', ipc)
         self.assertIn('maximum > neostation::donation::max_chunk_bytes', handler)
-        self.assertIn('processResidentBytes', header)
-        self.assertIn('RPCS3ProcessResidentBytes', bridge)
-        self.assertIn('NeoSwapMemoryGraph(host, relayLiveBytes, relayMeasured, processResidentBytes)', overlay)
+        # Build412: the overlay receives the task physical footprint (donor and
+        # relay pages are charged to their microprocesses), never the resident
+        # counter, whose mapped aliases would be summed with their backing.
+        self.assertIn('processFootprintBytes', header)
+        self.assertNotIn('processResidentBytes', header)
+        self.assertIn('RPCS3ProcessFootprintBytes', bridge)
+        self.assertIn('return info.phys_footprint;', bridge)
+        self.assertIn('const uint64_t processFootprintBytes = RPCS3ProcessFootprintBytes();', bridge)
+        self.assertIn('processFootprintBytes:processFootprintBytes', bridge)
+        self.assertNotIn('processResidentBytes:processResidentBytes', bridge)
+        self.assertIn('NeoSwapMemoryGraph(host, relayLiveBytes, relayMeasured, processFootprintBytes)', overlay)
+        self.assertNotIn('processResidentBytes', overlay)
         policy = (ROOT / 'packages/rpcs3_internal_bridge/ios/Classes/NeoSwapUsagePolicy.h').read_text()
         self.assertIn('host->owner_donated_live_bytes[NEOSWAP_RPCS3]', policy)
         self.assertIn('loans + relayLiveBacking', policy)
@@ -297,7 +306,8 @@ class DonorContractTests(unittest.TestCase):
         self.assertIn('append(deviceLine, sample.memory.deviceRam, sample.memory.deviceRamValid, deviceStarted);', overlay)
         self.assertIn('append(neoswapLine, sample.memory.hostLoans, sample.memory.hostLoansValid, neoswapStarted);', overlay)
         self.assertNotIn('memoryMicroprocess', overlay)
-        self.assertIn('point.deviceRam = point.resident > UINT64_MAX - backing ? UINT64_MAX : point.resident + backing;', policy)
+        self.assertIn('point.deviceRam = point.footprint > UINT64_MAX - backing ? UINT64_MAX : point.footprint + backing;', policy)
+        self.assertNotIn('point.resident', policy)
         # Build409: sub-MiB RSX buffers are admitted for every title whenever
         # relay host loans or donors exist; the global budget closes the gate
         # under measured pressure. The title list only selects the Core profile.

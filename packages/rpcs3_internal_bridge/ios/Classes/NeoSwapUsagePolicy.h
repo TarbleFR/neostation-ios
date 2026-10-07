@@ -34,20 +34,24 @@ inline NeoSwapUsageStatus NeoSwapUsage(uint64_t live, const NeoSwapClientStats* 
 // not extra microprocess allocations. This is not a physical-residency sum.
 struct NeoSwapMemoryGraphPoint {
     uint64_t allocated = 0;
-    uint64_t resident = 0;
+    // Physical footprint of the RPCS3 task (kernel ledger), see deviceRam.
+    uint64_t footprint = 0;
     // HOST data NeoSwap supplies outside the process footprint: relay host
     // loans (RSX data, Vulkan buffers, video frames) plus donor loans. Guest
     // pages are part of `allocated` but not of this contribution figure.
     uint64_t hostLoans = 0;
     // RAM the device spends on the session (maintainer request of 7 October
-    // 2026): the RPCS3 task resident counter merged with the NeoSwap backing
-    // charged to its microprocesses (`allocated`). The overlay draws only this
-    // merged line and the NeoSwap contribution; microprocesses are no longer
-    // shown separately. Valid whenever the resident counter is; the backing is
-    // added only when it was measured.
+    // 2026): the RPCS3 task physical footprint (kernel ledger, compressed pages
+    // included) merged with the NeoSwap backing charged to its microprocesses
+    // (`allocated`). Donor and relay pages are charged to the microprocess that
+    // owns them and not to this footprint, even though their aliases are mapped
+    // and resident in RPCS3: the resident counter would count them twice, the
+    // footprint does not. The overlay draws only this merged line and the
+    // NeoSwap contribution; microprocesses are no longer shown separately.
+    // Valid whenever the footprint is; the backing is added only when measured.
     uint64_t deviceRam = 0;
     bool allocatedValid = false;
-    bool residentValid = false;
+    bool footprintValid = false;
     bool hostLoansValid = false;
     bool deviceRamValid = false;
 };
@@ -57,10 +61,10 @@ inline uint64_t NeoSwapHostLoanBytes(const NeoSwapHostStats* host) noexcept {
     return host->relay_loan_live_bytes > UINT64_MAX - donor ? UINT64_MAX : host->relay_loan_live_bytes + donor;
 }
 inline NeoSwapMemoryGraphPoint NeoSwapMemoryGraph(const NeoSwapHostStats* host,
-    uint64_t relayLiveBacking, bool relayMeasured, uint64_t processResident) noexcept {
+    uint64_t relayLiveBacking, bool relayMeasured, uint64_t processFootprint) noexcept {
     NeoSwapMemoryGraphPoint point{};
-    point.resident = processResident;
-    point.residentValid = processResident != 0;
+    point.footprint = processFootprint;
+    point.footprintValid = processFootprint != 0;
     if (host) {
         point.hostLoans = NeoSwapHostLoanBytes(host);
         point.hostLoansValid = true;
@@ -72,9 +76,9 @@ inline NeoSwapMemoryGraphPoint NeoSwapMemoryGraph(const NeoSwapHostStats* host,
             point.allocatedValid = true;
         }
     }
-    if (point.residentValid) {
+    if (point.footprintValid) {
         const uint64_t backing = point.allocatedValid ? point.allocated : 0;
-        point.deviceRam = point.resident > UINT64_MAX - backing ? UINT64_MAX : point.resident + backing;
+        point.deviceRam = point.footprint > UINT64_MAX - backing ? UINT64_MAX : point.footprint + backing;
         point.deviceRamValid = true;
     }
     return point;

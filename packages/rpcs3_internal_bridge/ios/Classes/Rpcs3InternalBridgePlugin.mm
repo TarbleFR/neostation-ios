@@ -70,14 +70,29 @@ static BOOL RPCS3HostHasEntitlement(CFStringRef entitlement) {
   return enabled;
 }
 
+static BOOL RPCS3TaskVMInfo(task_vm_info_data_t* info) {
+  mach_msg_type_number_t count = TASK_VM_INFO_COUNT;
+  return task_info(mach_task_self(), TASK_VM_INFO, (task_info_t)info, &count) == KERN_SUCCESS &&
+         count >= TASK_VM_INFO_REV1_COUNT;
+}
+
 static uint64_t RPCS3ProcessResidentBytes(void) {
   task_vm_info_data_t info = {};
-  mach_msg_type_number_t count = TASK_VM_INFO_COUNT;
-  if (task_info(mach_task_self(), TASK_VM_INFO, (task_info_t)&info, &count) != KERN_SUCCESS ||
-      count < TASK_VM_INFO_REV1_COUNT) return 0;
-  // Resident task pages, not phys_footprint (which also accounts compression).
-  // Do not add donor RSS: shared mappings would be counted again.
+  if (!RPCS3TaskVMInfo(&info)) return 0;
+  // Resident task pages, kept for the diagnostic samples and the build
+  // comparison tooling. Donor and relay aliases mapped into this task are
+  // resident here too, so this counter must never be summed with their backing.
   return info.resident_size;
+}
+
+static uint64_t RPCS3ProcessFootprintBytes(void) {
+  task_vm_info_data_t info = {};
+  if (!RPCS3TaskVMInfo(&info)) return 0;
+  // Pages charged to this process by the kernel ledger, compressed pages
+  // included. Donor and relay pages are charged to their microprocesses and
+  // excluded here (the donation probe asserts it), so the overlay can add the
+  // measured microprocess backing without counting an alias twice.
+  return info.phys_footprint;
 }
 
 static UIViewController* RPCS3RootViewController(void) {
@@ -704,7 +719,7 @@ static void RPCS3Progress(void* context,
           strongSelf->_neoSwapClientStats(&client) == NEOSWAP_OK;
       NeoSwapHostStats host = {};
       const BOOL hostValid = NeoSwap_HostSnapshot(&host) == NEOSWAP_OK;
-      const uint64_t processResidentBytes = RPCS3ProcessResidentBytes();
+      const uint64_t processFootprintBytes = RPCS3ProcessFootprintBytes();
       NSDictionary* relay = NeoSwapRelay_Diagnostics();
       const BOOL relayMeasured = [relay[@"liveBackingBytes"] isKindOfClass:NSNumber.class];
       const uint64_t relayLiveBytes = relayMeasured ? [relay[@"liveBackingBytes"] unsignedLongLongValue] : 0;
@@ -727,7 +742,7 @@ static void RPCS3Progress(void* context,
                                                     host:hostValid ? &host : nullptr
                                           relayLiveBytes:relayLiveBytes
                                            relayMeasured:relayMeasured
-                                    processResidentBytes:processResidentBytes
+                                   processFootprintBytes:processFootprintBytes
                                                timestamp:timestamp];
       });
     });
