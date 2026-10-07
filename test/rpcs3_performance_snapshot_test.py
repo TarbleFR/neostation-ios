@@ -78,7 +78,21 @@ for token in ("fps_target=%.0f", "fps_hold=%.1f%%", "below_target_samples=%llu",
 assert 'RPCS3Milestone(@"renderer_detected", [NSString stringWithUTF8String:message] ?: @"");' in plugin
 log_handler = plugin.split("static void RPCS3Log(void* context, int32_t level, const char* message) {", 1)[1].split("RPCS3Diagnostic(@\"core_log\", text);", 1)[0]
 assert 'strstr(message, "Found Vulkan-compatible GPU")' in log_handler
-assert log_handler.index('renderer_detected') < log_handler.index('if (level > 2 && !profiler && !videoArchive) return;')
+budget_filter = 'if (level > 2 && !profiler && !videoArchive) return;'
+assert log_handler.index('renderer_detected') < log_handler.index(budget_filter)
+# One-time boot facts survive the budget and the 2 MiB restart as milestones;
+# the Core's SPUPROF/RANGELOCKPROF lines reach the diagnostic like COREPROF.
+for marker, stage in (('"Resolved boot policy"', 'boot_policy'), ('"Applied iOS God of War III"', 'gow3_mlaa_bypass')):
+    assert 'strstr(message, ' + marker + ')' in log_handler, marker
+    assert log_handler.index(stage) < log_handler.index(budget_filter), stage
+for marker in ('"SPUPROF "', '"RANGELOCKPROF "'):
+    assert 'strstr(message, ' + marker + ') != nullptr' in log_handler.split('const BOOL profiler =', 1)[1].split(';', 1)[0], marker
+boot_region = plugin.split('RPCS3Milestone(@"game_boot_begin", titleId);', 1)[1].split('RPCS3Milestone(@"game_boot_return"', 1)[0]
+assert 'RPCS3Milestone(@"host_cpu_topology", RPCS3HostCPUTopology());' in boot_region
+topology = plugin.split('static NSString* RPCS3HostCPUTopology(void) {', 1)[1].split('\n}\n', 1)[0]
+for key in ('"hw.ncpu"', '"hw.nperflevels"', '"hw.perflevel0.logicalcpu"', '"hw.perflevel1.logicalcpu"', '"hw.memsize"'):
+    assert key in topology, key
+assert 'sysctlbyname' in topology and 'dispatch' not in topology
 assert (CLASSES / "RPCS3FrameRateHold.h").read_text().count("double target = 30.0;") == 1
 
 compiler = os.environ.get("CXX") or shutil.which("clang++") or shutil.which("g++")

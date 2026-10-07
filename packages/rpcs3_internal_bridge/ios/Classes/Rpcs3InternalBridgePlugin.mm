@@ -28,6 +28,7 @@
 #import <mach/mach.h>
 #import <os/lock.h>
 #import <os/proc.h>
+#import <sys/sysctl.h>
 #import <unistd.h>
 
 static NSString* const kRpcs3Channel = @"neostation/rpcs3_internal";
@@ -290,19 +291,48 @@ static UIViewController* RPCS3RootViewController(void) {
   return [self localized:@"stateUnknown"];
 }
 
+// Host CPU topology (performance/efficiency cores) recorded once per boot so
+// the per-thread SPU/PPU/RSX core-time in COREPROF can be read against the
+// cores that actually exist. Pure sysctl reads; unavailable keys print -1.
+static NSString* RPCS3HostCPUTopology(void) {
+  auto integer = [](const char* key) -> long long {
+    int64_t value = 0; size_t size = sizeof(value);
+    return sysctlbyname(key, &value, &size, nullptr, 0) == 0 ? (long long)value : -1;
+  };
+  auto text = [](const char* key) -> NSString* {
+    char value[64] = {}; size_t size = sizeof(value) - 1;
+    return sysctlbyname(key, value, &size, nullptr, 0) == 0 ? [NSString stringWithUTF8String:value] ?: @"" : @"";
+  };
+  return [NSString stringWithFormat:@"ncpu=%lld perflevels=%lld perf0=%@:%lld perf1=%@:%lld physical_memory=%lld",
+      integer("hw.ncpu"), integer("hw.nperflevels"),
+      text("hw.perflevel0.name"), integer("hw.perflevel0.logicalcpu"),
+      text("hw.perflevel1.name"), integer("hw.perflevel1.logicalcpu"),
+      integer("hw.memsize")];
+}
+
 static void RPCS3Log(void* context, int32_t level, const char* message) {
   Rpcs3InternalBridgePlugin* bridge = (__bridge Rpcs3InternalBridgePlugin*)context;
   if (!bridge || !message) return;
 
   // NEOSTATION_BUILD283_BOUNDED_CORE_LOG
+  // SPUPROF and RANGELOCKPROF are computed by the Core every report period
+  // but were never exported: the 7 October 2026 God of War III analysis needs
+  // them to attribute SPU compile time and range-lock blockers.
   const BOOL profiler =
       strstr(message, "COREPROF ") != nullptr ||
-      strstr(message, "COREPROF_RESILIENCE ") != nullptr;
-  // The renderer's one-time GPU/driver line is the only on-device attestation
-  // of the linked MoltenVK version. The 2 MiB diagnostic log restarts during a
-  // long session, so mirror that line into the durable milestones as well.
+      strstr(message, "COREPROF_RESILIENCE ") != nullptr ||
+      strstr(message, "SPUPROF ") != nullptr ||
+      strstr(message, "RANGELOCKPROF ") != nullptr;
+  // One-time boot facts that every device log must keep whatever the budget
+  // or the 2 MiB diagnostic restart: the renderer's GPU/driver line (the only
+  // on-device attestation of the linked MoltenVK version), the resolved
+  // experimental boot policy and the God of War III MLAA bypass applications.
   if (strstr(message, "Found Vulkan-compatible GPU") != nullptr) {
     RPCS3Milestone(@"renderer_detected", [NSString stringWithUTF8String:message] ?: @"");
+  } else if (strstr(message, "Resolved boot policy") != nullptr) {
+    RPCS3Milestone(@"boot_policy", [NSString stringWithUTF8String:message] ?: @"");
+  } else if (strstr(message, "Applied iOS God of War III") != nullptr) {
+    RPCS3Milestone(@"gow3_mlaa_bypass", [NSString stringWithUTF8String:message] ?: @"");
   }
   // Core already emits bounded video archive/unmap/restore notices. Keep them
   // under the ordinary log budget so device logs can measure real RAM release.
@@ -1703,6 +1733,7 @@ static void RPCS3CollectSavestate(void* context, const rpcs3_ios_savestate_info*
       surface.metal_layer = (__bridge void*)controller.metalLayer;
       rpcs3_ios_status surfaceStatus = self->_api.set_display_surface(&surface);
       RPCS3Milestone(@"game_boot_begin", titleId);
+      RPCS3Milestone(@"host_cpu_topology", RPCS3HostCPUTopology());
       rpcs3_ios_status bootStatus = surfaceStatus == 0
           ? [self bootTitleForCore:titleId.UTF8String savestate:savestateId.length ? savestateId.UTF8String : NULL]
           : surfaceStatus;

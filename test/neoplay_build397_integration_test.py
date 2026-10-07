@@ -64,7 +64,9 @@ REVIEWED_RPCS3_HOST_POSTIMAGES = {
     # run and mean (RPCS3FrameRateHold, same gated 1 Hz samples), and the
     # renderer's one-time GPU/driver line is mirrored into the durable
     # milestones as renderer_detected (MoltenVK attestation). Nothing else.
-    'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm': 'c8cd4384204fe745c7871a7d21427bc331ebe8cacb8138f8669acc8f4638ca38',
+    # Plus: SPUPROF/RANGELOCKPROF forwarded like COREPROF; boot_policy and
+    # gow3_mlaa_bypass milestones; host_cpu_topology milestone at game boot.
+    'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm': 'db75c15cfa1746068e65dc56589f265a85a1ce9e8b522a9212433d676e6a3687',
     'packages/rpcs3_internal_bridge/ios/Classes/RPCS3PerformanceSnapshot.h': 'badde59ea1202e288e48bd8c318d61fde82b764815a83484da37db075be69c79',
 }
 APPROVED_RPCS3_MENU_FILES = frozenset({
