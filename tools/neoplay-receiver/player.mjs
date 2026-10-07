@@ -2,8 +2,8 @@ import { mp4Mime, MAX_BUFFERED, displayLimits, KIND, parseConfig, parseVideo, pa
 import { audioTime, isLive, choose, overflow, engineFor } from './presenter.mjs';
 import { ReceiverDiagnostics } from './diagnostics.mjs';
 import { noReorderDescription } from './h264-sps.mjs';
-const video = document.querySelector('#video'), canvas = document.querySelector('#canvas'), status = document.querySelector('#status');
-const say = text => { status.textContent = text; };
+const video = document.querySelector('#video'), canvas = document.querySelector('#canvas'), status = document.querySelector('#status'), emptyState = document.querySelector('#empty-state');
+const say = text => { status.textContent = text; if (emptyState) emptyState.hidden = /^Receiving/.test(text); };
 // Two engines. `frames` (v2): WebCodecs pictures and PCM on one sample-accurate
 // audio clock, never a seek. `segments` (v1): MediaSource fMP4, the validated
 // fallback for browsers without WebCodecs.
@@ -235,3 +235,7 @@ document.querySelector('#full').onclick = () => document.querySelector('#stage')
 document.querySelector('#stop').onclick = () => { if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'stop' })); };
 new ResizeObserver(report).observe(document.querySelector('#stage'));
 window.addEventListener('beforeunload', () => socket?.close());
+
+// Open the local viewer immediately so NeoStation iOS can pair without an extra desktop click.
+// A real click on Ready remains useful later to unlock browser audio if Chromium requests a user gesture.
+queueMicrotask(() => document.querySelector('#ready')?.click());

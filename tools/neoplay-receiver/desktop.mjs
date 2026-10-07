@@ -8,7 +8,7 @@ import { createReceiver } from './server.mjs';
 
 async function main() {
   const assets = isSea() ? Object.fromEntries(['index.html','player.mjs','presenter.mjs','protocol.mjs','audio-ring.mjs','audio-worklet.mjs','diagnostics.mjs','h264-sps.mjs'].map(name => [name,getAsset(name,'utf8')])) : null;
-  const receiverName = `NeoPlay — ${hostname()} · 0.5.0`;
+  const receiverName = `NeoPlay — ${hostname()} · Desktop`;
   const smoke = process.argv.includes('--smoke-test');
   const conflictTest = process.argv.includes('--port-conflict-test');
   let blocker = null;
