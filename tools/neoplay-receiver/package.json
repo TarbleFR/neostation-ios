@@ -2,6 +2,7 @@
   "name": "neoplay-receiver",
   "version": "0.5.1",
   "private": true,
+  "description": "NeoPlay Desktop Receiver for NeoStation iOS",
   "type": "module",
   "license": "GPL-3.0-or-later",
   "engines": {
