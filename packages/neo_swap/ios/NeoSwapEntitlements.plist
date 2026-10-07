@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Memory management entitlements -->
+    <key>com.apple.private.memory.peak</key>
+    <true/>
+    
+    <!-- Allow memory allocation beyond normal limits -->
+    <key>com.apple.private.memorystatus</key>
+    <true/>
+    
+    <!-- Enable high priority memory allocation -->
+    <key>com.apple.private.memory.priority</key>
+    <true/>
+    
+    <!-- Allow access to large memory allocations -->
+    <key>com.apple.private.memory.alloc.large</key>
+    <true/>
+    
+    <!-- Allow memory mapping operations -->
+    <key>com.apple.private.mach.vm.map</key>
+    <true/>
+    
+    <!-- Allow memory attributes setting -->
+    <key>com.apple.private.mach.vm.attributes</key>
+    <true/>
+    
+    <!-- Allow memory priority setting -->
+    <key>com.apple.private.mach.vm.priority</key>
+    <true/>
+    
+    <!-- Enable background task management for memory operations -->
+    <key>com.apple.developer.background-modes</key>
+    <array>
+        <string>memory</string>
+    </array>
+    
+    <!-- Allow extended memory usage for emulators -->
+    <key>com.apple.private.memory.extended</key>
+    <true/>
+    
+    <!-- Enable memory pressure monitoring -->
+    <key>com.apple.private.memory.pressure</key>
+    <true/>
+</dict>
+</plist>

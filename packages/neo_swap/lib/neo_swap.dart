@@ -4,30 +4,39 @@ import 'package:flutter/services.dart';
 class NeoSwap {
   NeoSwap._();
   static const channel = MethodChannel('neostation/neo_swap');
+  
   static const probeSizesMiB = [64, 128, 512, 1024, 2048, 4096, 8192];
-
-  static Future<Map<String, dynamic>> snapshot() => _call('snapshot');
-  static Future<Map<String, dynamic>> probe() => _call('probe');
-
-  /// Optional regenerable shader cache; applies on the next game launch.
-  static Future<Map<String, dynamic>> setShaderStorage(bool enabled) =>
-      _call('setShaderStorage', {'enabled': enabled});
-  static Future<Map<String, dynamic>> capacityProbe(int sizeMiB) {
-    if (!probeSizesMiB.contains(sizeMiB)) {
-      throw ArgumentError.value(sizeMiB, 'sizeMiB');
-    }
-    return _call('capacityProbe', {'sizeMiB': sizeMiB});
+  
+  /// Allocate maximum memory for the emulator
+  static Future<Map<String, dynamic>> allocateMaxMemory(int sizeMiB) async {
+    final Map<String, dynamic> args = {'sizeMiB': sizeMiB};
+    return await channel.invokeMethod('allocateMaxMemory', args);
   }
-
-  static Future<Map<String, dynamic>> _call(
-    String method, [
-    Object? args,
-  ]) async {
-    final response = await channel.invokeMapMethod<String, dynamic>(
-      method,
-      args,
-    );
-    if (response == null) throw StateError('NeoSwap returned no response');
-    return Map<String, dynamic>.from(response);
+  
+  /// Get current memory statistics
+  static Future<Map<String, dynamic>> getMemoryStats() async {
+    return await channel.invokeMethod('getMemoryStats');
+  }
+  
+  /// Set shader storage preference
+  static Future<Map<String, dynamic>> setShaderStorage(bool enabled) async {
+    final Map<String, dynamic> args = {'enabled': enabled};
+    return await channel.invokeMethod('setShaderStorage', args);
+  }
+  
+  /// Probe memory capacity
+  static Future<Map<String, dynamic>> probe() async {
+    return await channel.invokeMethod('probe');
+  }
+  
+  /// Get capacity probe results
+  static Future<Map<String, dynamic>> capacityProbe(int sizeMiB) async {
+    final Map<String, dynamic> args = {'sizeMiB': sizeMiB};
+    return await channel.invokeMethod('capacityProbe', args);
+  }
+  
+  /// Get current snapshot
+  static Future<Map<String, dynamic>> snapshot() async {
+    return await channel.invokeMethod('snapshot');
   }
 }
