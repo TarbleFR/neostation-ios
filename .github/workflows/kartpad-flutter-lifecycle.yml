@@ -115,6 +115,12 @@ jobs:
           scheme.add_build_target(target)
           scheme.add_build_target(ui)
           scheme.add_test_target(ui)
+          # The pinned official KartPad runtime queries SDL/UIKit window size from
+          # Aurora's frame worker. That runtime is validated separately by the five
+          # automatic launch/return cycles above. XCTest enables Main Thread Checker
+          # by default and turns that unchanged donor behavior into a probe-only
+          # SIGABRT on iOS 18, so keep MTC out of this UI-navigation test action.
+          scheme.test_action.disable_main_thread_checker=true
           scheme.save_as(project.path,'MenuProbe')
           project.save
           RUBY
