@@ -90,3 +90,11 @@ les mesures (voir `RECEIVER-VALIDATION.md`).
 Grésillement audible, flux iPhone → Windows réel (Wi-Fi, ReplayKit), warmup SPU
 et prêts NeoSwap pendant God of War III, FPS et frametime. Aucun de ces points
 n'est démontré par la CI ou le Simulateur.
+
+## Correctif NeoPlay Desktop 0.5.1 — validation physique demandée
+
+- Le receiver Windows empaqueté s'ouvre comme application GUI, sans console PowerShell visible.
+- L'application Desktop lance par défaut le chemin H.264/AAC segmenté validé au lieu du chemin WebCodecs `frames` qui a produit un écran noir sur le PC physique ; le protocole v2 reste disponible pour les diagnostics isolés.
+- Le correctif de découverte LAN/.local du receiver 0.3.x reste conservé.
+- Le contrôleur iOS réintègre le bail de volume local déjà développé pour le Build408 : après confirmation de lecture Windows, le volume média local est atténué à zéro, maintenu pendant la session puis restauré à sa valeur précédente à l'arrêt/échec/changement de route. ReplayKit continue de capturer l'audio de l'application.
+- Ces corrections restent privées et ne constituent pas une release publique. La coupure réelle du haut-parleur iPhone et le flux iPhone→Windows doivent encore être confirmés sur appareil physique.
