@@ -1,0 +1,36 @@
+name: NeoPlay Windows executable
+on:
+  push:
+    branches: [experimental]
+    paths:
+      - 'tools/neoplay-receiver/**'
+      - '.github/workflows/neoplay-exe.yml'
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Test receiver
+        working-directory: tools/neoplay-receiver
+        run: |
+          npm ci --ignore-scripts
+          npm test
+      - name: Build and smoke-test standalone receiver
+        working-directory: tools/neoplay-receiver
+        run: |
+          node build-executable.mjs
+          ./dist/NeoPlay-Receiver-0.4.0.exe --smoke-test
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NeoPlay-Receiver-0.4.0-${{ github.sha }}
+          path: |
+            tools/neoplay-receiver/dist/NeoPlay-Receiver-0.4.0.exe
+            tools/neoplay-receiver/dist/build.json
+          if-no-files-found: error
+          retention-days: 30
