@@ -82,6 +82,7 @@ void pool_footprint(std::uint64_t generation, const Footprint& donor) noexcept;
 void pool_lost(std::uint64_t generation, std::int32_t reason) noexcept;
 void pool_snapshot(PoolSnapshot& out) noexcept;
 
+// Acquisition uses try_lock and returns pool_busy on contention.
 // No XPC, files, allocation or page writes on these paths. Existing mappings
 // remain valid when a helper disconnects; only new loans stop. Tokens are unique
 // until process death, so a late release cannot free another allocation.

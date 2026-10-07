@@ -52,7 +52,10 @@ void main() {
     test(
       'targets only the registered God of War III serials',
       () {
-        for (final serial in <String>['BCUS98111', 'BCES00510', 'BCAS25003']) {
+        for (final serial in <String>[
+          'BCUS98111', 'BCES00510', 'BCES00799',
+          'BCJS37001', 'BCAS25003', 'BCKS15003',
+        ]) {
           final profile = Rpcs3GameProfileService.profileForSerial(serial)!;
           expect(profile.settings['cpu.spu_block_size'], 'Mega');
           expect(profile.settings['cpu.preferred_spu_threads'], '0');

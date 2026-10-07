@@ -138,7 +138,10 @@ abstract final class Rpcs3GameProfileService {
     // the guarded ARM64 batch already instrumented by Build 256.
     'BCUS98111': _godOfWarIII,
     'BCES00510': _godOfWarIII,
+    'BCES00799': _godOfWarIII,
+    'BCJS37001': _godOfWarIII,
     'BCAS25003': _godOfWarIII,
+    'BCKS15003': _godOfWarIII,
 
     // ARMSX3 issue #77 is guest pacing rather than an Android driver hack.
     // PS3 Native honours the title's alternate-vblank flip cadence.

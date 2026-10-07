@@ -358,7 +358,10 @@ Result pool_acquire(std::uint64_t bytes, std::uint64_t alignment,
   if (!out || !token) return {Stage::invalid_argument, -1};
   *out = nullptr; *token = 0;
   auto& p = pool();
-  std::lock_guard guard(p.mutex);
+  std::unique_lock guard(p.mutex, std::try_to_lock);
+  // Cleanup can hold this mutex across OS calls. Never queue an
+  // emulator acquisition behind that work, and do not mutate stats unlocked.
+  if (!guard.owns_lock()) return {Stage::pool_busy, 0};
   if (p.stats.state != PoolState::verified) return fail(p, Stage::pool_unready);
   if (!bytes || !power_of_two(alignment) || alignment > 65536)
     return fail(p, Stage::invalid_argument);

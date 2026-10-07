@@ -27,6 +27,7 @@ on:
       - 'test/rpcs3_build353_xitrix_v010_test.py'
       - 'test/rpcs3_xitrix_v0101_native_test.py'
       - 'test/native/rpcs3_spu_*'
+      - 'test/rpcs3_spu_warmup_test.py'
       - 'test/native/rpcs3_vk_*'
       - 'test/native/rpcs3_neoswap_stats_getter_test.cpp'
       - 'test/rpcs3_neoswap_vulkan_buffer_test.py'
@@ -106,6 +107,7 @@ jobs:
           git -C "$STORAGE_SRC" fetch --depth 1 origin 22f1152783cef1f7e04af7b1c895173e28fd5b03
           git -C "$STORAGE_SRC" checkout -q --detach FETCH_HEAD
           python3 build-utils/materialize_rpcs3_core.py "$STORAGE_SRC"
+          CXX="$(xcrun --sdk macosx --find clang++)" HOST_MACOS_SDK="$(xcrun --sdk macosx --show-sdk-path)" python3 test/rpcs3_spu_warmup_test.py "$STORAGE_SRC" --sanitize
           CXX="$(xcrun --sdk macosx --find clang++)" HOST_MACOS_SDK="$(xcrun --sdk macosx --show-sdk-path)" python3 test/rpcs3_shader_storage_test.py "$STORAGE_SRC"
           CXX="$(xcrun --sdk macosx --find clang++)" HOST_MACOS_SDK="$(xcrun --sdk macosx --show-sdk-path)" python3 test/rpcs3_source_archive_test.py "$STORAGE_SRC"
           brew list --versions ffmpeg >/dev/null 2>&1 || brew install ffmpeg

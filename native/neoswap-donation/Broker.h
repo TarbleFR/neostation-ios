@@ -60,6 +60,7 @@ enum class Stage : std::uint32_t {
   memory_pressure,
   pool_duplicate_pid,
   snapshot_busy,
+  pool_busy,
 };
 
 struct Result {

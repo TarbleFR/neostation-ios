@@ -74,6 +74,24 @@ assert budget['physical_iPhone_validated'] is False
 assert budget['gameplay_validated'] is False
 assert budget['maximum_useful_memory_measured'] is False
 
+# Maintainer request of 7 October 2026: instrument the SPU, acquire only ready
+# memory on its critical path, and prepare donors incrementally off that path.
+# This is source scope, not a successful new Core/IPA or physical-device proof.
+runtime_preparation = manifest['runtime_preparation']
+assert runtime_preparation == {
+    'baseline_host_commit': '301ff56a63291c1229fba4c5d4f345e124fc0caa',
+    'workload': 'God of War III',
+    'priorities': ['SPU warmup', 'ready-only NeoSwap acquisition', 'incremental donor preparation'],
+    'donor_seed_bytes': 16 * 1024 * 1024,
+    'boot_donor_wait_ms': 0,
+    'extra_emulation_threads': False,
+    'spu_gpu_offload': False,
+    'arm64_absolute_code_persistence': False,
+    'physical_iPhone_validated': False,
+    'gameplay_validated': False,
+    'neoplay_real_stream_validated': False,
+}
+
 # Additions require a review of the requested production scope. Never derive
 # this whitelist from git status or from the hash manifest itself.
 PRODUCTION_FILES = {
@@ -465,6 +483,30 @@ SUPPORT_FILES |= {
     'tools/neoplay-receiver/test/protocol.test.mjs',
 }
 
+# Explicitly reviewed new paths for the current request. Existing related
+# production paths remain in their historical sets above; no automatic
+# expansion from git status or a generated hash list is permitted.
+PRODUCTION_FILES |= {
+    'lib/services/rpcs3_game_profile_service.dart',
+    'packages/neo_swap/ios/Classes/NeoSwap.h',
+    'packages/neo_swap/ios/Classes/NeoSwapPreparation.h',
+    'tools/neoplay-receiver/diagnostics.mjs',
+}
+SUPPORT_FILES |= {
+    'docs/neoplay/RECEIVER-VALIDATION.md',
+    'docs/rpcs3-neoswap-measurement-captures.md',
+    'docs/rpcs3-neoswap-neoplay-post410-validation.md',
+    'test/native/rpcs3_spu_warmup_test.cpp',
+    'test/rpcs3_spu_warmup_test.py',
+    'test/rpcs3_game_profile_service_test.dart',
+    'test/neoswap_preparation_test.cpp',
+    'test/neoswap_rpcs3_allocator_test.cpp',
+    'test/rpcs3_neoswap_build_comparison_test.py',
+    'tools/compare_rpcs3_neoswap_builds.py',
+    'tools/neoplay-receiver/test/diagnostics.test.mjs',
+    'tools/neoplay-receiver/test/player-diagnostics.test.mjs',
+}
+
 # Maintainer-authorized integration of swap and armsx2-26 into experimental.
 # Keep the complete reviewed ARMSX2 postimage pinned, separately from RPCS3.
 ARMSX2_INTEGRATION_SHA = '424a360348ae1178feed330da1af8c45909ed675'
@@ -576,12 +618,24 @@ IPA_WORKFLOW_BUILD410_LINES = (
     ('          cp docs/neoplay/BUILD397.md build/private-test/Notes-NeoPlay-Build397.md\n',
      '          cp docs/neoplay/BUILD410.md build/private-test/Notes-NeoPlay-Build410.md\n'),
 )
+# The historical ARMSX2/Build410 postimage remains fully checked. These exact
+# acceptance-test additions are the only current workflow delta at this stage;
+# a new Core artifact pin is added only after its build succeeds.
+IPA_WORKFLOW_RUNTIME_PREPARATION_LINES = (
+    ('            test/native/rpcs3_spu_branch_analyzer_test.cpp \\\n',
+     '            test/native/rpcs3_spu_branch_analyzer_test.cpp \\\n'
+     '            test/rpcs3_spu_warmup_test.py \\\n'
+     '            test/native/rpcs3_spu_warmup_test.cpp \\\n'),
+)
 for path in ARMSX2_INTEGRATION_FILES:
     reviewed = subprocess.check_output(['git', 'show', ARMSX2_INTEGRATION_SHA + ':' + path], cwd=ROOT)
     if path == '.github/workflows/neoswap-ipa.yml':
         text = reviewed.decode('utf-8')
         for old, new in IPA_WORKFLOW_BUILD410_LINES:
             assert text.count(old) == 1, 'Reviewed IPA workflow line expected once: ' + old
+            text = text.replace(old, new, 1)
+        for old, new in IPA_WORKFLOW_RUNTIME_PREPARATION_LINES:
+            assert text.count(old) == 1, 'Runtime acceptance workflow line expected once: ' + old
             text = text.replace(old, new, 1)
         reviewed = text.encode('utf-8')
     assert (ROOT / path).read_bytes() == reviewed, 'Reviewed ARMSX2 integration changed: ' + path
@@ -656,12 +710,35 @@ for path in (
     'native/dolphin_internal_helper/Info.plist',
     'native/rpcs3_internal_helper/Info.plist',
     'native/armsx2_internal_helper/Info.plist',
-    'packages/neo_swap/ios/Classes/NeoSwap.h',
     'lib/services/kartpad_internal_service.dart',
     'build-utils/kartpad/source.json',
     'build-utils/stikjit/source.json',
 ):
     assert (ROOT / path).read_bytes() == before(path), 'Protected helper/core/ABI/routing changed: ' + path
+
+
+def validate_allocator_v1_layout():
+    """Accept exactly the new request bit and test-only hook; preserve ABI v1."""
+    path = 'packages/neo_swap/ios/Classes/NeoSwap.h'
+    header = (ROOT / path).read_bytes()
+    additions = (
+        (b'/* Additive request flag on ABI v1. An older host rejects the unknown kind,\n'
+         b' * preserving ordinary allocator fallback. Fast requests may only borrow already\n'
+         b' * mapped RAM and may never wait for a lock, map, donor, relay or file operation. */\n', b''),
+        (b', NEOSWAP_REQUEST_FAST = 0x40000000u', b''),
+        (b'     * failure retains ownership and must not be turned into a heap free.\n'
+         b'     * FAST loans: OK transfers cleanup to host maintenance; the pointer must\n'
+         b'     * never be touched again. Mapping/quota remain owned until real retirement. */\n',
+         b'     * failure retains ownership and must not be turned into a heap free. */\n'),
+        (b'void NeoSwap_TestWithBrokerLock(void (*callback)(void*), void* context);\n', b''),
+    )
+    for added, original in additions:
+        assert header.count(added) == 1, 'Expected one additive allocator declaration: ' + repr(added)
+        header = header.replace(added, original, 1)
+    assert header == before(path), 'Existing allocator v1 declarations or layout changed'
+
+
+validate_allocator_v1_layout()
 
 # Original allocator/probe API unchanged: only one boolean preference.
 storage_method = "\n  /// Optional regenerable shader cache; applies on the next game launch.\n  static Future<Map<String, dynamic>> setShaderStorage(bool enabled) =>\n      _call('setShaderStorage', {'enabled': enabled});\n"

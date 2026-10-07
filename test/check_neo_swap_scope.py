@@ -498,8 +498,12 @@ AUDITED_CORE_FILES |= VIDEO_FILES
 # borrowing a host loan before their anonymous mapping. Every other section,
 # the main ABI, JIT/VM/GPU policy and the video producer stay byte-identical.
 HOST_LOAN_FILES={'rpcs3/ios/NeoSwapClient.h','rpcs3/ios/NeoSwapVulkanBuffer.h','rpcs3/ios/NeoSwapStorage/VideoBuffer.h'}
-loan_manifest=json.loads((ROOT/'build-utils/rpcs3/canonical-source.json').read_text())
-loan_patch=(ROOT/'build-utils/rpcs3/embedded-core.patch').read_bytes()
+HOST_LOAN_REVIEWED='1a307a0f7a353c48496c438d9b8ac7c8260600f7'
+# Keep the entire previously accepted Build409 stage immutable. Current SPU
+# and ready-memory changes are reviewed separately below, never folded into
+# this historical three-header permission.
+loan_manifest=json.loads(original('build-utils/rpcs3/canonical-source.json',HOST_LOAN_REVIEWED))
+loan_patch=original('build-utils/rpcs3/embedded-core.patch',HOST_LOAN_REVIEWED)
 loan_sections=sections(loan_patch)
 assert set(loan_manifest)==set(video_manifest)|{'neoswap_host_loans'}
 for key in set(video_manifest)-{'files_sha256','patch_sha256','policy','neoswap'}:
@@ -541,7 +545,52 @@ loans=loan_manifest['neoswap_host_loans']
 assert loans['client_abi']==1 and loans['extended_kinds']=={'gpu_host_visible':3,'video_frame':4}
 assert loans['backing_selected_by_host'] is True and loans['device_runtime_tested'] is False and loans['gameplay_validated'] is False
 AUDITED_CORE_FILES |= HOST_LOAN_FILES
-current=loan_manifest
+
+# Current request: a separately bounded SPU warmup/diagnostics delta and a
+# ready-memory acquisition path. Prior audits above still execute against the
+# exact accepted historical commits. Every unrelated current Core section and
+# materialized file remains equal to the last packaged Build410 source.
+RUNTIME_PREPARATION_BASE='301ff56a63291c1229fba4c5d4f345e124fc0caa'
+RUNTIME_PREPARATION_FILES={
+    'rpcs3/Emu/Cell/SPUCommonRecompiler.cpp',
+    'rpcs3/Emu/Cell/SPULLVMRecompiler.cpp',
+    'rpcs3/Emu/Cell/SPURecompiler.h',
+    'rpcs3/Emu/Cell/SPUWarmupPolicy.h',
+    'rpcs3/Emu/Memory/vm.cpp',
+    'rpcs3/ios/NeoSwap.h',
+    'rpcs3/ios/NeoSwapClient.h',
+    'rpcs3/ios/NeoSwapRelayClient.h',
+    'rpcs3/ios/RPCS3IOS.cpp',
+    'rpcs3/ios/RPCS3IOSPerformance.cpp',
+    'rpcs3/ios/RPCS3IOSPerformance.h',
+}
+RUNTIME_PREPARATION_ADDED={'rpcs3/Emu/Cell/SPUWarmupPolicy.h'}
+stage_base=json.loads(original('build-utils/rpcs3/canonical-source.json',RUNTIME_PREPARATION_BASE))
+stage_base_patch=original('build-utils/rpcs3/embedded-core.patch',RUNTIME_PREPARATION_BASE)
+assert stage_base == loan_manifest, 'Build410 Core source differs from its reviewed Build409 artifact'
+assert stage_base_patch == loan_patch, 'Packaged Build410 changed the native delta without a new Core'
+current=json.loads((ROOT/'build-utils/rpcs3/canonical-source.json').read_text())
+runtime_patch=(ROOT/'build-utils/rpcs3/embedded-core.patch').read_bytes()
+runtime_sections=sections(runtime_patch)
+assert set(current)==set(stage_base)|{'spu_warmup_nonblocking','neoswap_fast_acquisition'}
+for key in set(stage_base)-{'files_sha256','patch_sha256','policy','neoswap'}:
+    assert current[key]==stage_base[key], 'Runtime preparation changed unrelated Core policy: '+key
+assert set(current['neoswap'])==set(stage_base['neoswap'])
+for key in set(stage_base['neoswap'])-{'coverage'}:
+    assert current['neoswap'][key]==stage_base['neoswap'][key], 'Runtime preparation changed allocator contract: '+key
+assert current['spu_warmup_nonblocking']['device_tested'] is False
+assert current['neoswap_fast_acquisition']['device_tested'] is False
+assert current['device_runtime_tested'] is False
+assert set(current['files_sha256'])==set(stage_base['files_sha256'])|RUNTIME_PREPARATION_ADDED
+assert {p for p,h in current['files_sha256'].items() if stage_base['files_sha256'].get(p)!=h}==RUNTIME_PREPARATION_FILES, \
+    'Unexpected runtime preparation postimages'
+assert hashlib.sha256(runtime_patch).hexdigest()==current['patch_sha256']
+assert set(runtime_sections)==set(loan_sections)|RUNTIME_PREPARATION_ADDED
+for path in set(loan_sections)-RUNTIME_PREPARATION_FILES:
+    assert runtime_sections[path]==loan_sections[path], 'Runtime preparation changed unrelated Core section: '+path
+assert {p for p in runtime_sections if loan_sections.get(p)!=runtime_sections[p]}==RUNTIME_PREPARATION_FILES, \
+    'Unexpected runtime preparation patch sections'
+AUDITED_CORE_FILES |= RUNTIME_PREPARATION_FILES
 assert candidate['manifest']['rpcs3_postimages_sha256'] == {
     path: current['files_sha256'][path] for path in sorted(AUDITED_CORE_FILES)
 }, 'Candidate/Core postimage identity drift'
@@ -551,7 +600,7 @@ assert current['neoswap_cpu_buffers']['generic_vulkan_threshold_unchanged'] is T
 assert current['neoswap_cpu_buffers']['device_runtime_tested'] is False
 
 abi_path = 'packages/neo_swap/ios/Classes/NeoSwap.h'
-assert (ROOT / abi_path).read_bytes() == original(abi_path), 'Allocator v1 ABI changed'
+candidate['validate_allocator_v1_layout']()
 for source, target in [
     (abi_path, 'rpcs3/ios/NeoSwap.h'),
     ('native/neoswap/NeoSwapClient.h', 'rpcs3/ios/NeoSwapClient.h'),
@@ -577,5 +626,6 @@ assert broker.count('Broker& broker() { static Broker b; return b; }') == 1
 catalog = json.loads((ROOT / 'native/neoswap/localizations.json').read_text())
 assert set(catalog) == {'en', 'es', 'ru', 'zh', 'zh_Hant', 'pt', 'fr', 'de', 'it', 'id', 'ja', 'ko'}
 print('PASS NeoSwap scope: historical Vulkan/Core changes retained; explicitly reviewed postimages; '
-      'optional shader CPU cache, owned GLSL source archive and Build409 relay host-loan kinds; JIT/PPU/SPU and allocator v1 unchanged; '
+      'optional shader CPU cache, owned GLSL source archive and Build409 relay host-loan kinds; '
+      'separate SPU warmup/telemetry and ready-memory delta; allocator v1 layout retained; '
       'runtime ABI30/relay ABI1; one host broker; no physical iPhone validation claim')

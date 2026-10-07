@@ -5,6 +5,7 @@
 #include "NeoSwapMemorySamples.h"
 #include "NeoSwapExperiment.h"
 #include "NeoSwapBudget.h"
+#include "NeoSwapPreparation.h"
 #import <UIKit/UIKit.h>
 #if defined(NEOSWAP_SHADER_STORAGE)
 #import "NeoSwapStorageService.h"
@@ -33,7 +34,7 @@ static NSString* const kDiagnostic = @"NeoSwap-v1.jsonl";
 static const uint64_t kMiB = 1024 * 1024;
 static const uint64_t kGiB = 1024 * kMiB;
 // Build385 adaptive policy: 5 GiB is a hard ceiling, not a startup target.
-// Start two verified 256 MiB chunks for real boot buffers, then retain only
+// Warm one verified 16 MiB chunk at a time for real boot buffers, then retain only
 // 128 MiB reserve above active donor loans (not file-backed buffers). Growth remains
 // fail-closed under kernel/system pressure and prepared pages are retained
 // only for the lifetime of the active RPCS3 session.
@@ -41,14 +42,14 @@ static const uint64_t kDonationHardLimitBytes = 5 * kGiB;
 static const uint64_t kDonationWarmFloorBytes = 512 * kMiB;
 static const uint64_t kDonationReserveBytes = 128 * kMiB;
 static const uint64_t kDonationGrowthQuantumBytes = 128 * kMiB;
-static const uint64_t kDonationInitialChunkBytes = 256 * kMiB;
-static const uint64_t kDonationPrimaryChunkBytes = 256 * kMiB;
-static const uint64_t kDonationFallbackChunkBytes = 128 * kMiB;
-static const NSUInteger kDonationConcurrentGrowths = 2;
+static const uint64_t kDonationInitialChunkBytes = 16 * kMiB;
+static const uint64_t kDonationPrimaryChunkBytes = 16 * kMiB;
+static const uint64_t kDonationFallbackChunkBytes = 16 * kMiB;
+static const NSUInteger kDonationConcurrentGrowths = 1;
 static const NSUInteger kDonationWarmDonorCount = 2;
 #if defined(NEOSWAP_DONATION)
-static_assert(kDonationPrimaryChunkBytes == neostation::donation::max_chunk_bytes);
-static_assert(kDonationInitialChunkBytes == neostation::donation::max_chunk_bytes);
+static_assert(kDonationPrimaryChunkBytes <= neostation::donation::max_chunk_bytes);
+static_assert(kDonationInitialChunkBytes == neostation::preparation::chunk_bytes);
 #endif
 
 @interface NeoSwapPlugin () {
@@ -60,6 +61,7 @@ static_assert(kDonationInitialChunkBytes == neostation::donation::max_chunk_byte
     uint64_t _budgetDecisionCount;
     uint64_t _budgetStateChanges;
     uint64_t _budgetLastChangeMs;
+    neostation::preparation::Lifecycle _donorPreparation;
 }
 @property(nonatomic, strong) dispatch_queue_t queue;
 @property(nonatomic, strong) dispatch_source_t timer;
@@ -90,15 +92,19 @@ static_assert(kDonationInitialChunkBytes == neostation::donation::max_chunk_byte
 @property(nonatomic, assign) uint64_t donorEpoch;
 @property(nonatomic, strong) NSMutableIndexSet* donorPendingIndexes;
 @property(nonatomic, strong) NSMutableArray<NSNumber*>* donorPendingMaximums;
-@property(nonatomic, strong) NSDate* donorFallbackUntil;
 @property(nonatomic, assign) NSUInteger donorLaunchIndex;
 @property(nonatomic, assign) NSUInteger donorCursor;
 @property(nonatomic, assign) NeoSwapDonationDemand donorDemand;
 @property(nonatomic, assign) uint64_t donorGenerationCounter;
+@property(nonatomic, copy) NSString* donorPreparationMode;
+@property(nonatomic, strong) NSDictionary* donorPreparationRecord;
 #endif
 - (void)applyBudget;
 - (uint64_t)donorFloorBytes;
 - (uint64_t)donorReserveBytes;
+#if defined(NEOSWAP_DONATION)
+- (void)recordDonorPreparation;
+#endif
 @end
 
 static NSDictionary* NeoSwapEffectivePermissions() {
@@ -150,7 +156,7 @@ static NSDictionary* NeoSwapEffectivePermissions() {
     // Runtime policy, not an optional user feature. Old Off/budget preferences
     // cannot disable the integrated service after an update or relaunch.
     self.capacityMiB = NeoSwapExperimentProfile().donors() ? 8192 : 0;
-    // Relay preparation begins only at RPCS3's explicit WaitReady call.
+    // Relay preparation begins at RPCS3's explicit Core preparation call.
     dispatch_async(self.queue, ^{
         NSError* error = nil;
         BOOL created = self.directory.length && [[NSFileManager defaultManager]
@@ -178,6 +184,21 @@ static NSDictionary* NeoSwapEffectivePermissions() {
     dispatch_source_set_timer(self.timer, dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC/4),
         NSEC_PER_SEC/4, NSEC_PER_SEC/20);
     __weak NeoSwapPlugin* weakSelf = self;
+    // Wake the existing worker before display setup/LLVM warmup. Waiting for
+    // the periodic tick used to waste up to 250 ms of the short boot window.
+    [NSNotificationCenter.defaultCenter addObserverForName:@"NeoSwapRPCS3SessionStarted"
+        object:nil queue:nil usingBlock:^(__unused NSNotification* notification) {
+        NeoSwapPlugin* owner = weakSelf;
+        if (!owner) return;
+        dispatch_async(owner.queue, ^{
+            if (!NeoSwap_OwnerSessionActive(NEOSWAP_RPCS3)) return;
+            [owner applyBudget];
+#if defined(NEOSWAP_DONATION)
+            [owner startDonors];
+            [owner recordDonorPreparation];
+#endif
+        });
+    }];
     [NSNotificationCenter.defaultCenter addObserverForName:UIApplicationDidReceiveMemoryWarningNotification
         object:nil queue:nil usingBlock:^(__unused NSNotification* notification) {
         NeoSwapPlugin* owner = weakSelf;
@@ -213,6 +234,7 @@ static NSDictionary* NeoSwapEffectivePermissions() {
             if (NeoSwapExperimentProfile().donors() && NeoSwap_OwnerSessionActive(NEOSWAP_RPCS3)) {
                 if (!strongSelf.donorSessions) [strongSelf startDonors];
                 [strongSelf advanceDonors];
+                [strongSelf recordDonorPreparation];
             } else {
                 [strongSelf retireDonorsIfIdle];
             }
@@ -290,10 +312,11 @@ static NSDictionary* NeoSwapEffectivePermissions() {
         return;
     }
     ++self.donorEpoch;
+    const uint64_t nowMs = static_cast<uint64_t>(NSProcessInfo.processInfo.systemUptime * 1000);
+    if (!_donorPreparation.begin(self.donorEpoch, nowMs)) return;
     self.donorGenerationCounter = self.donorEpoch * 16;
     self.donorPendingIndexes = [NSMutableIndexSet indexSet];
     self.donorPendingMaximums = [NSMutableArray new];
-    self.donorFallbackUntil = NSDate.distantPast;
     self.donorSessions = [NSMutableArray new];
     self.donorAdoptedChunks = [NSMutableArray new];
     self.donorRetryAfter = [NSMutableArray new];
@@ -369,9 +392,8 @@ static NSDictionary* NeoSwapEffectivePermissions() {
         if (!strongSelf) return;
         dispatch_async(strongSelf.queue, ^{ [strongSelf donorChanged:source index:index error:failure]; });
     }];
-    const uint64_t initialMaximum = NeoSwapExperimentProfile().configured
-        ? (self.donorDemand.bytes ?: 16*kMiB) : kDonationInitialChunkBytes;
-    const uint64_t first = MIN(budget, initialMaximum);
+    const uint64_t first = neostation::preparation::next_chunk(
+        kDonationInitialChunkBytes, budget, vm_page_size);
     if (![session setInitialChunkMaximumBytes:first]) {
         self.donorErrors[[NSString stringWithFormat:@"%lu", (unsigned long)index]] =
             @{@"stage":@"initial_chunk_budget", @"bytes":@(first)};
@@ -437,9 +459,11 @@ static NSDictionary* NeoSwapEffectivePermissions() {
     self.donorLaunchIndex = 0;
     self.donorCursor = 0;
     self.donorGrowthRefusal = nil;
-    self.donorFallbackUntil = NSDate.distantPast;
     for (id object in sessions)
         if ([object isKindOfClass:NeoSwapDonorSession.class]) [(NeoSwapDonorSession*)object close];
+    (void)_donorPreparation.finish(self.donorEpoch, pool.live_blocks);
+    self.donorPreparationMode = nil;
+    self.donorPreparationRecord = nil;
     [self appendRecord:[self snapshot:@"donation_session_end"]];
 }
 - (void)advanceDonors {
@@ -453,7 +477,7 @@ static NSDictionary* NeoSwapEffectivePermissions() {
         self.donorDemand = demand;
     }
 
-    // Two helpers are enough to establish the warm floor quickly. Additional
+    // Start helpers incrementally, with one preparation in flight. Additional
     // donor processes are started only when the active pair cannot satisfy a
     // real RPCS3 demand or the adaptive target.
     const NSUInteger warmDonors = NeoSwapExperimentProfile().configured ? 1 : kDonationWarmDonorCount;
@@ -543,18 +567,8 @@ static NSDictionary* NeoSwapEffectivePermissions() {
         const uint64_t accounted = pool.prepared_bytes + pending;
         if (accounted >= adaptiveTarget) break;
         uint64_t remaining = adaptiveTarget - accounted;
-        const BOOL fallback = [self.donorFallbackUntil timeIntervalSinceNow] > 0;
-        uint64_t requested = fallback ? kDonationFallbackChunkBytes : kDonationPrimaryChunkBytes;
-        if (remaining < requested) requested = remaining;
-        requested -= requested % vm_page_size;
+        uint64_t requested = neostation::preparation::next_chunk(remaining, budget, vm_page_size);
         if (requested < kMiB) break;
-        if (budget < requested) {
-            if (!fallback && budget >= kDonationFallbackChunkBytes && remaining >= kDonationFallbackChunkBytes)
-                requested = kDonationFallbackChunkBytes;
-            else if (remaining <= kDonationFallbackChunkBytes && budget >= remaining)
-                requested = remaining - remaining % vm_page_size;
-            else break;
-        }
 
         NSUInteger chosen = NSNotFound;
         uint64_t bestHeadroom = 0;
@@ -641,7 +655,8 @@ static NSDictionary* NeoSwapEffectivePermissions() {
         for (uint64_t chunk = previous; result && chunk < adopted; ++chunk)
             if (![session acknowledgeVerifiedChunk:chunk]) result = {
                 neostation::donation::Stage::pool_unready, KERN_FAILURE};
-        if (result && adopted > previous && self.donorDemand.bytes && pending) {
+        if (result && adopted > previous && self.donorDemand.bytes && pending &&
+            self.donorPendingMaximums[index].unsignedLongLongValue >= self.donorDemand.bytes) {
             if (largestNewChunk >= self.donorDemand.bytes) {
                 const int acknowledged = NeoSwap_AcknowledgeDonationDemand(self.donorDemand.sequence);
                 if (acknowledged == NEOSWAP_OK) self.donorDemand = (NeoSwapDonationDemand){};
@@ -666,8 +681,6 @@ static NSDictionary* NeoSwapEffectivePermissions() {
                     @"requestedBytes":@(status.refusedBytes),
                     @"generation":@(status.generation)};
                 self.donorRetryAfter[index] = [NSDate dateWithTimeIntervalSinceNow:30];
-                if (self.donorPendingMaximums[index].unsignedLongLongValue > kDonationFallbackChunkBytes)
-                    self.donorFallbackUntil = [NSDate dateWithTimeIntervalSinceNow:30];
             }
             if (pending && status.growthState != NeoSwapDonorGrowthRequested &&
                 status.growthState != NeoSwapDonorGrowthPreparing) [self clearPendingDonor:index];
@@ -698,6 +711,43 @@ static NSDictionary* NeoSwapEffectivePermissions() {
         [self appendRecord:[self snapshot:@"donor_state"]];
     }
     [self advanceDonors];
+    [self recordDonorPreparation];
+}
+- (void)recordDonorPreparation {
+    if (!_donorPreparation.active()) return;
+    neostation::donation::PoolSnapshot pool{};
+    neostation::donation::pool_snapshot(pool);
+    if (pool.last_stage == neostation::donation::Stage::snapshot_busy) return;
+    const uint64_t nowMs = static_cast<uint64_t>(NSProcessInfo.processInfo.systemUptime * 1000);
+    neostation::preparation::Observation observed{};
+    observed.pool_verified = pool.state == neostation::donation::PoolState::verified;
+    observed.donor_count = pool.donor_count;
+    observed.prepared_bytes = pool.prepared_bytes;
+    observed.relay_ready = _budgetInputs.relay_ready;
+    observed.refused = self.donorGrowthRefusal != nil || self.donorErrors.count != 0;
+    const auto mode = _donorPreparation.observe(self.donorEpoch, nowMs, observed);
+    NSString* name = [NSString stringWithUTF8String:neostation::preparation::mode_name(mode)];
+    self.donorPreparationRecord = @{
+        @"mode":name, @"campaign":@(self.donorEpoch), @"campaignStarts":@(_donorPreparation.starts()),
+        @"elapsedMs":@(_donorPreparation.elapsed(nowMs)),
+        @"firstVerifiedMs":_donorPreparation.observed_prepared() ? @(_donorPreparation.first_prepared_ms()) : NSNull.null,
+        @"firstReadyMs":_donorPreparation.observed_ready() ? @(_donorPreparation.first_ready_ms()) : NSNull.null,
+        @"readinessDeadlineMs":@(neostation::preparation::readiness_deadline_ms),
+        @"readinessTimedOut":@(_donorPreparation.timed_out()),
+        @"chunkBytes":@(kDonationInitialChunkBytes), @"preparedBytes":@(pool.prepared_bytes),
+        @"donorCount":@(pool.donor_count), @"donorLoanLiveBytes":@(pool.live_bytes),
+        @"pendingBytes":@([self pendingDonationBytes]),
+        @"relayBackendReady":@(observed.relay_ready),
+        @"relayLiveBytes":@(_budgetInputs.relay_guest_live_bytes + _budgetInputs.relay_host_live_bytes),
+        @"refusal":self.donorGrowthRefusal ?: NSNull.null,
+        @"workerErrors":self.donorErrors.count ? [self.donorErrors copy] : (id)NSNull.null,
+        @"poolStage":[NSString stringWithUTF8String:neostation::donation::stage_name(pool.last_stage)],
+        @"poolKernelResult":@(pool.last_kernel_result), @"residentBytes":NSNull.null,
+        @"synchronousBootWaitConfiguredMs":@0};
+    if (![name isEqualToString:self.donorPreparationMode]) {
+        self.donorPreparationMode = name;
+        [self appendRecord:[self snapshot:@"donation_preparation_transition"]];
+    }
 }
 #endif
 - (void)applyBudget {
@@ -845,6 +895,7 @@ static NSDictionary* NeoSwapEffectivePermissions() {
     uint64_t donorCapacity = 0;
     id cleanupDiagnostics = NSNull.null;
     id donationWorkers = @[];
+    id preparation = NSNull.null;
     id growthRefusal = NSNull.null;
     NSString* growthState = @"unavailable";
     uint64_t target = kDonationHardLimitBytes;
@@ -858,6 +909,7 @@ static NSDictionary* NeoSwapEffectivePermissions() {
     uint64_t remaining = adaptiveTarget;
     uint64_t pendingGrowthCount = 0;
 #if defined(NEOSWAP_DONATION)
+    preparation = self.donorPreparationRecord ?: (id)NSNull.null;
     NSMutableArray* workers = [NSMutableArray new];
     uint64_t measuredHeadroom = 0;
     BOOL anyRefused = NO;
@@ -925,6 +977,8 @@ static NSDictionary* NeoSwapEffectivePermissions() {
 #endif
     NeoSwapCPUBufferStats cpuBuffers{};
     NeoSwap_CPUBufferSnapshot(&cpuBuffers);
+    NeoSwapFastStats fastAllocation{};
+    NeoSwap_FastSnapshot(&fastAllocation);
     NeoSwapRelayLoanStats relayLoans{};
     NeoSwap_RelayLoanSnapshot(&relayLoans);
 #if defined(NEOSWAP_TESTING)
@@ -998,6 +1052,15 @@ static NSDictionary* NeoSwapEffectivePermissions() {
             @"relay":@(NeoSwapExperimentProfile().relay()), @"donors":@(NeoSwapExperimentProfile().donors()),
             @"storage":@(NeoSwapExperimentProfile().storage()), @"changesRequireProcessRestart":@YES},
         @"iosMemoryWarningCount":@(self.iosWarningCount),
+        @"fastAllocation":@{
+            @"scope":@"process_lifetime", @"requests":@(fastAllocation.requests),
+            @"successes":@(fastAllocation.successes), @"broker_busy":@(fastAllocation.broker_busy),
+            @"donor_busy":@(fastAllocation.donor_busy), @"ready_misses":@(fastAllocation.ready_misses),
+            @"fallback_count":@(fastAllocation.fallback_count), @"total_time_us":@(fastAllocation.total_time_us),
+            @"max_time_us":@(fastAllocation.max_time_us), @"prepare_requests":@(fastAllocation.prepare_requests),
+            @"prepared_loans":@(fastAllocation.prepared_loans), @"prepare_failures":@(fastAllocation.prepare_failures),
+            @"retire_requests":@(fastAllocation.retire_requests), @"retired_loans":@(fastAllocation.retired_loans),
+            @"retire_failures":@(fastAllocation.retire_failures)},
         @"thermalState":@(NSProcessInfo.processInfo.thermalState),
         @"budget":budget, @"neoswapContribution":contribution,
         @"terminationCause":NSNull.null, @"jetsamConfirmed":@NO,
@@ -1061,6 +1124,7 @@ static NSDictionary* NeoSwapEffectivePermissions() {
         @"donationPendingDemandCount":@(host.donor_pending_demand_count),
         @"donationDemandOverflowCount":@(host.donor_demand_overflow_count),
         @"donationWorkers":donationWorkers,
+        @"donationPreparation":preparation,
         @"donationPreparedBytes":@(host.donor_prepared_bytes), @"donorCapacityBytes":@(donorCapacity),
         @"donatedResidentBytes":donatedResident, @"donatedCompressedBytes":donatedCompressed,
         @"donorFootprintBytes":donorFootprint, @"donorHeadroomBytes":donorHeadroom,

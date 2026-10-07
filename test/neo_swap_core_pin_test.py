@@ -17,7 +17,7 @@ import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
 UPSTREAM = '22f1152783cef1f7e04af7b1c895173e28fd5b03'
-PATCH_SHA256 = '7db1bb716f2d9c3de48e1dd091b5f4f920a999707070632a207835a4663026d5'
+PATCH_SHA256 = '241a95244fe255ba7daaa1900ca3ac117a761fc0b17b962bd1145776010400e1'
 BACKPORTS = (
     '8bd938e9de9ff6455f312cdf8bd64bd37a064c4e',
     '1d13d1e6bbabfbb7a873f2c608c52525ff470e25',
@@ -80,6 +80,8 @@ CORE_INPUTS = (
     'test/rpcs3_xitrix_v0101_native_test.py',
     'test/native/rpcs3_spu_analyzer_support.h',
     'test/native/rpcs3_spu_branch_analyzer_test.cpp',
+    'test/rpcs3_spu_warmup_test.py',
+    'test/native/rpcs3_spu_warmup_test.cpp',
     'test/native/rpcs3_vk_memory_pressure_test.cpp',
     'test/native/rpcs3_vk_conditional_render_test.cpp',
     'test/native/rpcs3_neoswap_stats_getter_test.cpp',

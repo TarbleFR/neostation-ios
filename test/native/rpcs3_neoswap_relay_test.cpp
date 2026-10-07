@@ -138,8 +138,24 @@ int main() {
  assert(neostation::relay::install(&api)==NEOSWAP_RELAY_OK);
  auto other=api; assert(neostation::relay::install(&other)==NEOSWAP_RELAY_BUSY);
  active=false; fallback(false); assert(creates==0); active=true;
- fallback(true); assert(creates==0); // COW excludes relay before any view
- fallback(false,utils::protection::rx); assert(creates==0); // executable excluded
+ // Gameplay never requests a new relay loan. The entire original shm path
+ // remains usable even if a relay manager holds its broker lock indefinitely.
+ for (int cycle=0; cycle<3; ++cycle) {
+  neostation::relay::set_gameplay_active(true);
+  const int before_creates=creates, before_maps=maps;
+  {
+   std::lock_guard blocked(broker_mutex);
+   fallback(false);
+  }
+  assert(creates==before_creates && maps==before_maps);
+  assert(neostation::relay::gameplay_fallbacks.load()==static_cast<unsigned>(cycle+1));
+  neostation::relay::set_gameplay_active(false);
+  fallback(false); // next loading cycle can acquire a fresh relay object
+  assert(creates==before_creates+1 && objects.empty());
+ }
+ const int boot_creates=creates;
+ fallback(true); assert(creates==boot_creates); // COW excludes relay before any view
+ fallback(false,utils::protection::rx); assert(creates==boot_creates); // executable excluded
  reject_create=true; fallback(false); assert(objects.empty()); reject_create=false;
  reject_map=true; fallback(false); assert(objects.empty()); reject_map=false;
  void* base=reserve(bytes); void* sudo=reserve(bytes);
@@ -147,6 +163,8 @@ int main() {
    // Actual preallocated main/video/stack constructor, not a test-only shim.
    utils::shm memory(bytes,std::string("_block_x00010000"),utils::shm_use::guest_data);
    assert(memory.map_critical(base,utils::protection::ro).first==base);
+   neostation::relay::set_gameplay_active(true);
+   // A boot-published object retains its shared relay backing in gameplay.
    assert(memory.map_critical(sudo).first==sudo);
    auto* self=memory.map_self(); assert(self);
    assert(objects.size()==1 && objects.begin()->second.aliases.size()==3);
@@ -171,6 +189,7 @@ int main() {
    memory.unmap_self(); assert(objects.begin()->second.aliases.empty());
  }
  assert(objects.empty()); assert(munmap(base,bytes)==0); assert(munmap(sudo,bytes)==0);
+ neostation::relay::set_gameplay_active(false);
  {
   utils::shm memory(bytes,0,utils::shm_use::guest_data);
   std::vector<std::thread> threads; std::vector<void*> views(8);

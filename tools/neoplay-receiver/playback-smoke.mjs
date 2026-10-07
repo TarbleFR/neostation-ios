@@ -87,10 +87,25 @@ try {
     assert.equal(await page.$eval('video',v => getComputedStyle(v).objectFit),'contain');
   }
   const closed=once(sender,'close'); await page.click('#stop'); await closed;
+  await page.waitForFunction(() => window.neoplayDebug?.mode === null);
+  const diagnostics = await page.evaluate(() => window.neoplayDebug.diagnostics());
+  assert.ok(diagnostics.samples.length > 0, 'receipt telemetry is retained after stop');
+  const totals = diagnostics.samples.at(-1).receive;
+  if (framesFixture) {
+    assert.equal(totals.configurations, fixture.filter(part => part.kind === 3).length);
+    assert.equal(totals.video, fixture.filter(part => part.kind === 4).length);
+    assert.equal(totals.pcm, fixture.filter(part => part.kind === 5).length);
+    assert.equal(totals.segments, 0, 'v2 has no legacy fMP4 segments');
+  } else {
+    assert.equal(totals.segments, fixture.filter(part => !part.initial).length);
+    assert.equal(totals.video, 0); assert.equal(totals.pcm, 0);
+  }
+  assert.ok(diagnostics.samples.some(row => row.receive.megabitsPerSecond > 0));
   assert.equal((await (await fetch(`http://127.0.0.1:${receiver.port}/v1/info`)).json()).available,true);
   assert.deepEqual(failures,[]);
   await mkdir('test-output',{recursive:true});
   const report = {fixtureSha256,codeCommit:process.env.GITHUB_SHA || process.env.NEOPLAY_SOURCE_SHA || null,platform:process.platform,browser:await browser.version(),fixture:process.argv[2],...measured,acknowledged,audioRenderedSilently:true,physicalIPhone:false,physicalChromecast:false};
   await writeFile(framesFixture ? 'test-output/playback-frames.json' : 'test-output/playback.json', JSON.stringify(report,null,2));
+  await writeFile(framesFixture ? 'test-output/receiver-frames-diagnostics.json' : 'test-output/receiver-segments-diagnostics.json', JSON.stringify(diagnostics,null,2));
   console.log(JSON.stringify(report));
 } finally { sender?.terminate(); await browser?.close(); await receiver.close(); }

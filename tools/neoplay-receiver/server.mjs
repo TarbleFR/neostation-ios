@@ -40,7 +40,7 @@ export async function createReceiver({port = 17642, host = '0.0.0.0', advertise 
         return json(res, 200, {v:VERSION, token:grant.token, ...limits});
       }
       if (!local(req.socket.remoteAddress) || !['localhost','127.0.0.1','[::1]'].some(h => req.headers.host === `${h}:${server.address().port}`)) return json(res, 403, {error:'local_ui_only'});
-      const assets = {'/':'index.html', '/player.mjs':'player.mjs', '/presenter.mjs':'presenter.mjs', '/protocol.mjs':'protocol.mjs', '/audio-ring.mjs':'audio-ring.mjs', '/audio-worklet.mjs':'audio-worklet.mjs'};
+      const assets = {'/':'index.html', '/player.mjs':'player.mjs', '/presenter.mjs':'presenter.mjs', '/protocol.mjs':'protocol.mjs', '/audio-ring.mjs':'audio-ring.mjs', '/audio-worklet.mjs':'audio-worklet.mjs', '/diagnostics.mjs':'diagnostics.mjs'};
       if (req.method === 'GET' && url.pathname === '/favicon.ico') { res.writeHead(204, {'Cache-Control':'max-age=86400'}); return res.end(); } // browsers ask; no 404 in the page
       if (req.method !== 'GET' || !assets[url.pathname]) return json(res, 404, {error:'not_found'});
       let data = await readFile(new URL(assets[url.pathname], import.meta.url), 'utf8');

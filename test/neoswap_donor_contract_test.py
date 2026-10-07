@@ -223,8 +223,16 @@ class DonorContractTests(unittest.TestCase):
         self.assertIn('NeoSwap_OwnerSessionActive', host)
         self.assertIn('NeoSwap_WaitForDonationReady', host)
         self.assertIn('NeoSwap_WaitForDonationReady(', bridge)
-        self.assertIn('kNeoSwapBootMinimumBytes = 384ULL * 1024 * 1024', bridge)
-        self.assertIn('kNeoSwapBootWaitMs = 1500', bridge)
+        # Startup is now observational: preparation wakes the existing queue
+        # early and a first verified 16 MiB seed is sufficient. The behavioral
+        # preparation test executes partial/refused/timed-out pool lifecycles.
+        self.assertIn('kNeoSwapBootMinimumBytes = 16ULL * 1024 * 1024', bridge)
+        self.assertIn('kNeoSwapBootWaitMs = 0', bridge)
+        wake = 'postNotificationName:@"NeoSwapRPCS3SessionStarted"'
+        self.assertLess(launch.index('NeoSwap_SetCPUBufferExperiment(cpuBuffersEnabled)'), launch.index(wake))
+        self.assertLess(launch.index(wake), launch.index('void (^present)(void)'))
+        self.assertIn('addObserverForName:@"NeoSwapRPCS3SessionStarted"', plugin)
+        self.assertIn('dispatch_async(owner.queue', plugin)
         self.assertNotIn('kNeoSwapWarmWaitMs = 8000', bridge)
         self.assertIn('pool_campaign_end(self.donorEpoch)', plugin)
         self.assertIn('Result pool_campaign_end', pool)
@@ -232,10 +240,10 @@ class DonorContractTests(unittest.TestCase):
         self.assertIn('kDonationWarmFloorBytes = 512 * kMiB', plugin)
         self.assertIn('kDonationReserveBytes = 128 * kMiB', plugin)
         self.assertIn('kDonationGrowthQuantumBytes = 128 * kMiB', plugin)
-        self.assertIn('kDonationInitialChunkBytes = 256 * kMiB', plugin)
-        self.assertIn('kDonationPrimaryChunkBytes = 256 * kMiB', plugin)
-        self.assertIn('kDonationFallbackChunkBytes = 128 * kMiB', plugin)
-        self.assertIn('kDonationConcurrentGrowths = 2', plugin)
+        self.assertIn('kDonationInitialChunkBytes = 16 * kMiB', plugin)
+        self.assertIn('kDonationPrimaryChunkBytes = 16 * kMiB', plugin)
+        self.assertIn('kDonationFallbackChunkBytes = 16 * kMiB', plugin)
+        self.assertIn('kDonationConcurrentGrowths = 1', plugin)
         self.assertIn('kDonationWarmDonorCount = 2', plugin)
         self.assertIn('- (uint64_t)adaptiveDonationTarget', plugin)
         target = plugin.split('- (uint64_t)adaptiveDonationTarget {', 1)[1].split('- (void)retireDonorsIfIdle', 1)[0]
@@ -277,7 +285,10 @@ class DonorContractTests(unittest.TestCase):
         self.assertIn('self.donorPendingMaximums[index] = @(first)', plugin)
         broker = (ROOT / 'native/neoswap-donation/Broker.h').read_text()
         self.assertIn('max_chunk_bytes = 256ULL * 1024 * 1024', broker)
-        self.assertIn('kDonationPrimaryChunkBytes == neostation::donation::max_chunk_bytes', plugin)
+        self.assertIn('kDonationPrimaryChunkBytes <= neostation::donation::max_chunk_bytes', plugin)
+        self.assertIn('requestNextChunkWithMaximumBytes:self.donorDemand.bytes', plugin)
+        self.assertIn('self.donorPendingMaximums[index].unsignedLongLongValue >= self.donorDemand.bytes', plugin)
+        self.assertIn('@"donationPreparation":preparation', plugin)
         self.assertIn('systemCyanColor', overlay)
         self.assertIn('systemOrangeColor', overlay)
         # Build409: sub-MiB RSX buffers are admitted for every title whenever

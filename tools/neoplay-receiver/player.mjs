@@ -1,5 +1,6 @@
 import { mp4Mime, MAX_BUFFERED, displayLimits, KIND, parseConfig, parseVideo, parseAudio } from './protocol.mjs';
 import { audioTime, isLive, choose, overflow } from './presenter.mjs';
+import { ReceiverDiagnostics } from './diagnostics.mjs';
 const video = document.querySelector('#video'), canvas = document.querySelector('#canvas'), status = document.querySelector('#status');
 const say = text => { status.textContent = text; };
 // Two engines. `frames` (v2): WebCodecs pictures and PCM on one sample-accurate
@@ -7,11 +8,15 @@ const say = text => { status.textContent = text; };
 // fallback for browsers without WebCodecs.
 const framesCapable = typeof VideoDecoder !== 'undefined' && typeof EncodedVideoChunk !== 'undefined' && typeof AudioWorkletNode !== 'undefined' && typeof AudioContext !== 'undefined';
 const segmentsCapable = typeof MediaSource !== 'undefined' && MediaSource.isTypeSupported('video/mp4; codecs="avc1.42E02A, mp4a.40.2"');
-let socket, engine = null, audioContext = null, workletReady = null;
-const debug = { error: null, stats: () => engine?.stats() ?? null, get audioNode() { return engine?.audioNode ?? null; }, get mode() { return engine?.mode ?? null; }, get audio() { return audioContext ? { state: audioContext.state, sampleRate: audioContext.sampleRate, baseLatency: audioContext.baseLatency, outputLatency: audioContext.outputLatency } : null; } };
+let socket, engine = null, audioContext = null, workletReady = null, diagnostics = null, lastDiagnostics = null;
+const debug = { error: null, stats: () => engine?.stats() ?? null, diagnostics: () => diagnostics?.export() ?? lastDiagnostics, get audioNode() { return engine?.audioNode ?? null; }, get mode() { return engine?.mode ?? null; }, get audio() { return audioContext ? { state: audioContext.state, sampleRate: audioContext.sampleRate, baseLatency: audioContext.baseLatency, outputLatency: audioContext.outputLatency } : null; } };
 const fail = error => { debug.error = error?.message ?? String(error); say(debug.error); };
 window.neoplayDebug = debug;
-function closeMedia() { engine?.close(); engine = null; }
+function closeMedia() {
+  if (engine && diagnostics) { diagnostics.sample(engine.mode, engine.stats()); lastDiagnostics = diagnostics.export(); }
+  engine?.close(); engine = null; diagnostics = null;
+}
+function sampleDiagnostics() { return engine && diagnostics ? diagnostics.sample(engine.mode, engine.stats()) : null; }
 function report() {
   if (socket?.readyState !== WebSocket.OPEN) return;
   const bounds = document.querySelector('#stage').getBoundingClientRect();
@@ -110,11 +115,14 @@ function createFramesEngine() {
     const { pts, samples } = parseAudio(packet, config.channels); counters.pcmPackets++;
     node.port.postMessage({ type: 'pcm', pts, samples }, [samples.buffer]);
   }
-  const timer = setInterval(() => { if (config) say(`Receiving · frames · ${config.width}×${config.height} · audio cushion ${(clock.fillSeconds * 1000).toFixed(0)}/${(clock.targetSeconds * 1000).toFixed(0)} ms · rate ${clock.ratio.toFixed(3)} · late ${counters.droppedLate} · underruns ${clock.stats?.underruns ?? 0} · skips ${clock.stats?.skips ?? 0} · recoveries ${counters.recoveries}`); }, 500);
+  const timer = setInterval(() => {
+    const row = sampleDiagnostics();
+    if (config && row) say(`Receiving · frames · ${config.width}×${config.height} · video ${counters.presented}/${counters.pictures} · PCM ${counters.pcmPackets} · rx ${row.receive.megabitsPerSecond.toFixed(2)} Mbps / ${row.receive.packetsPerSecond.toFixed(0)} pkt/s · audio cushion ${(clock.fillSeconds * 1000).toFixed(0)}/${(clock.targetSeconds * 1000).toFixed(0)} ms · resample ${clock.ratio.toFixed(3)} · late-video ${counters.droppedLate} · underruns ${clock.stats?.underruns ?? 0} PCM frames · skips ${clock.stats?.skips ?? 0} · recoveries ${counters.recoveries}`);
+  }, 500);
   return {
     mode: 'frames',
     get audioNode() { return node; },
-    stats: () => ({ ...counters, queue: queue.length, clock: { ...clock }, config: config ? { width: config.width, height: config.height, sampleRate: config.sampleRate, channels: config.channels, codec: config.codec } : null }),
+    stats: () => ({ ...counters, queue: queue.length, audioOutputSampleRate: audioContext?.sampleRate ?? null, clock: { ...clock }, config: config ? { width: config.width, height: config.height, sampleRate: config.sampleRate, channels: config.channels, codec: config.codec } : null }),
     async receive(packet) {
       if (packet[0] === KIND.CONFIG) await configure(packet);
       else if (packet[0] === KIND.VIDEO) picture(packet);
@@ -173,6 +181,7 @@ function createSegmentsEngine() {
     if (started) say(`Receiving · segments · buffer ${Math.max(0, lag).toFixed(2)} s · ${video.videoWidth}×${video.videoHeight} · aspect preserved`);
   }
   const onTime = () => synchronize();
+  const timer = setInterval(sampleDiagnostics, 500);
   const onPlaying = () => { if (video.readyState >= 2) acknowledge(); };
   video.addEventListener('timeupdate', onTime); video.addEventListener('playing', onPlaying);
   return {
@@ -182,7 +191,7 @@ function createSegmentsEngine() {
       if (packet[0] === KIND.INIT) initialize(packet.slice(1).buffer);
       else if (packet[0] === KIND.SEGMENT && mediaSource) enqueue(packet.slice(1).buffer);
     },
-    close() { closed = true; video.removeEventListener('timeupdate', onTime); video.removeEventListener('playing', onPlaying); release(); },
+    close() { closed = true; clearInterval(timer); video.removeEventListener('timeupdate', onTime); video.removeEventListener('playing', onPlaying); release(); },
   };
 }
 document.querySelector('#ready').onclick = () => {
@@ -203,10 +212,11 @@ document.querySelector('#ready').onclick = () => {
       // A new fMP4 initialization restarts MediaSource. A later frames configuration
       // (a link tier change) reconfigures the running frames engine in place: its
       // sound and clock continue; only a protocol change builds a new engine.
-      if (packet[0] === KIND.INIT || (packet[0] === KIND.CONFIG && engine?.mode !== 'frames')) { closeMedia(); engine = packet[0] === KIND.CONFIG ? createFramesEngine() : createSegmentsEngine(); }
+      if (packet[0] === KIND.INIT || (packet[0] === KIND.CONFIG && engine?.mode !== 'frames')) { closeMedia(); diagnostics = new ReceiverDiagnostics(); engine = packet[0] === KIND.CONFIG ? createFramesEngine() : createSegmentsEngine(); }
       if (!engine) return;
-      const current = engine;
-      chain = chain.then(() => current.receive(packet)).catch(error => { fail(error); socket?.close(); closeMedia(); });
+      const current = engine, currentDiagnostics = diagnostics, receivedAt = performance.now();
+      currentDiagnostics.received(packet, receivedAt);
+      chain = chain.then(() => { if (current !== engine) return; currentDiagnostics.processed(receivedAt); return current.receive(packet); }).catch(error => { fail(error); socket?.close(); closeMedia(); });
     } catch (error) { fail(error); socket.close(); closeMedia(); }
   };
   socket.onclose = () => { closeMedia(); say('Receiver disconnected. Click Ready to restart.'); };

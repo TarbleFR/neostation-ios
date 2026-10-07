@@ -130,9 +130,13 @@ int main() {
     memset(p, 0xC3, 64 * KiB);
     void* grown = rsx::aligned_allocator::realloc<64>(p, 64 * KiB, 256 * KiB); assert(grown);
     for (size_t n = 0; n < 64 * KiB; ++n) assert(static_cast<unsigned char*>(grown)[n] == 0xC3);
+    assert(cpu().live_bytes == (64 + 256) * KiB); // old FAST loan remains owned pending maintenance
+    (void)NeoSwap_RelayLoanMaintain(0, 0); // also drains donor-only builds
     assert(cpu().live_bytes == 256 * KiB);
     NeoSwap_SetCPUBufferPressure(1);
-    p = rsx::aligned_allocator::realloc<64>(grown, 256 * KiB, 512 * KiB); assert(p && !cpu().live_bytes);
+    p = rsx::aligned_allocator::realloc<64>(grown, 256 * KiB, 512 * KiB); assert(p && cpu().live_bytes == 256 * KiB);
+    (void)NeoSwap_RelayLoanMaintain(0, 0);
+    assert(!cpu().live_bytes);
     for (size_t n = 0; n < 64 * KiB; ++n) assert(static_cast<unsigned char*>(p)[n] == 0xC3);
     rsx::aligned_allocator::free(p);
     NeoSwap_SetCPUBufferPressure(0);

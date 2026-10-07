@@ -529,6 +529,7 @@ const char* stage_name(Stage stage) noexcept {
     case Stage::memory_pressure: return "memory_pressure";
     case Stage::pool_duplicate_pid: return "pool_duplicate_pid";
     case Stage::snapshot_busy: return "snapshot_busy";
+    case Stage::pool_busy: return "pool_busy";
   }
   return "unknown";
 }

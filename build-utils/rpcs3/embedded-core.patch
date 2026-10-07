@@ -3790,10 +3790,17 @@ index 0000000..665988a
 +}
 +}
 diff --git a/rpcs3/Emu/Cell/SPUCommonRecompiler.cpp b/rpcs3/Emu/Cell/SPUCommonRecompiler.cpp
-index d451a94..f62b48a 100644
+index d451a94..b4ad7ab 100644
 --- a/rpcs3/Emu/Cell/SPUCommonRecompiler.cpp
 +++ b/rpcs3/Emu/Cell/SPUCommonRecompiler.cpp
-@@ -40,6 +40,19 @@ const extern spu_decoder<spu_itype> g_spu_itype;
+@@ -1,5 +1,6 @@
+ #include "stdafx.h"
+ #include "SPURecompiler.h"
++#include "SPUWarmupPolicy.h"
+ 
+ #include "Emu/System.h"
+ #include "Emu/system_config.h"
+@@ -40,6 +41,19 @@ const extern spu_decoder<spu_itype> g_spu_itype;
  const extern spu_decoder<spu_iname> g_spu_iname;
  const extern spu_decoder<spu_iflag> g_spu_iflag;
  
@@ -3813,7 +3820,7 @@ index d451a94..f62b48a 100644
  constexpr u32 s_reg_max = spu_recompiler_base::s_reg_max;
  
  template<typename T>
-@@ -279,7 +292,19 @@ static void ghc_cpp_trampoline(u64 fn_target, native_asm& c, auto& args)
+@@ -279,7 +293,19 @@ static void ghc_cpp_trampoline(u64 fn_target, native_asm& c, auto& args)
  }
  #endif
  
@@ -3834,7 +3841,7 @@ index d451a94..f62b48a 100644
  {
  	jit_write_guard jit_guard;
  #if defined(ARCH_X64)
-@@ -306,8 +331,11 @@ DECLARE(spu_runtime::tr_dispatch) = []
+@@ -306,8 +332,11 @@ DECLARE(spu_runtime::tr_dispatch) = []
  #error "Unimplemented"
  #endif
  }();
@@ -3847,7 +3854,7 @@ index d451a94..f62b48a 100644
  {
  	jit_write_guard jit_guard;
  #if defined(ARCH_X64)
-@@ -332,8 +360,11 @@ DECLARE(spu_runtime::tr_branch) = []
+@@ -332,8 +361,11 @@ DECLARE(spu_runtime::tr_branch) = []
  #error "Unimplemented"
  #endif
  }();
@@ -3860,7 +3867,7 @@ index d451a94..f62b48a 100644
  {
  	jit_write_guard jit_guard;
  #if defined(ARCH_X64)
-@@ -354,23 +385,30 @@ DECLARE(spu_runtime::tr_interpreter) = []
+@@ -354,23 +386,30 @@ DECLARE(spu_runtime::tr_interpreter) = []
  	return trptr;
  #endif
  }();
@@ -3895,7 +3902,7 @@ index d451a94..f62b48a 100644
  {
  	jit_write_guard jit_guard;
  
-@@ -400,11 +438,11 @@ DECLARE(spu_runtime::tr_all) = []
+@@ -400,11 +439,11 @@ DECLARE(spu_runtime::tr_all) = []
  	*raw++ = 0xe8;
  	*raw++ = 0x0c;
  
@@ -3909,7 +3916,7 @@ index d451a94..f62b48a 100644
  	std::memcpy(raw, &r32, 4);
  	raw += 4;
  
-@@ -427,7 +465,7 @@ DECLARE(spu_runtime::tr_all) = []
+@@ -427,7 +466,7 @@ DECLARE(spu_runtime::tr_all) = []
  
  #elif defined(ARCH_ARM64)
  	auto trptr = build_function_asm<spu_function_t>("tr_all",
@@ -3918,7 +3925,7 @@ index d451a94..f62b48a 100644
  		{
  			using namespace asmjit;
  
-@@ -449,12 +487,12 @@ DECLARE(spu_runtime::tr_all) = []
+@@ -449,12 +488,12 @@ DECLARE(spu_runtime::tr_all) = []
  			c.ldr(a64::w3, arm::Mem(a64::x7));
  			// shr (32 - 20)
  			c.lsr(a64::w3, a64::w3, Imm(32 - 20));
@@ -3934,7 +3941,7 @@ index d451a94..f62b48a 100644
  			c.mov(a64::x6, Imm(8));
  			c.mul(a64::x6, a64::x3, a64::x6);
  			c.add(a64::x4, a64::x4, a64::x6);
-@@ -468,8 +506,11 @@ DECLARE(spu_runtime::tr_all) = []
+@@ -468,8 +507,11 @@ DECLARE(spu_runtime::tr_all) = []
  #error "Unimplemented"
  #endif
  }();
@@ -3947,7 +3954,7 @@ index d451a94..f62b48a 100644
  {
  	// Gateway for SPU dispatcher, converts from native to GHC calling convention, also saves RSP value for spu_escape
  	using namespace asmjit;
-@@ -519,7 +560,7 @@ DECLARE(spu_runtime::g_gateway) = build_function_asm<spu_function_t>("spu_gatewa
+@@ -519,7 +561,7 @@ DECLARE(spu_runtime::g_gateway) = build_function_asm<spu_function_t>("spu_gatewa
  		c.vzeroupper();
  	}
  
@@ -3956,7 +3963,7 @@ index d451a94..f62b48a 100644
  
  	if (utils::has_avx())
  	{
-@@ -599,7 +640,7 @@ DECLARE(spu_runtime::g_gateway) = build_function_asm<spu_function_t>("spu_gatewa
+@@ -599,7 +641,7 @@ DECLARE(spu_runtime::g_gateway) = build_function_asm<spu_function_t>("spu_gatewa
  	c.sub(a64::sp, a64::sp, Imm(8192));
  #endif
  
@@ -3965,7 +3972,7 @@ index d451a94..f62b48a 100644
  	c.blr(a64::x0);
  
  	// This is the return point for the far ret. Never jump back into host code without coming through this exit
-@@ -628,8 +669,11 @@ DECLARE(spu_runtime::g_gateway) = build_function_asm<spu_function_t>("spu_gatewa
+@@ -628,8 +670,11 @@ DECLARE(spu_runtime::g_gateway) = build_function_asm<spu_function_t>("spu_gatewa
  #error "Unimplemented"
  #endif
  });
@@ -3978,7 +3985,7 @@ index d451a94..f62b48a 100644
  {
  	using namespace asmjit;
  
-@@ -652,8 +696,11 @@ DECLARE(spu_runtime::g_escape) = build_function_asm<void(*)(spu_thread*)>("spu_e
+@@ -652,8 +697,11 @@ DECLARE(spu_runtime::g_escape) = build_function_asm<void(*)(spu_thread*)>("spu_e
  #error "Unimplemented"
  #endif
  });
@@ -3991,7 +3998,7 @@ index d451a94..f62b48a 100644
  {
  	using namespace asmjit;
  
-@@ -730,6 +777,53 @@ DECLARE(spu_runtime::g_tail_escape) = build_function_asm<void(*)(spu_thread*, sp
+@@ -730,6 +778,53 @@ DECLARE(spu_runtime::g_tail_escape) = build_function_asm<void(*)(spu_thread*, sp
  #error "Unimplemented"
  #endif
  });
@@ -4045,7 +4052,7 @@ index d451a94..f62b48a 100644
  
  DECLARE(spu_runtime::g_interpreter_table) = {};
  
-@@ -845,6 +939,10 @@ static u16 calculate_crc16(const uchar* data, usz length)
+@@ -845,6 +940,10 @@ static u16 calculate_crc16(const uchar* data, usz length)
  
  std::deque<spu_program> spu_cache::get()
  {
@@ -4056,7 +4063,7 @@ index d451a94..f62b48a 100644
  	std::deque<spu_program> result;
  
  	if (!m_file)
-@@ -852,10 +950,18 @@ std::deque<spu_program> spu_cache::get()
+@@ -852,10 +951,18 @@ std::deque<spu_program> spu_cache::get()
  		return result;
  	}
  
@@ -4078,7 +4085,7 @@ index d451a94..f62b48a 100644
  	{
  		struct block_info_t
  		{
-@@ -864,37 +970,48 @@ std::deque<spu_program> spu_cache::get()
+@@ -864,37 +971,48 @@ std::deque<spu_program> spu_cache::get()
  			be_t<u32> addr;
  		} block_info{};
  
@@ -4135,7 +4142,7 @@ index d451a94..f62b48a 100644
  			continue;
  		}
  
-@@ -905,11 +1022,39 @@ std::deque<spu_program> spu_cache::get()
+@@ -905,11 +1023,39 @@ std::deque<spu_program> spu_cache::get()
  		result.emplace_front(std::move(res));
  	}
  
@@ -4175,7 +4182,7 @@ index d451a94..f62b48a 100644
  	if (!m_file)
  	{
  		return;
-@@ -917,9 +1062,8 @@ void spu_cache::add(const spu_program& func)
+@@ -917,9 +1063,8 @@ void spu_cache::add(const spu_program& func)
  
  	be_t<u32> size = ::size32(func.data);
  	be_t<u32> addr = func.entry_point;
@@ -4187,7 +4194,7 @@ index d451a94..f62b48a 100644
  
  	const fs::iovec_clone gather[3]
  	{
-@@ -927,9 +1071,33 @@ void spu_cache::add(const spu_program& func)
+@@ -927,9 +1072,33 @@ void spu_cache::add(const spu_program& func)
  		{&addr, sizeof(addr)},
  		{func.data.data(), func.data.size() * 4}
  	};
@@ -4223,7 +4230,7 @@ index d451a94..f62b48a 100644
  }
  
  void spu_cache::initialize(bool build_existing_cache)
-@@ -974,8 +1142,22 @@ void spu_cache::initialize(bool build_existing_cache)
+@@ -974,8 +1143,22 @@ void spu_cache::initialize(bool build_existing_cache)
  		return;
  	}
  
@@ -4248,7 +4255,112 @@ index d451a94..f62b48a 100644
  	atomic_t<usz> fnext{};
  	atomic_t<u8> fail_flag{0};
  
-@@ -1302,7 +1484,7 @@ void spu_cache::initialize(bool build_existing_cache)
+@@ -989,12 +1172,20 @@ void spu_cache::initialize(bool build_existing_cache)
+ 		total_precompile += sec.funcs.size();
+ 	}
+ 
+-	const bool spu_precompilation_enabled = func_list.empty() && g_cfg.core.spu_cache && g_cfg.core.llvm_precompilation;
++	#ifdef RPCS3_IOS
++	const bool targeted_warmup = rpcs3::ios::is_god_of_war_iii_title(Emu.GetTitleID());
++#else
++	constexpr bool targeted_warmup = false;
++#endif
++	const bool spu_precompilation_enabled = rpcs3::spu::precompile_discovered(
++		g_cfg.core.llvm_precompilation, g_cfg.core.spu_cache, func_list.empty(), targeted_warmup && build_existing_cache);
+ 
+ 	if (spu_precompilation_enabled)
+ 	{
+-		// What compiles in this case goes straight to disk
++		// Keep the writer available for newly discovered modules even when this
++		// title already has metadata. Existing records are marked cached below.
+ 		g_fxo->get<spu_cache>() = std::move(cache);
++		g_fxo->get<spu_cache>().collect_funcs_to_precompile = false;
+ 	}
+ 	else if (!build_existing_cache)
+ 	{
+@@ -1046,6 +1237,9 @@ void spu_cache::initialize(bool build_existing_cache)
+ 		}
+ 
+ 		worker_count = std::min<u32>(rpcs3::utils::get_max_threads(), ::narrow<u32>(add_count));
++#ifdef RPCS3_IOS
++		worker_count = rpcs3::spu::warmup_worker_count(worker_count, g_cfg.core.llvm_threads, true);
++#endif
+ 	}
+ 
+ 	atomic_t<u32> pending_progress = 0;
+@@ -1058,8 +1252,20 @@ void spu_cache::initialize(bool build_existing_cache)
+ 		progress_dialog.emplace(get_localized_string(localized_string_id::PROGRESS_DIALOG_BUILDING_SPU_CACHE));
+ 	}
+ 
++#ifdef RPCS3_IOS
++	const u64 warmup_started = utils::get_tsc();
++	atomic_t<u32> warmup_mismatches = 0;
++	spu_log.notice("SPUWARMUP begin title=%s llvm_precompilation=%u spu_cache=%u metadata=%llu discovered=%llu workers=%u",
++		Emu.GetTitleID(), +g_cfg.core.llvm_precompilation.get(), +g_cfg.core.spu_cache.get(),
++		static_cast<u64>(func_list.size()), static_cast<u64>(total_precompile), worker_count);
++#endif
++	// Reuse the same workers for both phases. A fast worker must not append
++	// a discovered duplicate before another worker marks its disk record.
++	std::barrier metadata_replayed{static_cast<std::ptrdiff_t>(worker_count)};
+ 	named_thread_group workers("SPU Worker ", worker_count, [&]() -> uint
+ 	{
++		rpcs3::spu::warmup_barrier_guard metadata_phase{metadata_replayed};
++		rpcs3::spu::warmup_scope phase;
+ #ifdef __APPLE__
+ 		// Apple Silicon W^X: enable JIT write mode for this worker and
+ 		// pair it with an RAII guard so execute mode is restored on
+@@ -1170,8 +1376,14 @@ void spu_cache::initialize(bool build_existing_cache)
+ 			// Call analyser
+ 			spu_program func2 = compiler->analyse(ls.data(), func.entry_point);
+ 
++			// Always clear the entire previous record before reusing this LS,
++			// including failed analysis and failed compilation paths.
++			rpcs3::spu::clear_warmup_local_store(std::span{ls.data() + start / 4, size0});
+ 			if (func2 != func)
+ 			{
++#ifdef RPCS3_IOS
++				warmup_mismatches++;
++#endif
+ 				spu_log.error("[0x%05x] SPU Analyser failed, %u vs %u", func2.entry_point, func2.data.size(), size0);
+ 
+ 				if (logged_error < 2)
+@@ -1182,16 +1394,20 @@ void spu_cache::initialize(bool build_existing_cache)
+ 					logged_error++;
+ 				}
+ 			}
+-			else if (!compile_program(std::move(func2)))
++			else
+ 			{
+-				// Likely, out of JIT memory. Signal to prevent further building.
+-				fail_flag |= 1;
+-				continue;
++				// Mark this raw disk record only after compile() has accepted its
++				// input. Pre-adding here could strand a relocated duplicate if
++				// the retry wrapper's program copy throws before claiming it.
++				rpcs3::spu::metadata_replay_scope metadata_record;
++				if (!compile_program(std::move(func2)))
++				{
++					// Preserve usable compiled blocks and compile the rest on demand.
++					fail_flag |= 1;
++					continue;
++				}
+ 			}
+ 
+-			// Clear fake LS
+-			std::memset(ls.data() + start / 4, 0, 4 * (size0 - 1));
+-
+ 			result++;
+ 
+ 			if (is_first_thread && !showing_progress)
+@@ -1211,6 +1427,7 @@ void spu_cache::initialize(bool build_existing_cache)
+ 			}
+ 		}
+ 
++		metadata_phase.wait();
+ 		u32 last_sec_idx = umax;
+ 
+ 		for (func_i = data_indexer++;; func_i = data_indexer++, (showing_progress ? g_progr_pdone : pending_progress) += build_existing_cache ? 1 : 0)
+@@ -1302,7 +1519,7 @@ void spu_cache::initialize(bool build_existing_cache)
  				{
  					if (ls[start_new / 4] && g_spu_itype.decode(ls[start_new / 4]) != spu_itype::UNK)
  					{
@@ -4257,7 +4369,7 @@ index d451a94..f62b48a 100644
  						func2 = compiler->analyse(ls.data(), start_new, &targets);
  						block_addr = start_new;
  						continue;
-@@ -1366,7 +1548,7 @@ void spu_cache::initialize(bool build_existing_cache)
+@@ -1366,7 +1583,7 @@ void spu_cache::initialize(bool build_existing_cache)
  				}
  
  
@@ -4266,7 +4378,19 @@ index d451a94..f62b48a 100644
  				func2 = compiler->analyse(ls.data(), new_entry, &targets);
  				block_addr = new_entry;
  			}
-@@ -1432,7 +1614,7 @@ void spu_cache::initialize(bool build_existing_cache)
+@@ -1408,6 +1625,11 @@ void spu_cache::initialize(bool build_existing_cache)
+ 	}
+ 
+ #ifdef RPCS3_IOS
++	const auto warmup_frequency = utils::get_tsc_freq();
++	spu_log.notice("SPUWARMUP end title=%s metadata=%llu discovered=%llu programs=%u analyzer_mismatches=%u failed=%u stopped=%u elapsed_ms=%.3f",
++		Emu.GetTitleID(), static_cast<u64>(func_list.size()), static_cast<u64>(total_precompile), built_total,
++		warmup_mismatches.load(), +!!fail_flag, +Emu.IsStopped(),
++		warmup_frequency ? static_cast<double>(utils::get_tsc() - warmup_started) * 1000.0 / warmup_frequency : 0.0);
+ 	if (const u64 released = rpcs3::ios::relieve_process_memory_pressure())
+ 	{
+ 		spu_log.notice("iOS released %llu MiB of transient SPU compilation memory", released / rpcs3::ios::process_memory_mib);
+@@ -1432,9 +1654,10 @@ void spu_cache::initialize(bool build_existing_cache)
  	}
  
  	// Initialize global cache instance
@@ -4274,8 +4398,11 @@ index d451a94..f62b48a 100644
 +	if (g_cfg.core.spu_cache && !spu_precompilation_enabled && cache && !defer_existing_spu_cache)
  	{
  		g_fxo->get<spu_cache>() = std::move(cache);
++		g_fxo->get<spu_cache>().collect_funcs_to_precompile = false;
  	}
-@@ -1499,8 +1681,8 @@ spu_runtime::spu_runtime()
+ }
+ 
+@@ -1499,8 +1722,8 @@ spu_runtime::spu_runtime()
  #ifdef RPCS3_IOS
  	if (rpcs3::ios::get_experimental_policy().persistent_spu_object_cache)
  	{
@@ -4286,7 +4413,7 @@ index d451a94..f62b48a 100644
  		constexpr usz max_files = 12'000;
  		sha1_context ctx;
  		u8 key[20];
-@@ -1889,7 +2071,12 @@ spu_function_t spu_runtime::rebuild_ubertrampoline(u32 id_inst)
+@@ -1889,7 +2112,12 @@ spu_function_t spu_runtime::rebuild_ubertrampoline(u32 id_inst)
  			if (w.level >= w.beg->first.size() || w.level >= it->first.size())
  			{
  				// If functions cannot be compared, assume smallest function
@@ -4300,7 +4427,7 @@ index d451a94..f62b48a 100644
  #if defined(ARCH_X64)
  				make_jump(0xe9, w.beg->second); // jmp rel32
  #elif defined(ARCH_ARM64)
-@@ -1928,7 +2115,7 @@ spu_function_t spu_runtime::rebuild_ubertrampoline(u32 id_inst)
+@@ -1928,7 +2156,7 @@ spu_function_t spu_runtime::rebuild_ubertrampoline(u32 id_inst)
  
  			if (it == m_flat_list.end())
  			{
@@ -4309,7 +4436,7 @@ index d451a94..f62b48a 100644
  #if defined(ARCH_X64)
  				make_jump(0xe9, w.beg->second); // jmp rel32
  #elif defined(ARCH_ARM64)
-@@ -2564,6 +2751,7 @@ void spu_recompiler_base::old_interpreter(spu_thread& spu, void* ls, u8* /*rip*/
+@@ -2564,6 +2792,7 @@ void spu_recompiler_base::old_interpreter(spu_thread& spu, void* ls, u8* /*rip*/
  
  	// LS pointer
  	const auto base = static_cast<const u8*>(ls);
@@ -4317,7 +4444,7 @@ index d451a94..f62b48a 100644
  
  	while (true)
  	{
-@@ -2581,7 +2769,8 @@ void spu_recompiler_base::old_interpreter(spu_thread& spu, void* ls, u8* /*rip*/
+@@ -2581,7 +2810,8 @@ void spu_recompiler_base::old_interpreter(spu_thread& spu, void* ls, u8* /*rip*/
  		}
  
  		const u32 op = *reinterpret_cast<const be_t<u32>*>(base + spu.pc);
@@ -4327,7 +4454,7 @@ index d451a94..f62b48a 100644
  			spu.pc += 4;
  	}
  }
-@@ -3174,6 +3363,55 @@ struct block_reg_info
+@@ -3174,6 +3404,55 @@ struct block_reg_info
  	}
  };
  
@@ -4383,7 +4510,7 @@ index d451a94..f62b48a 100644
  spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, std::map<u32, std::vector<u32>>* out_target_list)
  {
  	// Result: addr + raw instruction data
-@@ -3401,11 +3639,23 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
+@@ -3401,11 +3680,23 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
  			{
  				const u32 target = spu_branch_target(av);
  
@@ -4408,7 +4535,7 @@ index d451a94..f62b48a 100644
  					break;
  				}
  
-@@ -5789,7 +6039,7 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
+@@ -5789,7 +6080,7 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
  				getllar_starts[previous.lsa_pc] = true;
  				g_fxo->get<putllc16_statistics_t>().breaking_reason[cause]++;
  
@@ -4417,7 +4544,7 @@ index d451a94..f62b48a 100644
  				{
  					return;
  				}
-@@ -5829,7 +6079,7 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
+@@ -5829,7 +6120,7 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
  				}
  
  				fmt::append(tracing, " of %d failures", fail_count);
@@ -4426,7 +4553,7 @@ index d451a94..f62b48a 100644
  			}
  		};
  
-@@ -5846,7 +6096,7 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
+@@ -5846,7 +6137,7 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
  
  				g_fxo->get<rchcnt_statistics_t>().breaking_reason[cause]++;
  
@@ -4435,7 +4562,7 @@ index d451a94..f62b48a 100644
  				{
  					return;
  				}
-@@ -5886,7 +6136,7 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
+@@ -5886,7 +6177,7 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
  				}
  
  				fmt::append(tracing, " of %d failures", fail_count);
@@ -4444,7 +4571,7 @@ index d451a94..f62b48a 100644
  			}
  		};
  
-@@ -5896,7 +6146,7 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
+@@ -5896,7 +6187,7 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
  			{
  				g_fxo->get<reduced_statistics_t>().breaking_reason[cause]++;
  
@@ -4453,7 +4580,7 @@ index d451a94..f62b48a 100644
  				{
  					return;
  				}
-@@ -5941,12 +6191,12 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
+@@ -5941,12 +6232,12 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
  				}
  
  				fmt::append(tracing, " of %d failures", fail_count);
@@ -4468,7 +4595,7 @@ index d451a94..f62b48a 100644
  			}
  		};
  
-@@ -6157,7 +6407,7 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
+@@ -6157,7 +6448,7 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
  						{
  							if (!std::exchange(logged_block[target_pc / 4], true))
  							{
@@ -4477,7 +4604,7 @@ index d451a94..f62b48a 100644
  							}
  
  							state_it->parent_target_index++;
-@@ -6830,7 +7080,14 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
+@@ -6830,7 +7121,14 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
  			{
  				const reg_state_t& rt = vregs[op.rt];
  
@@ -4493,7 +4620,7 @@ index d451a94..f62b48a 100644
  				{
  					if (rchcnt_loop->conditioned)
  					{
-@@ -6841,7 +7098,11 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
+@@ -6841,7 +7139,11 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
  
  					rchcnt_loop->conditioned = true;
  					rchcnt_loop->branch_pc = pos;
@@ -4506,7 +4633,7 @@ index d451a94..f62b48a 100644
  				}
  
  				break;
-@@ -7679,7 +7940,7 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
+@@ -7679,7 +7981,7 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
  							if (getllar_starts.emplace(atomic16->lsa_pc, false).second)
  							{
  								g_fxo->get<putllc16_statistics_t>().all++;
@@ -4515,7 +4642,7 @@ index d451a94..f62b48a 100644
  							}
  						}
  
-@@ -8745,7 +9006,7 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
+@@ -8745,7 +9047,7 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
  
  			if (rchcnt_loop->active)
  			{
@@ -4524,7 +4651,7 @@ index d451a94..f62b48a 100644
  				{
  					if (op.si10 != 0 && op.si10 != 1)
  					{
-@@ -8754,7 +9015,9 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
+@@ -8754,7 +9056,9 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
  					}
  
  					rchcnt_loop->ch_product = vregs[op.rt];
@@ -4535,7 +4662,7 @@ index d451a94..f62b48a 100644
  				}
  			}
  
-@@ -9007,7 +9270,7 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
+@@ -9007,7 +9311,7 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
  			add_pattern(inst_attr::putllc16, pattern.put_pc - result.entry_point, value.data);
  		}
  
@@ -4544,7 +4671,7 @@ index d451a94..f62b48a 100644
  			, pattern.mem_count, pattern.put_pc, value.type == v_relative, value.off18, value.type == v_const, value.type == v_reg2, value.reg, value.runtime16_select, entry_point, func_hash, pattern_hash, +stats.nowrite, ++stats.single, +stats.all);
  	}
  
-@@ -9024,6 +9287,11 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
+@@ -9024,6 +9328,11 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
  			continue;
  		}
  
@@ -4556,7 +4683,7 @@ index d451a94..f62b48a 100644
  		if (inst_attr attr = m_inst_attrs[(read_pc - entry_point) / 4]; attr == inst_attr::none)
  		{
  			add_pattern(inst_attr::rchcnt_loop, read_pc - result.entry_point, 0);
-@@ -9113,7 +9381,7 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
+@@ -9113,7 +9422,7 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
  
  	if (likely_putllc_loop && !had_putllc_evaluation)
  	{
@@ -4565,6 +4692,15 @@ index d451a94..f62b48a 100644
  	}
  
  	if (result.data.empty())
+@@ -9359,7 +9668,7 @@ struct spu_llvm_worker
+ 			}
+ 
+ 			// Clear fake LS
+-			std::memset(ls.data() + start / 4, 0, 4 * (size0 - 1));
++			rpcs3::spu::clear_warmup_local_store(std::span{ls.data() + start / 4, size0});
+ 		}
+ 
+ 		if (set_relax_flag)
 diff --git a/rpcs3/Emu/Cell/SPUInterpreter.cpp b/rpcs3/Emu/Cell/SPUInterpreter.cpp
 index ca3133c..1324ab8 100644
 --- a/rpcs3/Emu/Cell/SPUInterpreter.cpp
@@ -4853,17 +4989,19 @@ index 0000000..9d19266
 +}
 +}
 diff --git a/rpcs3/Emu/Cell/SPULLVMRecompiler.cpp b/rpcs3/Emu/Cell/SPULLVMRecompiler.cpp
-index 9a1e4c7..1e15f6d 100644
+index 9a1e4c7..a715849 100644
 --- a/rpcs3/Emu/Cell/SPULLVMRecompiler.cpp
 +++ b/rpcs3/Emu/Cell/SPULLVMRecompiler.cpp
-@@ -1,4 +1,6 @@
+@@ -1,5 +1,8 @@
  #include "stdafx.h"
 +
 +// NEOSTATION_SPU_ARM64_LOWERING_41F0ECC_V1: ported from upstream 41f0ecc.
  #include "SPURecompiler.h"
++#include "SPUWarmupPolicy.h"
  
  #include "Emu/System.h"
-@@ -8,6 +10,11 @@
+ #include "Emu/system_config.h"
+@@ -8,6 +11,11 @@
  #include "Emu/Cell/lv2/sys_time.h"
  #include "Emu/Memory/vm_reservation.h"
  #include "Emu/RSX/Core/RSXReservationLock.hpp"
@@ -4875,7 +5013,7 @@ index 9a1e4c7..1e15f6d 100644
  #include "Crypto/sha1.h"
  #include "Utilities/JIT.h"
  
-@@ -27,6 +34,19 @@ const extern spu_decoder<spu_iflag> g_spu_iflag;
+@@ -27,6 +35,19 @@ const extern spu_decoder<spu_iflag> g_spu_iflag;
  
  #ifdef LLVM_AVAILABLE
  
@@ -4895,7 +5033,7 @@ index 9a1e4c7..1e15f6d 100644
  #include "Emu/CPU/CPUTranslator.h"
  
  #ifdef _MSC_VER
-@@ -61,9 +81,12 @@ const extern spu_decoder<spu_iflag> g_spu_iflag;
+@@ -61,9 +82,12 @@ const extern spu_decoder<spu_iflag> g_spu_iflag;
  #endif
  
  #ifdef ARCH_ARM64
@@ -4908,7 +5046,7 @@ index 9a1e4c7..1e15f6d 100644
  
  namespace
  {
-@@ -706,19 +729,44 @@ class spu_llvm_recompiler : public spu_recompiler_base, public cpu_translator
+@@ -706,19 +730,44 @@ class spu_llvm_recompiler : public spu_recompiler_base, public cpu_translator
  	{
  		ensure(val && val->getType() == get_type<f64[4]>());
  
@@ -4953,7 +5091,7 @@ index 9a1e4c7..1e15f6d 100644
  		// Use integer operations here so LLVM can fold the masks into VPTERNLOG
  		if (m_use_avx512)
  		{
-@@ -728,6 +776,7 @@ class spu_llvm_recompiler : public spu_recompiler_base, public cpu_translator
+@@ -728,6 +777,7 @@ class spu_llvm_recompiler : public spu_recompiler_base, public cpu_translator
  			const auto e = m_ir->CreateAnd(val, 0x7f800000);
  			return uint64_as_double(m_ir->CreateSelect(m_ir->CreateIsNotNull(e), f, s));
  		}
@@ -4961,7 +5099,7 @@ index 9a1e4c7..1e15f6d 100644
  
  		const auto s = m_ir->CreateShl(m_ir->CreateAnd(x, 0x80000000), 32);
  		const auto a = m_ir->CreateAnd(x, 0x7fffffff);
-@@ -735,6 +784,7 @@ class spu_llvm_recompiler : public spu_recompiler_base, public cpu_translator
+@@ -735,6 +785,7 @@ class spu_llvm_recompiler : public spu_recompiler_base, public cpu_translator
  		const auto r = m_ir->CreateSelect(m_ir->CreateICmpSGT(a, splat<u64[4]>(0x7fffff).eval(m_ir)), m, splat<u64[4]>(0).eval(m_ir));
  		const auto f = m_ir->CreateOr(s, r);
  		return uint64_as_double(f);
@@ -4969,7 +5107,7 @@ index 9a1e4c7..1e15f6d 100644
  	}
  
  	// Clamp double values to ±Smax, flush values smaller than ±Smin to positive zero
-@@ -742,6 +792,7 @@ class spu_llvm_recompiler : public spu_recompiler_base, public cpu_translator
+@@ -742,6 +793,7 @@ class spu_llvm_recompiler : public spu_recompiler_base, public cpu_translator
  	{
  		ensure(val && val->getType() == get_type<f64[4]>());
  
@@ -4977,7 +5115,7 @@ index 9a1e4c7..1e15f6d 100644
  		// Use integer operations here so LLVM can fold the masks into VPTERNLOG
  		if (m_use_avx512)
  		{
-@@ -754,6 +805,7 @@ class spu_llvm_recompiler : public spu_recompiler_base, public cpu_translator
+@@ -754,6 +806,7 @@ class spu_llvm_recompiler : public spu_recompiler_base, public cpu_translator
  			const auto r = m_ir->CreateOr(c, m_ir->CreateAnd(d, 0x8000000000000000));
  			return uint64_as_double(m_ir->CreateSelect(n, r, splat<u64[4]>(0).eval(m_ir)));
  		}
@@ -4985,7 +5123,7 @@ index 9a1e4c7..1e15f6d 100644
  
  		const auto smax = uint64_as_double(splat<u64[4]>(0x47ffffffe0000000).eval(m_ir));
  		const auto smin = uint64_as_double(splat<u64[4]>(0x3810000000000000).eval(m_ir));
-@@ -770,10 +822,279 @@ class spu_llvm_recompiler : public spu_recompiler_base, public cpu_translator
+@@ -770,10 +823,279 @@ class spu_llvm_recompiler : public spu_recompiler_base, public cpu_translator
  	// Expand 32-bit mask for xfloat values to 64-bit, 29 least significant bits are always zero
  	llvm::Value* conv_xfloat_mask(llvm::Value* val)
  	{
@@ -5265,7 +5403,7 @@ index 9a1e4c7..1e15f6d 100644
  	}
  
  	llvm::Value* get_reg_raw(u32 index)
-@@ -1160,10 +1481,27 @@ class spu_llvm_recompiler : public spu_recompiler_base, public cpu_translator
+@@ -1160,10 +1482,27 @@ class spu_llvm_recompiler : public spu_recompiler_base, public cpu_translator
  		m_ir->SetInsertPoint(check);
  		update_pc(addr);
  
@@ -5294,12 +5432,58 @@ index 9a1e4c7..1e15f6d 100644
  
  		if (may_be_unsafe_for_savestate)
  		{
-@@ -1722,11 +2060,14 @@ public:
+@@ -1674,6 +2013,12 @@ public:
+ 			return nullptr;
+ 		}
+ 
++		// No allocating operation may separate publication and the ownership
++		// claim below. The caller identifies raw metadata through a TLS scope.
++		if (rpcs3::spu::replaying_metadata)
++		{
++			add_loc->cached = 1;
++		}
+ 		const spu_program& func = add_loc->data;
+ 
+ 		if (func.entry_point != start0)
+@@ -1689,6 +2034,10 @@ public:
+ 				add_loc->compiled.wait(nullptr, atomic_wait_timeout{10'000'000});
+ 			}
+ 
++#ifdef RPCS3_IOS
++			if (!rpcs3::spu::loading_warmup && add_loc->warmed)
++				rpcs3::ios::record_spu_warm_reuse();
++#endif
+ 			return add_loc->compiled;
+ 		}
+ 
+@@ -1702,6 +2051,10 @@ public:
+ 				add_loc->llvm_compile_state.wait(1, atomic_wait_timeout{10'000'000});
+ 			}
+ 
++#ifdef RPCS3_IOS
++			if (!rpcs3::spu::loading_warmup && add_loc->warmed && add_loc->llvm_compile_state == 2)
++				rpcs3::ios::record_spu_warm_reuse();
++#endif
+ 			return add_loc->llvm_compile_state == 2 ? add_loc->compiled.load() : nullptr;
+ 		}
+ 
+@@ -1722,11 +2075,25 @@ public:
  
  		bool add_to_file = false;
  
 +#ifdef RPCS3_IOS
 +		const u64 compile_started = utils::get_tsc();
++		struct compile_measurement
++		{
++			u64 started;
++			spu_item* item;
++			bool previously_warmed;
++			~compile_measurement()
++			{
++				rpcs3::ios::record_spu_compile_attempt(utils::get_tsc() - started,
++					rpcs3::spu::loading_warmup, item->llvm_compile_state == 2, previously_warmed);
++			}
++		} measurement{compile_started, add_loc, !!add_loc->warmed};
 +#endif
 +
  		if (auto& cache = g_fxo->get<spu_cache>(); cache && g_cfg.core.spu_cache && !add_loc->cached.exchange(1))
@@ -5310,7 +5494,7 @@ index 9a1e4c7..1e15f6d 100644
  		{
  			sha1_context ctx;
  			u8 output[20];
-@@ -1764,13 +2105,21 @@ public:
+@@ -1764,13 +2131,21 @@ public:
  		m_pp_id = 0;
  
  		std::string function_log;
@@ -5336,7 +5520,7 @@ index 9a1e4c7..1e15f6d 100644
  			{
  				// Fallback: write to main log
  				to_log_func = true;
-@@ -1786,11 +2135,13 @@ public:
+@@ -1786,11 +2161,13 @@ public:
  			if (itype == spu_itype::RDCH && op.ra == SPU_RdDec)
  			{
  				to_log_func = true;
@@ -5350,7 +5534,7 @@ index 9a1e4c7..1e15f6d 100644
  			spu_log.notice("Function %s dump:\n%s", m_hash, function_log);
  		}
  
-@@ -1875,6 +2226,7 @@ public:
+@@ -1875,6 +2252,7 @@ public:
  			[[maybe_unused]] u32 elements;
  			[[maybe_unused]] u32 dwords;
  
@@ -5358,7 +5542,7 @@ index 9a1e4c7..1e15f6d 100644
  			if (m_use_avx512)
  			{
  				stride = 64;
-@@ -1888,6 +2240,7 @@ public:
+@@ -1888,6 +2266,7 @@ public:
  				dwords = 4;
  			}
  			else
@@ -5366,7 +5550,7 @@ index 9a1e4c7..1e15f6d 100644
  			{
  				stride = 16;
  				elements = 4;
-@@ -3885,6 +4238,12 @@ public:
+@@ -3885,6 +4264,12 @@ public:
  		for (auto& f : *m_module)
  		{
  			run_transforms(f);
@@ -5379,7 +5563,7 @@ index 9a1e4c7..1e15f6d 100644
  		}
  
  		for (const auto& func : m_functions)
-@@ -3893,6 +4252,22 @@ public:
+@@ -3893,6 +4278,22 @@ public:
  			fpm.run(*f, fam);
  		}
  
@@ -5402,7 +5586,7 @@ index 9a1e4c7..1e15f6d 100644
  		// Clear context (TODO)
  		m_blocks.clear();
  		m_block_queue.clear();
-@@ -3904,12 +4279,28 @@ public:
+@@ -3904,12 +4305,28 @@ public:
  		std::string& llvm_log = function_log;
  		raw_string_ostream out(llvm_log);
  
@@ -5413,7 +5597,7 @@ index 9a1e4c7..1e15f6d 100644
 -		if (verifyModule(*_module, &out))
 +		bool llvm_ir_logged = false;
 +		const auto append_llvm_ir = [&]
-+		{
+ 		{
 +			if (!llvm_ir_logged)
 +			{
 +				prepare_function_log();
@@ -5423,7 +5607,7 @@ index 9a1e4c7..1e15f6d 100644
 +			}
 +		};
 +		if (g_cfg.core.spu_debug)
- 		{
++		{
 +			append_llvm_ir();
 +		}
 +		std::string verification_log;
@@ -5436,9 +5620,61 @@ index 9a1e4c7..1e15f6d 100644
  			out.flush();
  			spu_log.error("LLVM: Verification failed at 0x%x:\n%s", func.entry_point, llvm_log);
  
-@@ -4023,6 +4414,10 @@ public:
+@@ -3951,25 +4368,10 @@ public:
+ 
+ 			if (recoverable)
+ 			{
+-				bool added = false;
+ 				std::string& llvm_error = g_spu_llvm_compile_context->llvm_error;
+-
+-				if (g_cfg.core.spu_debug)
+-				{
+-					// Testing only
+-					added = m_jit.try_add(std::move(_module), m_spurt->get_cache_path() + "llvm/", llvm_error);
+-				}
+-				else if (!m_spurt->get_obj_cache_path().empty())
+-				{
+-					// ARM64 objects embed process-specific host addresses as
+-					// immediates without relocations. Compile into the current
+-					// process only until every such address is symbolic.
+-					added = m_jit.try_add(std::move(_module), llvm_error);
+-				}
+-				else
+-				{
+-					added = m_jit.try_add(std::move(_module), llvm_error);
+-				}
++				// ARM64 objects embed process-specific host addresses. This rule
++				// also applies in debug mode; textual IR diagnostics remain safe.
++				const bool added = m_jit.try_add(std::move(_module), llvm_error);
+ 
+ 				if (!added || !m_jit.try_fin(llvm_error))
+ 				{
+@@ -3983,19 +4385,7 @@ public:
+ 			}
+ 			else
+ 			{
+-				if (g_cfg.core.spu_debug)
+-				{
+-					// Testing only
+-					m_jit.add(std::move(_module), m_spurt->get_cache_path() + "llvm/");
+-				}
+-				else if (!m_spurt->get_obj_cache_path().empty())
+-				{
+-					m_jit.add(std::move(_module));
+-				}
+-				else
+-				{
+-					m_jit.add(std::move(_module));
+-				}
++				m_jit.add(std::move(_module));
+ 
+ 				m_jit.fin();
+ 			}
+@@ -4022,7 +4412,12 @@ public:
+ 		const spu_function_t fn = reinterpret_cast<spu_function_t>(m_jit.get_engine().getPointerToFunction(main_func));
  
  		// Install unconditionally, possibly replacing existing one from spu_fast
++		add_loc->warmed = rpcs3::spu::loading_warmup;
  		add_loc->compiled = fn;
 +#ifdef RPCS3_IOS
 +		rpcs3::ios::record_spu_block_compiled(
@@ -5515,7 +5751,24 @@ index 9a1e4c7..1e15f6d 100644
  			out.flush();
  			spu_log.error("LLVM: Verification failed:\n%s", llvm_log);
  
-@@ -4484,6 +4895,16 @@ public:
+@@ -4466,6 +4877,10 @@ public:
+ 			fmt::throw_exception("Compilation failed");
+ 		}
+ 
++#ifdef ARCH_ARM64
++		// The generated interpreter also contains process-local addresses.
++		m_jit.add(std::move(_module));
++#else
+ 		if (g_cfg.core.spu_debug)
+ 		{
+ 			// Testing only
+@@ -4479,11 +4894,22 @@ public:
+ 		{
+ 			m_jit.add(std::move(_module));
+ 		}
++#endif
+ 
+ 		m_jit.fin();
  
  		// Register interpreter entry point
  		spu_runtime::g_interpreter = reinterpret_cast<spu_function_t>(m_jit.get_engine().getPointerToFunction(main_func));
@@ -5532,7 +5785,7 @@ index 9a1e4c7..1e15f6d 100644
  
  		for (u32 i = 0; i < spu_runtime::g_interpreter_table.size(); i++)
  		{
-@@ -4507,7 +4928,7 @@ public:
+@@ -4507,7 +4933,7 @@ public:
  
  	static bool exec_check_state(spu_thread* _spu)
  	{
@@ -5541,7 +5794,7 @@ index 9a1e4c7..1e15f6d 100644
  	}
  
  	template <spu_intrp_func_t F>
-@@ -4924,9 +5345,25 @@ public:
+@@ -4924,9 +5350,25 @@ public:
  			{
  				auto wait_inbox = [](spu_thread* _spu, spu_channel_4_t* ch) -> u32
  				{
@@ -5568,7 +5821,7 @@ index 9a1e4c7..1e15f6d 100644
  				res.value = call("wait_spu_inbox", +wait_inbox, m_thread, spu_ptr(&spu_thread::ch_in_mbox));
  				break;
  			}
-@@ -5200,7 +5637,7 @@ public:
+@@ -5200,7 +5642,7 @@ public:
  				}
  			}
  
@@ -5577,7 +5830,7 @@ index 9a1e4c7..1e15f6d 100644
  			//m_ir->CreateStore(val.value, spu_ptr(&spu_thread::ch_mfc_cmd, &spu_mfc_cmd::eah));
  			return;
  		}
-@@ -5403,6 +5840,16 @@ public:
+@@ -5403,6 +5845,16 @@ public:
  					}
  					}
  
@@ -5594,7 +5847,7 @@ index 9a1e4c7..1e15f6d 100644
  					// Check if the LS address is constant and 256 bit aligned
  					u64 clsa = umax;
  
-@@ -5411,20 +5858,19 @@ public:
+@@ -5411,20 +5863,19 @@ public:
  						clsa = ci->getZExtValue();
  					}
  
@@ -5617,7 +5870,7 @@ index 9a1e4c7..1e15f6d 100644
  					{
  						// Generate fixed sequence of copy operations
  						for (u32 i = 0; i < csize; i += stride)
-@@ -5558,7 +6004,7 @@ public:
+@@ -5558,7 +6009,7 @@ public:
  			}
  
  			// Fallback to unoptimized WRCH implementation (TODO)
@@ -5626,7 +5879,7 @@ index 9a1e4c7..1e15f6d 100644
  			break;
  		}
  		case MFC_WrListStallAck:
-@@ -5580,29 +6026,8 @@ public:
+@@ -5580,29 +6031,8 @@ public:
  			return;
  		}
  		case SPU_WrDec:
@@ -5658,7 +5911,7 @@ index 9a1e4c7..1e15f6d 100644
  		case SPU_Set_Bkmk_Tag:
  		case SPU_PM_Start_Ev:
  		case SPU_PM_Stop_Ev:
-@@ -5702,14 +6127,34 @@ public:
+@@ -5702,14 +6132,34 @@ public:
  
  	void ABSDB(spu_opcode_t op)
  	{
@@ -5693,7 +5946,7 @@ index 9a1e4c7..1e15f6d 100644
  	}
  
  	void ROTM(spu_opcode_t op)
-@@ -5747,7 +6192,13 @@ public:
+@@ -5747,7 +6197,13 @@ public:
  			return;
  		}
  
@@ -5707,7 +5960,7 @@ index 9a1e4c7..1e15f6d 100644
  	}
  
  	void SHL(spu_opcode_t op)
-@@ -5766,7 +6217,13 @@ public:
+@@ -5766,7 +6222,13 @@ public:
  	void ROTH(spu_opcode_t op)
  	{
  		const auto [a, b] = get_vrs<u16[8]>(op.ra, op.rb);
@@ -5721,7 +5974,7 @@ index 9a1e4c7..1e15f6d 100644
  	}
  
  	void ROTHM(spu_opcode_t op)
-@@ -5804,7 +6261,13 @@ public:
+@@ -5804,7 +6266,13 @@ public:
  			return;
  		}
  
@@ -5735,7 +5988,7 @@ index 9a1e4c7..1e15f6d 100644
  	}
  
  	void SHLH(spu_opcode_t op)
-@@ -6258,13 +6721,12 @@ public:
+@@ -6258,13 +6726,12 @@ public:
  
  	void FSMB(spu_opcode_t op)
  	{
@@ -5753,7 +6006,7 @@ index 9a1e4c7..1e15f6d 100644
  		const auto m = bitcast<bool[16]>(trunc<u16>(v));
  		set_vr(op.rt, sext<s8[16]>(m));
  #endif
-@@ -6273,7 +6735,17 @@ public:
+@@ -6273,7 +6740,17 @@ public:
  	template <typename TA>
  	static auto byteswap(TA&& a)
  	{
@@ -5771,7 +6024,7 @@ index 9a1e4c7..1e15f6d 100644
  	}
  
  	static auto rotqby_reverse_base()
-@@ -6334,20 +6806,24 @@ public:
+@@ -6334,20 +6811,24 @@ public:
  				const auto sc = rotqby_reverse_base();
  				const auto sh = sc + (splat_scalar(b) >> 3);
  
@@ -5796,7 +6049,7 @@ index 9a1e4c7..1e15f6d 100644
  
  			return eval(pshufb_for_x86_and_tbl_for_aarch64(a, (sh & 0xf)));
  		});
-@@ -6504,8 +6980,14 @@ public:
+@@ -6504,8 +6985,14 @@ public:
  			}
  		}
  
@@ -5811,7 +6064,7 @@ index 9a1e4c7..1e15f6d 100644
  	}
  
  	void ROTQMBI(spu_opcode_t op)
-@@ -6518,15 +7000,27 @@ public:
+@@ -6518,15 +7005,27 @@ public:
  			minusb = eval(x);
  		}
  
@@ -5839,7 +6092,7 @@ index 9a1e4c7..1e15f6d 100644
  	}
  
  #if defined(ARCH_X64)
-@@ -6561,11 +7055,13 @@ public:
+@@ -6561,11 +7060,13 @@ public:
  			const auto sc = rotqby_reverse_base();
  			const auto sh = eval(sc + splat_scalar(b));
  
@@ -5853,7 +6106,7 @@ index 9a1e4c7..1e15f6d 100644
  
  			set_vr(op.rt, pshufb_for_x86_and_tbl_for_aarch64(as, (sh & 0xf)));
  			return;
-@@ -6574,11 +7070,13 @@ public:
+@@ -6574,11 +7075,13 @@ public:
  		const auto sc = rotqby_forward_base();
  		const auto sh = eval(sc - splat_scalar(b));
  
@@ -5867,7 +6120,7 @@ index 9a1e4c7..1e15f6d 100644
  
  		set_vr(op.rt, pshufb_for_x86_and_tbl_for_aarch64(a, (sh & 0xf)));
  	}
-@@ -6724,6 +7222,16 @@ public:
+@@ -6724,6 +7227,16 @@ public:
  	void ROTQBYI(spu_opcode_t op)
  	{
  		const auto a = get_vr<u8[16]>(op.ra);
@@ -5884,7 +6137,7 @@ index 9a1e4c7..1e15f6d 100644
  		const auto sc = rotqby_forward_base();
  		const auto sh = (sc - get_imm<u8[16]>(op.i7, false)) & 0xf;
  		set_vr(op.rt, pshufb_for_x86_and_tbl_for_aarch64(a, sh));
-@@ -6732,6 +7240,16 @@ public:
+@@ -6732,6 +7245,16 @@ public:
  	void ROTQMBYI(spu_opcode_t op)
  	{
  		const auto a = get_vr<u8[16]>(op.ra);
@@ -5901,7 +6154,7 @@ index 9a1e4c7..1e15f6d 100644
  		const auto sc = rotqby_zero_base();
  		const auto sh = sc + (-get_imm<u8[16]>(op.i7, false) & 0x1f);
  		set_vr(op.rt, pshufb_for_x86_and_tbl_for_aarch64(a, sh));
-@@ -6741,6 +7259,16 @@ public:
+@@ -6741,6 +7264,16 @@ public:
  	{
  		if (get_reg_raw(op.ra) && !op.i7) return set_reg_fixed(op.rt, get_reg_raw(op.ra), false); // For expressions matching
  		const auto a = get_vr<u8[16]>(op.ra);
@@ -5918,7 +6171,7 @@ index 9a1e4c7..1e15f6d 100644
  		const auto sc = rotqby_forward_base();
  		const auto sh = sc - (get_imm<u8[16]>(op.i7, false) & 0x1f);
  		set_vr(op.rt, pshufb_for_x86_and_tbl_for_aarch64(a, sh));
-@@ -6773,6 +7301,7 @@ public:
+@@ -6773,6 +7306,7 @@ public:
  
  	void SUMB(spu_opcode_t op)
  	{
@@ -5926,7 +6179,7 @@ index 9a1e4c7..1e15f6d 100644
  		if (m_use_avx512)
  		{
  			const auto [a, b] = get_vrs<u8[16]>(op.ra, op.rb);
-@@ -6789,6 +7318,7 @@ public:
+@@ -6789,6 +7323,7 @@ public:
  			set_vr(op.rt, shuffle2(ax, bx, 0, 9, 2, 11, 4, 13, 6, 15));
  			return;
  		}
@@ -5934,7 +6187,7 @@ index 9a1e4c7..1e15f6d 100644
  
  #ifdef ARCH_ARM64
  		if (m_use_dotprod)
-@@ -6812,6 +7342,17 @@ public:
+@@ -6812,6 +7347,17 @@ public:
  			return;
  		}
  
@@ -5952,7 +6205,7 @@ index 9a1e4c7..1e15f6d 100644
  		const auto [a, b] = get_vrs<u16[8]>(op.ra, op.rb);
  		const auto ahs = eval((a >> 8) + (a & 0xff));
  		const auto bhs = eval((b >> 8) + (b & 0xff));
-@@ -6850,11 +7391,31 @@ public:
+@@ -6850,11 +7396,31 @@ public:
  
  	void XSWD(spu_opcode_t op)
  	{
@@ -5984,7 +6237,7 @@ index 9a1e4c7..1e15f6d 100644
  		set_vr(op.rt, get_vr<s32[4]>(op.ra) << 16 >> 16);
  	}
  
-@@ -6865,6 +7426,16 @@ public:
+@@ -6865,6 +7431,16 @@ public:
  
  	void XSBH(spu_opcode_t op)
  	{
@@ -6001,7 +6254,7 @@ index 9a1e4c7..1e15f6d 100644
  		set_vr(op.rt, get_vr<s16[8]>(op.ra) << 8 >> 8);
  	}
  
-@@ -6925,16 +7496,28 @@ public:
+@@ -6925,16 +7501,28 @@ public:
  	void CGX(spu_opcode_t op)
  	{
  		const auto [a, b] = get_vrs<u32[4]>(op.ra, op.rb);
@@ -6030,7 +6283,7 @@ index 9a1e4c7..1e15f6d 100644
  	}
  
  	void MPYHHA(spu_opcode_t op)
-@@ -7417,6 +8000,32 @@ public:
+@@ -7417,6 +8005,32 @@ public:
  			case 2:
  			case 1:
  			{
@@ -6063,7 +6316,7 @@ index 9a1e4c7..1e15f6d 100644
  				set_vr(op.rt4, select(bitcast<s8[16]>(c) != 0, get_vr<u8[16]>(op.rb), get_vr<u8[16]>(op.ra)));
  				return;
  			}
-@@ -7451,6 +8060,18 @@ public:
+@@ -7451,6 +8065,18 @@ public:
  			// If the mask comes from a constant generation instruction, replace SHUFB with insert
  			if (auto [ok, i] = match_expr(c, spu_get_insertion_shuffle_mask<VT>(match<u32>())); ok)
  			{
@@ -6082,7 +6335,7 @@ index 9a1e4c7..1e15f6d 100644
  				set_vr(op.rt4, insert(get_vr<VT>(op.rb), i, get_scalar(get_vr<VT>(op.ra))));
  				return true;
  			}
-@@ -7461,6 +8082,21 @@ public:
+@@ -7461,6 +8087,21 @@ public:
  			return;
  		}
  
@@ -6104,7 +6357,7 @@ index 9a1e4c7..1e15f6d 100644
  		const auto c = get_vr<u8[16]>(op.rc);
  
  		if (auto [ok, mask] = get_const_vector(c.value, m_pos); ok)
-@@ -7568,6 +8204,28 @@ public:
+@@ -7568,6 +8209,28 @@ public:
  		[[maybe_unused]] const bool consts_never_msb = known_idx.Zero[5];
  		[[maybe_unused]] const bool consts_never_allones = known_idx.One[5];
  		[[maybe_unused]] const bool idx_selects_single = known_idx.extractBits(1, 4).isConstant();
@@ -6133,7 +6386,7 @@ index 9a1e4c7..1e15f6d 100644
  
  		const auto a = get_vr<u8[16]>(op.ra);
  		const auto b = get_vr<u8[16]>(op.rb);
-@@ -7627,12 +8285,12 @@ public:
+@@ -7627,12 +8290,12 @@ public:
  			cv = eval(c ^ 0xf);
  		}
  
@@ -6151,7 +6404,7 @@ index 9a1e4c7..1e15f6d 100644
  #else
  		const std::optional<value_t<u8[16]>> single_src = (idx_selects_single || (op.ra == op.rb && !m_interp_magn))
  #endif
-@@ -7675,6 +8333,14 @@ public:
+@@ -7675,6 +8338,14 @@ public:
  				return;
  			}
  
@@ -6166,7 +6419,7 @@ index 9a1e4c7..1e15f6d 100644
  			const auto x = tbl(build<u8[16]>(0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x80, 0x80), (c >> 4));
  			const auto xv = perm_or_zero_only ? eval(splat<u8[16]>(0)) : x;
  			const auto cm = eval(cv & 0x8f);
-@@ -7694,6 +8360,15 @@ public:
+@@ -7694,6 +8365,15 @@ public:
  			return;
  		}
  
@@ -6182,7 +6435,7 @@ index 9a1e4c7..1e15f6d 100644
  		if (perm_only)
  		{
  			const auto cm = eval(cv & 0x1f);
-@@ -7701,6 +8376,14 @@ public:
+@@ -7701,6 +8381,14 @@ public:
  			return;
  		}
  
@@ -6197,7 +6450,7 @@ index 9a1e4c7..1e15f6d 100644
  		const auto idx_consts = tbl(build<u8[16]>(0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x80, 0x80), (c >> 4));
  		const auto idx_base = perm_or_zero_only ? eval(splat<u8[16]>(0)) : idx_consts;
  		const auto cm = eval(cv & 0x9f);
-@@ -7953,6 +8636,7 @@ public:
+@@ -7953,6 +8641,7 @@ public:
  	{
  		const auto known = known_opt.value_or(get_known_fp_class<3>(v, llvm::FPClassTest::fcNan | llvm::FPClassTest::fcInf));
  
@@ -6205,7 +6458,7 @@ index 9a1e4c7..1e15f6d 100644
  		// Avoid pessimation when full clamping isn't needed
  		if (m_use_avx512 && !(known.isKnownNeverNaN() && (known.isKnownNeverPosInfinity() || known.isKnownNeverNegInfinity())))
  		{
-@@ -7960,6 +8644,7 @@ public:
+@@ -7960,6 +8649,7 @@ public:
  			// Normally doesn't cause issues as SNaN frequently gets quieted beforehand
  			return eval(vrangeps(v, fsplat<f32[4]>(std::bit_cast<f32, u32>(0x7f7fffff)), 0x2, 0xff));
  		}
@@ -6213,7 +6466,7 @@ index 9a1e4c7..1e15f6d 100644
  
  		return eval(clamp_positive_smax(clamp_negative_smax(v, known), known));
  	}
-@@ -7993,6 +8678,7 @@ public:
+@@ -7993,6 +8683,7 @@ public:
  			const auto a_sign = (a & splat<u32[4]>(0x80000000));
  			value_t<u32[4]> final_result = eval(splat<u32[4]>(0));
  
@@ -6221,7 +6474,7 @@ index 9a1e4c7..1e15f6d 100644
  			if (m_use_avx512)
  			{
  				value_t<u32[16]> lo_lut;
-@@ -8003,6 +8689,7 @@ public:
+@@ -8003,6 +8694,7 @@ public:
  				final_result = vperm2d128From512(lo_lut, a_fraction, hi_lut);
  			}
  			else
@@ -6229,7 +6482,7 @@ index 9a1e4c7..1e15f6d 100644
  			{
  				for (u32 i = 0; i < 4; i++)
  				{
-@@ -8058,6 +8745,15 @@ public:
+@@ -8058,6 +8750,15 @@ public:
  	{
  		if (g_cfg.core.spu_xfloat_accuracy == xfloat_accuracy::accurate)
  		{
@@ -6245,7 +6498,7 @@ index 9a1e4c7..1e15f6d 100644
  			set_vr(op.rt, sext<s32[4]>(fcmp_ord(get_vr<f64[4]>(op.ra) > get_vr<f64[4]>(op.rb))));
  			return;
  		}
-@@ -8154,6 +8850,15 @@ public:
+@@ -8154,6 +8855,15 @@ public:
  	{
  		if (g_cfg.core.spu_xfloat_accuracy == xfloat_accuracy::accurate)
  		{
@@ -6261,7 +6514,7 @@ index 9a1e4c7..1e15f6d 100644
  			set_vr(op.rt, sext<s32[4]>(fcmp_ord(fabs(get_vr<f64[4]>(op.ra)) > fabs(get_vr<f64[4]>(op.rb)))));
  			return;
  		}
-@@ -8432,6 +9137,15 @@ public:
+@@ -8432,6 +9142,15 @@ public:
  	{
  		if (g_cfg.core.spu_xfloat_accuracy == xfloat_accuracy::accurate)
  		{
@@ -6277,7 +6530,7 @@ index 9a1e4c7..1e15f6d 100644
  			set_vr(op.rt, sext<s32[4]>(fcmp_ord(get_vr<f64[4]>(op.ra) == get_vr<f64[4]>(op.rb))));
  			return;
  		}
-@@ -8481,6 +9195,15 @@ public:
+@@ -8481,6 +9200,15 @@ public:
  	{
  		if (g_cfg.core.spu_xfloat_accuracy == xfloat_accuracy::accurate)
  		{
@@ -6293,7 +6546,7 @@ index 9a1e4c7..1e15f6d 100644
  			set_vr(op.rt, sext<s32[4]>(fcmp_ord(fabs(get_vr<f64[4]>(op.ra)) == fabs(get_vr<f64[4]>(op.rb)))));
  			return;
  		}
-@@ -8669,6 +9392,7 @@ public:
+@@ -8669,6 +9397,7 @@ public:
  					return eval(select(fcmp_uno(b != fsplat<f32[4]>(0.)), normal_fma, c));
  				}
  
@@ -6301,7 +6554,7 @@ index 9a1e4c7..1e15f6d 100644
  				// Same number of operations well preventing a serial predicate chain pessimization
  				if (m_use_avx512)
  				{
-@@ -8677,6 +9401,7 @@ public:
+@@ -8677,6 +9406,7 @@ public:
  					const auto cb = vfixupimmps(b, a, splat<u32[4]>(0x00000800u), 0, 0xff);
  					return fma32x4(ca, cb, c, a_known, b_known);
  				}
@@ -6309,7 +6562,7 @@ index 9a1e4c7..1e15f6d 100644
  
  				const auto normal_fma = fma32x4(a, b, c, a_known, b_known);
  				const auto a_cmp = fcmp_uno(a != fsplat<f32[4]>(0.));
-@@ -8689,6 +9414,7 @@ public:
+@@ -8689,6 +9419,7 @@ public:
  			}
  		});
  
@@ -6317,7 +6570,7 @@ index 9a1e4c7..1e15f6d 100644
  		if (m_use_avx512)
  		{
  			register_intrinsic("spu_re_acc", [&](llvm::CallInst* ci)
-@@ -8702,6 +9428,7 @@ public:
+@@ -8702,6 +9433,7 @@ public:
  			});
  		}
  		else
@@ -6325,7 +6578,7 @@ index 9a1e4c7..1e15f6d 100644
  		{
  			register_intrinsic("spu_re_acc", [&](llvm::CallInst* ci)
  			{
-@@ -8910,17 +9637,38 @@ public:
+@@ -8910,17 +9642,38 @@ public:
  
  		if (auto [ok_re, mystery] = match_expr(a, spu_re(MT)); ok_re)
  		{
@@ -6364,7 +6617,7 @@ index 9a1e4c7..1e15f6d 100644
  		}
  
  		if (!m_interp_magn && op.ra == op.rb)
-@@ -9046,6 +9794,7 @@ public:
+@@ -9046,6 +9799,7 @@ public:
  				const auto a_sign = (a & splat<u32[4]>(0x80000000));
  				value_t<u32[4]> b = eval(splat<u32[4]>(0));
  
@@ -6372,7 +6625,7 @@ index 9a1e4c7..1e15f6d 100644
  				if (m_use_avx512)
  				{
  					value_t<u32[16]> lo_lut;
-@@ -9056,6 +9805,7 @@ public:
+@@ -9056,6 +9810,7 @@ public:
  					b = vperm2d128From512(lo_lut, a_fraction, hi_lut);
  				}
  				else
@@ -6380,7 +6633,7 @@ index 9a1e4c7..1e15f6d 100644
  				{
  					for (u32 i = 0; i < 4; i++)
  					{
-@@ -9311,6 +10061,7 @@ public:
+@@ -9311,6 +10066,7 @@ public:
  
  			value_t<s32[4]> r;
  
@@ -6388,7 +6641,7 @@ index 9a1e4c7..1e15f6d 100644
  			if (m_use_avx512)
  			{
  				const auto sc = eval(bitcast<f32[4]>(max(bitcast<s32[4]>(a),splat<s32[4]>(0x0))));
-@@ -9318,6 +10069,7 @@ public:
+@@ -9318,6 +10074,7 @@ public:
  				set_vr(op.rt, r);
  				return;
  			}
@@ -6396,7 +6649,7 @@ index 9a1e4c7..1e15f6d 100644
  
  			r.value = m_ir->CreateFPToUI(a.value, get_type<s32[4]>());
  			set_vr(op.rt, select(bitcast<s32[4]>(a) > splat<s32[4]>(((32 + 127) << 23) - 1), splat<s32[4]>(-1), r & ~(bitcast<s32[4]>(a) >> 31)));
-@@ -9650,7 +10402,7 @@ public:
+@@ -9650,7 +10407,7 @@ public:
  
  		if (_spu->ch_events.load().count)
  		{
@@ -6405,7 +6658,7 @@ index 9a1e4c7..1e15f6d 100644
  			_spu->srr0 = addr;
  
  			// Test for BR/BRA instructions (they are equivalent at zero pc)
-@@ -9667,6 +10419,13 @@ public:
+@@ -9667,6 +10424,13 @@ public:
  		return addr;
  	}
  
@@ -6419,7 +6672,7 @@ index 9a1e4c7..1e15f6d 100644
  	llvm::BasicBlock* add_block_indirect(spu_opcode_t op, value_t<u32> addr, bool ret = true)
  	{
  		if (m_interp_magn)
-@@ -9690,7 +10449,7 @@ public:
+@@ -9690,7 +10454,7 @@ public:
  			target->addIncoming(e_addr, e_exec);
  			m_ir->CreateCondBr(get_imm<bool>(op.d).value, d_exec, d_done, m_md_unlikely);
  			m_ir->SetInsertPoint(d_exec);
@@ -6428,7 +6681,7 @@ index 9a1e4c7..1e15f6d 100644
  			m_ir->CreateBr(d_done);
  			m_ir->SetInsertPoint(d_done);
  			m_ir->CreateBr(m_interp_bblock);
-@@ -9749,7 +10508,7 @@ public:
+@@ -9749,7 +10513,7 @@ public:
  
  		if (op.d)
  		{
@@ -6437,7 +6690,7 @@ index 9a1e4c7..1e15f6d 100644
  		}
  
  		m_ir->CreateStore(addr.value, spu_ptr(&spu_thread::pc));
-@@ -10036,7 +10795,7 @@ public:
+@@ -10036,7 +10800,7 @@ public:
  		if (op.d && tfound != m_targets.end() && tfound->second.size() == 1 && tfound->second[0] == spu_branch_target(m_pos, 1))
  		{
  			// Interrupts-disable pattern
@@ -6447,7 +6700,7 @@ index 9a1e4c7..1e15f6d 100644
  		}
  
 diff --git a/rpcs3/Emu/Cell/SPURecompiler.h b/rpcs3/Emu/Cell/SPURecompiler.h
-index faf4082..384b531 100644
+index faf4082..ccff0c5 100644
 --- a/rpcs3/Emu/Cell/SPURecompiler.h
 +++ b/rpcs3/Emu/Cell/SPURecompiler.h
 @@ -8,6 +8,7 @@
@@ -6467,7 +6720,16 @@ index faf4082..384b531 100644
  
  public:
  	spu_cache() = default;
-@@ -116,16 +119,16 @@ class spu_runtime
+@@ -90,6 +93,8 @@ public:
+ 	atomic_t<spu_function_t> trampoline = nullptr;
+ 
+ 	atomic_t<u8> cached = false;
++	// Session-local provenance only; never serialized as host code.
++	atomic_t<u8> warmed = false;
+ 	atomic_t<u8> logged = false;
+ 	// 0 = unclaimed, 1 = compiling, 2 = complete, 3 = failed.
+ 	atomic_t<u32> llvm_compile_state = 0;
+@@ -116,16 +121,16 @@ class spu_runtime
  
  public:
  	// Trampoline to spu_recompiler_base::dispatch
@@ -6488,7 +6750,7 @@ index faf4082..384b531 100644
  
  public:
  	spu_runtime();
-@@ -161,16 +164,19 @@ public:
+@@ -161,16 +166,19 @@ public:
  	spu_function_t make_branch_patchpoint(u16 data = 0) const;
  
  	// All dispatchers (array allocated in jit memory)
@@ -7184,6 +7446,109 @@ index 6e59cd8..f95045d 100644
  	u8 cpu_work_iteration_count = 0;
  
  	std::array<v128, 0x4000> stack_mirror; // Return address information
+diff --git a/rpcs3/Emu/Cell/SPUWarmupPolicy.h b/rpcs3/Emu/Cell/SPUWarmupPolicy.h
+new file mode 100644
+index 0000000..eb97f59
+--- /dev/null
++++ b/rpcs3/Emu/Cell/SPUWarmupPolicy.h
+@@ -0,0 +1,97 @@
++#pragma once
++
++#include <algorithm>
++#include <atomic>
++#include <barrier>
++#include <cstddef>
++#include <cstdint>
++#include <span>
++
++namespace rpcs3::spu
++{
++// This phase belongs to the compiler's calling thread, not to presentation or
++// a global timer: a title may present a loading frame before warmup finishes.
++inline thread_local bool loading_warmup = false;
++inline thread_local bool replaying_metadata = false;
++
++struct warmup_scope
++{
++	bool previous = loading_warmup;
++	warmup_scope() noexcept { loading_warmup = true; }
++	~warmup_scope() { loading_warmup = previous; }
++};
++
++// Mark a known disk record only inside compile(), after its potentially
++// throwing program copy. Never pre-publish an unclaimed runtime item.
++struct metadata_replay_scope
++{
++	bool previous = replaying_metadata;
++	metadata_replay_scope() noexcept { replaying_metadata = true; }
++	~metadata_replay_scope() { replaying_metadata = previous; }
++};
++
++// A worker may throw during compiler initialization or analysis. Dropping its
++// participation during unwinding allows surviving workers to finish the phase.
++class warmup_barrier_guard
++{
++	std::barrier<>& barrier;
++	bool arrived = false;
++public:
++	explicit warmup_barrier_guard(std::barrier<>& value) noexcept : barrier(value) {}
++	~warmup_barrier_guard() { if (!arrived) barrier.arrive_and_drop(); }
++	void wait() { arrived = true; barrier.arrive_and_wait(); }
++};
++
++constexpr bool precompile_discovered(bool enabled, bool cache_enabled,
++	bool known_metadata_empty, bool targeted_warmup) noexcept
++{
++	return enabled && cache_enabled && (known_metadata_empty || targeted_warmup);
++}
++
++constexpr std::uint32_t warmup_worker_count(std::uint32_t existing_budget,
++	std::uint32_t configured_budget, bool ios) noexcept
++{
++	// Reuse the existing startup pool with a smaller budget. No background
++	// compiler is introduced and all workers join before guest execution.
++	const auto configured = configured_budget ? configured_budget : existing_budget;
++	return std::min(existing_budget, std::min(configured, ios ? 2u : existing_budget));
++}
++
++template <typename Word>
++void clear_warmup_local_store(std::span<Word> words) noexcept
++{
++	// A one-word program must clear one word as well. Leaving the final
++	// instruction behind changes analysis of the next cached program.
++	std::fill(words.begin(), words.end(), Word{});
++}
++
++struct compile_sample
++{
++	std::uint64_t count = 0, failures = 0, ticks = 0, maximum_ticks = 0;
++};
++
++class compile_counters
++{
++	std::atomic<std::uint64_t> count{0}, failures{0}, ticks{0}, maximum_ticks{0};
++public:
++	void record(std::uint64_t duration, bool succeeded) noexcept
++	{
++		count.fetch_add(1, std::memory_order_relaxed);
++		failures.fetch_add(!succeeded, std::memory_order_relaxed);
++		ticks.fetch_add(duration, std::memory_order_relaxed);
++		auto maximum = maximum_ticks.load(std::memory_order_relaxed);
++		while (maximum < duration && !maximum_ticks.compare_exchange_weak(
++			maximum, duration, std::memory_order_relaxed)) {}
++	}
++	// Each event is allocation-free and lock-free. A concurrently finishing
++	// event can straddle adjacent sample fields; sums over captured windows
++	// are meaningful, but a single window is not a transactional snapshot.
++	compile_sample take() noexcept
++	{
++		return {count.exchange(0, std::memory_order_relaxed),
++			failures.exchange(0, std::memory_order_relaxed),
++			ticks.exchange(0, std::memory_order_relaxed),
++			maximum_ticks.exchange(0, std::memory_order_relaxed)};
++	}
++};
++}
 diff --git a/rpcs3/Emu/Cell/lv2/sys_memory.cpp b/rpcs3/Emu/Cell/lv2/sys_memory.cpp
 index 01b36d8..403436f 100644
 --- a/rpcs3/Emu/Cell/lv2/sys_memory.cpp
@@ -7399,7 +7764,7 @@ index 669f759..d0e01fd 100644
  
  		return false;
 diff --git a/rpcs3/Emu/Memory/vm.cpp b/rpcs3/Emu/Memory/vm.cpp
-index e7f55d7..02c617c 100644
+index e7f55d7..7aa2b1c 100644
 --- a/rpcs3/Emu/Memory/vm.cpp
 +++ b/rpcs3/Emu/Memory/vm.cpp
 @@ -13,6 +13,8 @@
@@ -7428,7 +7793,27 @@ index e7f55d7..02c617c 100644
  		utils::pause();
  	}
  
-@@ -429,10 +441,22 @@ namespace vm
+@@ -416,6 +428,19 @@ namespace vm
+ 
+ 		if (!ok || cpu.state & cpu_flag::memory)
+ 		{
++#ifdef RPCS3_IOS
++			// One episode may contain thousands of timed wait iterations. These
++			// locks protect guest DMA/reservations; never bypass them on a NeoSwap miss.
++			struct range_wait_episode
++			{
++				u64 begin = utils::get_tsc();
++				u64 waits = 0;
++				~range_wait_episode()
++				{
++					if (waits) rpcs3::ios::record_range_lock_episode(utils::get_tsc() - begin, waits);
++				}
++			} episode;
++#endif
+ 			for (u64 i = 0;; i++)
+ 			{
+ 				if (cpu.is_paused())
+@@ -429,10 +454,23 @@ namespace vm
  					return;
  				}
  
@@ -7447,13 +7832,14 @@ index e7f55d7..02c617c 100644
 +					get_range_lock_bits(true).wait(bits, atomic_wait_timeout{50'000});
 +#ifdef RPCS3_IOS
 +					const u64 wait_end = utils::get_tsc();
-+					rpcs3::ios::record_range_lock_wait(wait_end >= wait_begin ? wait_end - wait_begin : 0);
++					++episode.waits;
++					rpcs3::ios::record_range_lock_wait(wait_end >= wait_begin ? wait_end - wait_begin : 0, bits);
 +#endif
 +				}
  
  				if (cpu_flag::wait - cpu.state)
  				{
-@@ -539,7 +563,7 @@ namespace vm
+@@ -539,7 +577,7 @@ namespace vm
  
  		if (range_lock)
  		{
@@ -7462,7 +7848,7 @@ index e7f55d7..02c617c 100644
  
  			for (auto lock = g_locks.cbegin(), end = lock + g_cfg.core.ppu_threads; lock != end; lock++)
  			{
-@@ -1044,7 +1068,7 @@ namespace vm
+@@ -1044,7 +1082,7 @@ namespace vm
  		else
  		{
  			shm->unmap_critical(g_base_addr + addr);
@@ -7471,7 +7857,7 @@ index e7f55d7..02c617c 100644
  			shm->unmap_critical(g_sudo_addr + addr);
  #endif
  		}
-@@ -1321,7 +1345,7 @@ namespace vm
+@@ -1321,7 +1359,7 @@ namespace vm
  			};
  
  			// Special path for whole-allocated areas allowing 4k granularity
@@ -7480,7 +7866,7 @@ index e7f55d7..02c617c 100644
  
  			if (!map_critical(vm::_ptr<u8>(addr), this->flags & page_size_4k && utils::get_page_size() > 4096 ? utils::protection::rw : utils::protection::no) || !map_critical(vm::get_super_ptr(addr), utils::protection::rw))
  			{
-@@ -1361,7 +1385,7 @@ namespace vm
+@@ -1361,7 +1399,7 @@ namespace vm
  			if (m_common)
  			{
  				m_common->unmap_critical(vm::base(addr));
@@ -7489,7 +7875,7 @@ index e7f55d7..02c617c 100644
  				m_common->unmap_critical(vm::get_super_ptr(addr));
  #endif
  				ensure(m_common.use_count() == 1);
-@@ -1415,7 +1439,7 @@ namespace vm
+@@ -1415,7 +1453,7 @@ namespace vm
  			shm = *src;
  		else
  		{
@@ -7498,7 +7884,7 @@ index e7f55d7..02c617c 100644
  		}
  
  		const u32 max = (this->addr + this->size - size) & (0 - align);
-@@ -1494,7 +1518,7 @@ namespace vm
+@@ -1494,7 +1532,7 @@ namespace vm
  			shm = *src;
  		else
  		{
@@ -7507,7 +7893,7 @@ index e7f55d7..02c617c 100644
  		}
  
  		vm::writer_lock lock;
-@@ -1808,7 +1832,7 @@ namespace vm
+@@ -1808,7 +1846,7 @@ namespace vm
  	{
  		if (flags & preallocated)
  		{
@@ -7516,7 +7902,7 @@ index e7f55d7..02c617c 100644
  			m_common->map_critical(vm::base(addr), this->flags & page_size_4k && utils::get_page_size() > 4096 ? utils::protection::rw : utils::protection::no);
  			m_common->map_critical(vm::get_super_ptr(addr));
  		}
-@@ -1849,6 +1873,13 @@ namespace vm
+@@ -1849,6 +1887,13 @@ namespace vm
  			{
  				pflags |= page_size_64k;
  			}
@@ -7530,7 +7916,7 @@ index e7f55d7..02c617c 100644
  			else if (!(flags & (page_size_mask & ~page_size_1m)))
  			{
  				pflags |= page_size_1m;
-@@ -2403,7 +2434,7 @@ namespace vm
+@@ -2403,7 +2448,7 @@ namespace vm
  
  			const u32 flags = ar.pop<u32>();
  			const u64 size = ar.pop<u64>();
@@ -11986,10 +12372,10 @@ index 0000000..006640b
 +}
 diff --git a/rpcs3/ios/NeoSwap.h b/rpcs3/ios/NeoSwap.h
 new file mode 100644
-index 0000000..012200b
+index 0000000..79d7cef
 --- /dev/null
 +++ b/rpcs3/ios/NeoSwap.h
-@@ -0,0 +1,74 @@
+@@ -0,0 +1,80 @@
 +#ifndef NEOSTATION_NEOSWAP_H
 +#define NEOSTATION_NEOSWAP_H
 +#include <stddef.h>
@@ -12008,7 +12394,10 @@ index 0000000..012200b
 +    NEOSWAP_RPCS3 = 0, NEOSWAP_DOLPHIN = 1, NEOSWAP_ARMSX2 = 2,
 +    NEOSWAP_DUSKLIGHT = 3, NEOSWAP_KARTPAD = 4, NEOSWAP_PROBE = 5
 +};
-+enum NeoSwapKind { NEOSWAP_CPU_DATA = 1, NEOSWAP_CPU_CACHE = 2 };
++/* Additive request flag on ABI v1. An older host rejects the unknown kind,
++ * preserving ordinary allocator fallback. Fast requests may only borrow already
++ * mapped RAM and may never wait for a lock, map, donor, relay or file operation. */
++enum NeoSwapKind { NEOSWAP_CPU_DATA = 1, NEOSWAP_CPU_CACHE = 2, NEOSWAP_REQUEST_FAST = 0x40000000u };
 +enum NeoSwapResult {
 +    NEOSWAP_OK = 0, NEOSWAP_NOT_OWNED = 1,
 +    NEOSWAP_DISABLED = -1, NEOSWAP_INVALID = -2, NEOSWAP_QUOTA = -3,
@@ -12038,7 +12427,9 @@ index 0000000..012200b
 +    int (*allocate)(uint32_t owner, uint32_t kind, uint64_t bytes,
 +                    uint64_t alignment, void** address);
 +    /* ONLY NOT_OWNED permits a caller to use its ordinary free(). Any other
-+     * failure retains ownership and must not be turned into a heap free. */
++     * failure retains ownership and must not be turned into a heap free.
++     * FAST loans: OK transfers cleanup to host maintenance; the pointer must
++     * never be touched again. Mapping/quota remain owned until real retirement. */
 +    int (*release)(void* address);
 +    int (*sync)(void* address);
 +    int (*enabled)(uint32_t owner);
@@ -12057,6 +12448,7 @@ index 0000000..012200b
 +NEOSWAP_PUBLIC uint64_t NeoSwap_LiveBytes(uint32_t owner);
 +#ifdef NEOSWAP_TESTING
 +/* Fault injection is compiled out of deliverable libraries. */
++void NeoSwap_TestWithBrokerLock(void (*callback)(void*), void* context);
 +void NeoSwap_TestFailNext(int stage); /* 1=open, 2=reserve, 3=map, 4=unmap, 5=sync */
 +int NeoSwap_TestVerifyFile(void* address, const void* expected, size_t bytes);
 +#endif
@@ -12066,7 +12458,7 @@ index 0000000..012200b
 +#endif
 diff --git a/rpcs3/ios/NeoSwapClient.h b/rpcs3/ios/NeoSwapClient.h
 new file mode 100644
-index 0000000..76c134e
+index 0000000..fa17794
 --- /dev/null
 +++ b/rpcs3/ios/NeoSwapClient.h
 @@ -0,0 +1,102 @@
@@ -12113,7 +12505,7 @@ index 0000000..76c134e
 +    }
 +    void* ptr = nullptr;
 +    eligible_attempts.fetch_add(1, std::memory_order_relaxed);
-+    const int result = api->allocate(owner, kind, bytes, alignment, &ptr);
++    const int result = api->allocate(owner, kind | NEOSWAP_REQUEST_FAST, bytes, alignment, &ptr);
 +    last_result.store(result, std::memory_order_relaxed);
 +    if (result == NEOSWAP_OK && ptr) {
 +        successful_allocations.fetch_add(1, std::memory_order_relaxed);
@@ -12147,7 +12539,7 @@ index 0000000..76c134e
 +    }
 +    void* pointer = nullptr;
 +    eligible_attempts.fetch_add(1, std::memory_order_relaxed);
-+    const int result = api->allocate(owner, NEOSWAP_CPU_CACHE, bytes, alignment, &pointer);
++    const int result = api->allocate(owner, NEOSWAP_CPU_CACHE | NEOSWAP_REQUEST_FAST, bytes, alignment, &pointer);
 +    last_result.store(result, std::memory_order_relaxed);
 +    if (result == NEOSWAP_OK && pointer) {
 +        successful_allocations.fetch_add(1, std::memory_order_relaxed);
@@ -12269,10 +12661,10 @@ index 0000000..25a589a
 +#endif
 diff --git a/rpcs3/ios/NeoSwapRelayClient.h b/rpcs3/ios/NeoSwapRelayClient.h
 new file mode 100644
-index 0000000..394543d
+index 0000000..5a8d01e
 --- /dev/null
 +++ b/rpcs3/ios/NeoSwapRelayClient.h
-@@ -0,0 +1,131 @@
+@@ -0,0 +1,144 @@
 +// SPDX-License-Identifier: MIT
 +#pragma once
 +#include "NeoSwapRelay.h"
@@ -12287,6 +12679,14 @@ index 0000000..394543d
 +// The Core borrows the host vtable; no broker, extension, allocation or static
 +// constructor is linked into the Core. The installed vtable lives for its lifetime.
 +inline constinit std::atomic<const NeoSwapRelayAPI*> client_api{nullptr};
++// Only loading may select NEW guest relay backing. Once gameplay starts,
++// first-map misses use RPCS3's original shared mapping without contacting the
++// relay. Existing published aliases must always keep their original bytes.
++inline constinit std::atomic<bool> gameplay_active{false};
++inline constinit std::atomic<std::uint64_t> gameplay_fallbacks{0};
++inline void set_gameplay_active(bool active) noexcept {
++    gameplay_active.store(active, std::memory_order_release);
++}
 +inline int install(const NeoSwapRelayAPI* api) noexcept {
 +    if (!api || api->struct_size != sizeof(*api) || api->abi_version != NEOSWAP_RELAY_ABI ||
 +        !api->create || !api->map || !api->unmap || !api->release || !api->enabled || !api->snapshot || !api->retire)
@@ -12330,6 +12730,11 @@ index 0000000..394543d
 +            return {true, nullptr, NEOSWAP_RELAY_INVALID};
 +        }
 +        if (state == mode::candidate) {
++            if (gameplay_active.load(std::memory_order_acquire)) {
++                state = mode::file;
++                gameplay_fallbacks.fetch_add(1, std::memory_order_relaxed);
++                return {false, nullptr, NEOSWAP_RELAY_DISABLED};
++            }
 +            api = client_api.load(std::memory_order_acquire);
 +            // Uses the unchanged common NeoSwap owner ABI.
 +            if (!api || !api->enabled(NEOSWAP_RPCS3) || api->create(NEOSWAP_RPCS3, bytes, &token) != NEOSWAP_RELAY_OK || !token) {
@@ -13055,7 +13460,7 @@ index 0000000..112f20b
 +}
 +} // namespace vk
 diff --git a/rpcs3/ios/RPCS3IOS.cpp b/rpcs3/ios/RPCS3IOS.cpp
-index 74a6dc7..f63811a 100644
+index 74a6dc7..efda59b 100644
 --- a/rpcs3/ios/RPCS3IOS.cpp
 +++ b/rpcs3/ios/RPCS3IOS.cpp
 @@ -1,4 +1,8 @@
@@ -13178,6 +13583,19 @@ index 74a6dc7..f63811a 100644
  }
  
  bool apply_database_settings_for_api(std::string_view title_id)
+@@ -904,10 +939,10 @@ EmuCallbacks make_callbacks()
+ 		g_config.main_thread_callback(g_config.user_context, &invoke_main_thread_payload, payload);
+ 	};
+ 
+-	callbacks.on_run = [](bool) {};
++	callbacks.on_run = [](bool) { neostation::relay::set_gameplay_active(true); };
+ 	callbacks.on_pause = []() {};
+ 	callbacks.on_resume = []() {};
+-	callbacks.on_stop = []() {};
++	callbacks.on_stop = []() { neostation::relay::set_gameplay_active(false); };
+ 	callbacks.on_ready = []() {};
+ 	callbacks.on_missing_fw = []() { emit_log(5, "PlayStation 3 firmware is not installed yet"); };
+ 	callbacks.on_emulation_stop_no_response = [](std::shared_ptr<atomic_t<bool>>, int)
 @@ -1267,15 +1302,15 @@ extern "C" uint32_t rpcs3_ios_abi_version(void) noexcept
  
  extern "C" const char* rpcs3_ios_build_info(void) noexcept
@@ -13819,11 +14237,13 @@ index 8fba197..8aa46a0 100644
  
  // Replaced only while boot is serialized and before emulation workers exist.
 diff --git a/rpcs3/ios/RPCS3IOSPerformance.cpp b/rpcs3/ios/RPCS3IOSPerformance.cpp
-index d800542..8e15f0d 100644
+index d800542..e050507 100644
 --- a/rpcs3/ios/RPCS3IOSPerformance.cpp
 +++ b/rpcs3/ios/RPCS3IOSPerformance.cpp
-@@ -2,12 +2,24 @@
+@@ -1,13 +1,27 @@
+ #include "stdafx.h"
  #include "RPCS3IOSPerformance.h"
++#include "Emu/Cell/SPUWarmupPolicy.h"
  
  #include "util/cpu_stats.hpp"
 +#include "util/logs.hpp"
@@ -13836,6 +14256,7 @@ index d800542..8e15f0d 100644
  #include <algorithm>
 +#include <array>
  #include <atomic>
++#include <bit>
  #include <chrono>
 +#include <cmath>
 +#include <condition_variable>
@@ -13847,7 +14268,7 @@ index d800542..8e15f0d 100644
  
  #ifdef __APPLE__
  #include <mach/mach.h>
-@@ -18,9 +30,93 @@
+@@ -18,9 +32,93 @@
  #include <os/proc.h>
  #endif
  
@@ -13941,7 +14362,7 @@ index d800542..8e15f0d 100644
  
  u64 process_memory_footprint()
  {
-@@ -41,23 +137,203 @@ u64 process_memory_footprint()
+@@ -41,23 +139,233 @@ u64 process_memory_footprint()
  class performance_registry final
  {
  public:
@@ -14001,6 +14422,15 @@ index d800542..8e15f0d 100644
 +		m_gpu_fence_timeouts = 0;
 +		m_range_lock_waits = 0;
 +		m_range_lock_wait_ticks = 0;
++		m_range_blocker_sum = 0;
++		m_range_blocker_max = 0;
++		m_range_iterations_max = 0;
++		static_cast<void>(m_range_episodes.take());
++		static_cast<void>(m_spu_loading.take());
++		static_cast<void>(m_spu_gameplay.take());
++		m_spu_warm_reuses = 0;
++		m_spu_warm_recompile_attempts = 0;
++		m_profile_session.fetch_add(1, std::memory_order_relaxed);
 +		m_memory_reclaim_attempts = 0;
 +		m_memory_reclaim_effective = 0;
 +		m_memory_reclaim_deferred = 0;
@@ -14072,10 +14502,31 @@ index d800542..8e15f0d 100644
 +		}
 +	}
 +
-+	void record_range_lock_wait(u64 wait_ticks) noexcept
++	void record_range_lock_wait(u64 wait_ticks, u64 blocker_bits) noexcept
 +	{
 +		m_range_lock_waits.fetch_add(1, std::memory_order_relaxed);
 +		m_range_lock_wait_ticks.fetch_add(wait_ticks, std::memory_order_relaxed);
++		const u64 blockers = std::popcount(blocker_bits);
++		m_range_blocker_sum.fetch_add(blockers, std::memory_order_relaxed);
++		update_max(m_range_blocker_max, blockers);
++	}
++
++	void record_range_lock_episode(u64 wait_ticks, u64 iterations) noexcept
++	{
++		m_range_episodes.record(wait_ticks, true);
++		update_max(m_range_iterations_max, iterations);
++	}
++
++	void record_spu_compile_attempt(u64 ticks, bool loading, bool succeeded, bool previously_warmed) noexcept
++	{
++		(loading ? m_spu_loading : m_spu_gameplay).record(ticks, succeeded);
++		if (!loading && previously_warmed)
++			m_spu_warm_recompile_attempts.fetch_add(1, std::memory_order_relaxed);
++	}
++
++	void record_spu_warm_reuse() noexcept
++	{
++		m_spu_warm_reuses.fetch_add(1, std::memory_order_relaxed);
 +	}
 +
 +	void record_memory_pressure_reclaim(u32 severity, bool attempted, bool relieved) noexcept
@@ -14154,7 +14605,7 @@ index d800542..8e15f0d 100644
  	}
  
  	rpcs3_ios_status snapshot(rpcs3_ios_performance_metrics* metrics)
-@@ -72,7 +348,7 @@ public:
+@@ -72,7 +380,7 @@ public:
  
  		std::lock_guard lock(m_sample_mutex);
  		const auto now = sample_clock::now();
@@ -14163,10 +14614,16 @@ index d800542..8e15f0d 100644
  		const bool presented_since_last_sample = !m_has_fps_baseline || frame_count > m_last_frame_count;
  		rpcs3_ios_performance_metrics result{};
  		result.struct_size = sizeof(result);
-@@ -113,7 +389,208 @@ public:
+@@ -113,7 +421,241 @@ public:
  	}
  
  private:
++	static void update_max(std::atomic<u64>& target, u64 value) noexcept
++	{
++		auto maximum = target.load(std::memory_order_relaxed);
++		while (maximum < value && !target.compare_exchange_weak(maximum, value, std::memory_order_relaxed)) {}
++	}
++
 +	void sampler_main()
 +	{
 +		for (;;)
@@ -14214,9 +14671,23 @@ index d800542..8e15f0d 100644
 +		std::array<double, core_group_count> average_threads{};
 +		double elapsed_ms = 0.0;
 +		u64 frame_baseline = 0;
++		rpcs3::spu::compile_sample loading, gameplay, range;
++		u64 profile_session = 0, warm_reuses = 0, warm_recompile_attempts = 0;
++		u64 range_iterations_max = 0, range_blocker_sum = 0, range_blocker_max = 0;
 +
 +		{
 +			std::lock_guard lock(m_profile_mutex);
++			// reset() shares this mutex: keep the epoch and all new samples
++			// together, then format diagnostics after releasing the lock.
++			profile_session = m_profile_session.load(std::memory_order_relaxed);
++			loading = m_spu_loading.take();
++			gameplay = m_spu_gameplay.take();
++			range = m_range_episodes.take();
++			warm_reuses = m_spu_warm_reuses.exchange(0, std::memory_order_relaxed);
++			warm_recompile_attempts = m_spu_warm_recompile_attempts.exchange(0, std::memory_order_relaxed);
++			range_iterations_max = m_range_iterations_max.exchange(0, std::memory_order_relaxed);
++			range_blocker_sum = m_range_blocker_sum.exchange(0, std::memory_order_relaxed);
++			range_blocker_max = m_range_blocker_max.exchange(0, std::memory_order_relaxed);
 +			frame_baseline = m_profile_frame_baseline;
 +			elapsed_ms = std::chrono::duration<double, std::milli>(now - m_profile_window_start).count();
 +			if (m_usage_samples)
@@ -14234,6 +14705,19 @@ index d800542..8e15f0d 100644
 +			m_profile_window_start = now;
 +			m_next_report = now + report_period;
 +		}
++
++		const auto milliseconds = [frequency](u64 ticks) { return frequency ? static_cast<double>(ticks) * 1000.0 / frequency : 0.0; };
++		ios_core_profiler.notice(
++			"SPUPROF session=%llu loading_attempts=%llu loading_failures=%llu loading_total_ms=%.3f loading_max_ms=%.3f "
++			"gameplay_attempts=%llu gameplay_failures=%llu gameplay_total_ms=%.3f gameplay_max_ms=%.3f "
++			"warm_reuses=%llu warm_recompile_attempts=%llu",
++			profile_session, loading.count, loading.failures, milliseconds(loading.ticks), milliseconds(loading.maximum_ticks),
++			gameplay.count, gameplay.failures, milliseconds(gameplay.ticks), milliseconds(gameplay.maximum_ticks),
++			warm_reuses, warm_recompile_attempts);
++		ios_core_profiler.notice(
++			"RANGELOCKPROF session=%llu episodes=%llu total_ms=%.3f max_ms=%.3f iterations_max=%llu blocker_samples=%llu blocker_max=%llu",
++			profile_session, range.count, milliseconds(range.ticks), milliseconds(range.maximum_ticks),
++			range_iterations_max, range_blocker_sum, range_blocker_max);
 +
 +		const u64 memory_reclaims = m_memory_reclaim_attempts.exchange(0, std::memory_order_relaxed);
 +		const u64 memory_reclaim_effective = m_memory_reclaim_effective.exchange(0, std::memory_order_relaxed);
@@ -14372,7 +14856,7 @@ index d800542..8e15f0d 100644
  	std::atomic<u32> m_rsx_load{0};
  	std::atomic_bool m_has_rsx_load{false};
  	std::mutex m_sample_mutex;
-@@ -121,6 +598,50 @@ private:
+@@ -121,6 +663,58 @@ private:
  	bool m_has_fps_baseline = false;
  	u64 m_last_frame_count = 0;
  	sample_clock::time_point m_last_sample_time{};
@@ -14398,6 +14882,14 @@ index d800542..8e15f0d 100644
 +	std::atomic<u64> m_gpu_fence_timeouts{0};
 +	std::atomic<u64> m_range_lock_waits{0};
 +	std::atomic<u64> m_range_lock_wait_ticks{0};
++	std::atomic<u64> m_range_blocker_sum{0};
++	std::atomic<u64> m_range_blocker_max{0};
++	std::atomic<u64> m_range_iterations_max{0};
++	rpcs3::spu::compile_counters m_range_episodes;
++	rpcs3::spu::compile_counters m_spu_loading, m_spu_gameplay;
++	std::atomic<u64> m_spu_warm_reuses{0};
++	std::atomic<u64> m_spu_warm_recompile_attempts{0};
++	std::atomic<u64> m_profile_session{0};
 +	std::atomic<u64> m_memory_reclaim_attempts{0};
 +	std::atomic<u64> m_memory_reclaim_effective{0};
 +	std::atomic<u64> m_memory_reclaim_deferred{0};
@@ -14423,7 +14915,7 @@ index d800542..8e15f0d 100644
  };
  
  performance_registry g_performance_registry;
-@@ -138,6 +659,71 @@ void record_presented_frame(u32 rsx_load) noexcept
+@@ -138,6 +732,86 @@ void record_presented_frame(u32 rsx_load) noexcept
  	g_performance_registry.record_presented_frame(rsx_load);
  }
  
@@ -14442,9 +14934,24 @@ index d800542..8e15f0d 100644
 +	g_performance_registry.record_gpu_fence_wait(wait_ticks, timed_out);
 +}
 +
-+void record_range_lock_wait(u64 wait_ticks) noexcept
++void record_range_lock_wait(u64 wait_ticks, u64 blocker_bits) noexcept
 +{
-+	g_performance_registry.record_range_lock_wait(wait_ticks);
++	g_performance_registry.record_range_lock_wait(wait_ticks, blocker_bits);
++}
++
++void record_range_lock_episode(u64 wait_ticks, u64 iterations) noexcept
++{
++	g_performance_registry.record_range_lock_episode(wait_ticks, iterations);
++}
++
++void record_spu_compile_attempt(u64 ticks, bool loading, bool succeeded, bool previously_warmed) noexcept
++{
++	g_performance_registry.record_spu_compile_attempt(ticks, loading, succeeded, previously_warmed);
++}
++
++void record_spu_warm_reuse() noexcept
++{
++	g_performance_registry.record_spu_warm_reuse();
 +}
 +
 +void record_memory_pressure_reclaim(u32 severity, bool attempted, bool relieved) noexcept
@@ -14496,10 +15003,10 @@ index d800542..8e15f0d 100644
  {
  #ifdef RPCS3_IOS
 diff --git a/rpcs3/ios/RPCS3IOSPerformance.h b/rpcs3/ios/RPCS3IOSPerformance.h
-index 88392e0..568d036 100644
+index 88392e0..7ef1c99 100644
 --- a/rpcs3/ios/RPCS3IOSPerformance.h
 +++ b/rpcs3/ios/RPCS3IOSPerformance.h
-@@ -15,6 +15,25 @@ void reset_performance_metrics();
+@@ -15,6 +15,29 @@ void reset_performance_metrics();
  // device-wide hardware counter.
  void record_presented_frame(u32 rsx_load) noexcept;
  
@@ -14508,7 +15015,9 @@ index 88392e0..568d036 100644
 +void record_pipeline_job_queued(u32 pending_jobs) noexcept;
 +void record_pipeline_job_completed(u64 queue_wait_ticks, u64 compile_ticks) noexcept;
 +void record_gpu_fence_wait(u64 wait_ticks, bool timed_out) noexcept;
-+void record_range_lock_wait(u64 wait_ticks) noexcept;
++// A wait is one polling iteration, not one independent stalled access.
++void record_range_lock_wait(u64 wait_ticks, u64 blocker_bits = 0) noexcept;
++void record_range_lock_episode(u64 wait_ticks, u64 iterations) noexcept;
 +
 +// NEOSTATION_BUILD258_RUNTIME_RESILIENCE_V1: counters are atomic and allocation-free so cache/JIT/RSX hot paths
 +// can attribute stutter without writing one diagnostic line per event.
@@ -14517,6 +15026,8 @@ index 88392e0..568d036 100644
 +void record_rsx_semaphore_wait(u64 wait_microseconds, bool timed_out) noexcept;
 +void record_ppu_cache_lookup(bool hit) noexcept;
 +void record_spu_block_compiled(u32 guest_code_bytes, u64 compile_ticks) noexcept;
++void record_spu_compile_attempt(u64 ticks, bool loading, bool succeeded, bool previously_warmed) noexcept;
++void record_spu_warm_reuse() noexcept;
 +void record_spu_metadata_write() noexcept;
 +void record_spu_metadata_cache_load(u32 loaded, u32 rejected, u64 repaired_bytes) noexcept;
 +void record_spu_compile_diagnostic() noexcept;

@@ -9,17 +9,30 @@
 #include <random>
 #include <vector>
 #include <algorithm>
+#include <thread>
 
 namespace {
 constexpr std::size_t KiB = 1024, MiB = 1024 * KiB;
 std::map<void*, void*> mappings;
-bool fail_cleanup = false;
+bool fail_cleanup = false, check_busy_on_cleanup = true;
 }
 namespace neostation::donation {
 Result availability() noexcept { return {}; }
 Block::~Block() { (void)reset(); }
 Result Block::reset() noexcept {
   if (address_) {
+  if (check_busy_on_cleanup) {
+    check_busy_on_cleanup = false;
+    // Production collection owns the pool mutex across the slow unmap callback.
+    // A concurrent emulator request must return before this callback finishes.
+    std::thread requester([] {
+      void* pointer = reinterpret_cast<void*>(1); std::uint64_t token = 42;
+      const auto result = pool_acquire(64 * KiB, 64 * KiB, &pointer, &token);
+      assert(result.stage == Stage::pool_busy && !pointer && !token);
+    });
+    requester.join();
+  }
+
     if (fail_cleanup) { fail_cleanup = false; return {Stage::unmap, 701}; }
     auto found = mappings.find(data());
     assert(found != mappings.end());
@@ -115,5 +128,5 @@ int main() {
   for (unsigned i = 0; i < 128; ++i) assert(acquire(64 * KiB, 64 * KiB));
   while (!live.empty()) release(live.size() / 2);
   assert(pool_campaign_end(2) && mappings.empty());
-  puts("PASS: production pool 1024-slot exhaustion, fragmented gap reuse, alignment, data isolation, stale tokens, donor loss, failed cleanup and campaign reuse; injected OS, no physical-RAM claim");
+  puts("PASS: production pool nonblocking acquisition during cleanup, 1024-slot exhaustion, fragmented gap reuse, alignment, data isolation, stale tokens, donor loss, failed cleanup and campaign reuse; injected OS, no physical-RAM claim");
 }

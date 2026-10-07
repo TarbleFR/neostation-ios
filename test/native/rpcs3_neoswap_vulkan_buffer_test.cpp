@@ -121,7 +121,7 @@ static void vkFreeMemory(VkDevice, VkDeviceMemory, void*) { assert(loan); events
 #include "rpcs3/ios/NeoSwapVulkanBuffer.h"
 static int allocate_loan(u32 owner, u32 kind, u64 bytes, u64 alignment, void** out) {
  // Imports identify themselves with the additive GPU host-visible kind.
- assert(owner == NEOSWAP_RPCS3 && kind == NEOSWAP_GPU_HOST_VISIBLE);
+ assert(owner == NEOSWAP_RPCS3 && kind == (static_cast<uint32_t>(NEOSWAP_GPU_HOST_VISIBLE) | NEOSWAP_REQUEST_FAST));
  events.push_back("loan"); if (fault == 5) return NEOSWAP_QUOTA;
  assert(!loan && alignment == 16384); loan = std::aligned_alloc(alignment, bytes);
  assert(loan); *out = loan; return NEOSWAP_OK;

@@ -50,6 +50,11 @@ jobs:
             native/neoswap-donation/Pool.cpp test/neoswap_pool_fragmentation_test.cpp \
             -o "$RUNNER_TEMP/neoswap-pool-fragmentation"
           "$RUNNER_TEMP/neoswap-pool-fragmentation" | tee build/neoswap/pool-fragmentation-tests.txt
+          xcrun clang++ -std=c++20 -O1 -g -Wall -Wextra -Werror -pthread -fsanitize=address,undefined \
+            -Ipackages/neo_swap/ios/Classes native/neoswap-donation/Pool.cpp test/neoswap_preparation_test.cpp \
+            -o "$RUNNER_TEMP/neoswap-preparation"
+          "$RUNNER_TEMP/neoswap-preparation" | tee build/neoswap/preparation-tests.txt
+          python3 test/rpcs3_neoswap_build_comparison_test.py | tee build/neoswap/build-comparison-tests.txt
           python3 test/check_neo_swap_scope.py
           python3 test/neoswap_evidence_lifecycle_test.py
           xcrun clang++ -std=c++20 -O1 -g -Wall -Wextra -Werror -pthread -DNEOSWAP_TESTING \
@@ -119,7 +124,7 @@ jobs:
           set -euo pipefail
           flutter pub get --enforce-lockfile
           flutter analyze --no-fatal-infos
-          flutter test test/neo_swap_locale_test.dart test/neo_swap_channel_test.dart test/neo_swap_dialog_test.dart test/jit_backend_preference_service_test.dart --reporter expanded | tee build/neoswap/dart-ui-tests.txt
+          flutter test test/neo_swap_locale_test.dart test/neo_swap_channel_test.dart test/neo_swap_dialog_test.dart test/jit_backend_preference_service_test.dart test/rpcs3_game_profile_service_test.dart --reporter expanded | tee build/neoswap/dart-ui-tests.txt
           python3 test/stikjit_unified_build_test.py
           python3 test/rpcs3_pod_header_visibility_test.py
           python3 test/rpcs3_atomic_startup_test.py

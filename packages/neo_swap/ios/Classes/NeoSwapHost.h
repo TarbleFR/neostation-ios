@@ -37,6 +37,15 @@ typedef struct NeoSwapCPUBufferStats {
     uint32_t enabled, pressure_raised;
 } NeoSwapCPUBufferStats;
 
+// Cumulative acquisition telemetry. These counts are host acquisition attempts,
+// independent of RPCS3 guest range-lock waits and OS page-fault measurements.
+typedef struct NeoSwapFastStats {
+    uint64_t requests, successes, broker_busy, donor_busy, ready_misses;
+    uint64_t fallback_count, total_time_us, max_time_us;
+    uint64_t prepare_requests, prepared_loans, prepare_failures;
+    uint64_t retire_requests, retired_loans, retire_failures;
+} NeoSwapFastStats;
+
 typedef struct NeoSwapDonationDemand {
     uint64_t sequence, bytes;
 } NeoSwapDonationDemand;
@@ -72,6 +81,7 @@ typedef struct NeoSwapRelayLoanStats {
 #ifdef __cplusplus
 extern "C" {
 #endif
+NEOSWAP_PUBLIC int NeoSwap_FastSnapshot(NeoSwapFastStats* stats);
 NEOSWAP_PUBLIC int NeoSwap_HostSnapshot(NeoSwapHostStats* stats);
 // These settings never migrate or free an existing allocation. Disable on exit.
 NEOSWAP_PUBLIC void NeoSwap_SetCPUBufferExperiment(int enabled);
@@ -96,7 +106,8 @@ NEOSWAP_PUBLIC int NeoSwap_WaitForDonationReady(uint64_t minimum_bytes, uint32_t
 // below the live value refuses new loans only; existing loans are retained.
 // video_frames selects whether kind 4 may borrow relay pages at all.
 NEOSWAP_PUBLIC int NeoSwap_SetRelayHostLoanPolicy(uint64_t quota_bytes, int admitted, int video_frames);
-// Retires cached (released, still mapped) loans older than the bounded reuse
+// Completes up to 32 relinquished FAST loans (relay or donors), retaining
+// ownership on cleanup failure. Also retires cached (released, still mapped) loans older than the bounded reuse
 // window, or every cached loan when flush_all is set. Maintenance only.
 // now_ms = 0 uses the broker's own monotonic clock, the one that stamps
 // releases; tests may pass an explicit value on that same base.

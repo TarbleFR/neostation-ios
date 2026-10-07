@@ -807,6 +807,8 @@ jobs:
             test/rpcs3_xitrix_v0101_native_test.py \
             test/native/rpcs3_spu_analyzer_support.h \
             test/native/rpcs3_spu_branch_analyzer_test.cpp \
+            test/rpcs3_spu_warmup_test.py \
+            test/native/rpcs3_spu_warmup_test.cpp \
             test/native/rpcs3_vk_memory_pressure_test.cpp \
             test/native/rpcs3_vk_conditional_render_test.cpp \
             test/native/rpcs3_neoswap_stats_getter_test.cpp \

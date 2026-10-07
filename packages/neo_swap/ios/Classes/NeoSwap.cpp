@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <bit>
 #include <cerrno>
 #include <chrono>
 #include <cstdio>
@@ -58,6 +59,12 @@ struct CPUBufferCounters {
     std::atomic<uint64_t> pressure_refusals{0}, policy_refusals{0}, pool_misses{0};
     std::array<std::atomic<uint64_t>, 4> request_bins{}, donated_bins{};
     std::atomic<bool> enabled{false}, pressure_raised{true};
+};
+struct FastCounters {
+    std::atomic<uint64_t> requests{0}, successes{0}, broker_busy{0}, donor_busy{0}, ready_misses{0};
+    std::atomic<uint64_t> fallback_count{0}, total_time_us{0}, max_time_us{0};
+    std::atomic<uint64_t> prepare_requests{0}, prepared_loans{0}, prepare_failures{0};
+    std::atomic<uint64_t> retire_requests{0}, retired_loans{0}, retire_failures{0};
 };
 struct RelayLoanCounters {
     std::atomic<uint64_t> live_bytes{0}, peak_bytes{0}, live_blocks{0}, allocation_count{0};
@@ -149,6 +156,13 @@ public:
 struct Broker {
     std::mutex mutex;
     std::array<Block, max_blocks> blocks{};
+    // Exact address publication, independent of the mutex-protected hash index.
+    // Low bit marks a fast loan. Cleanup withdraws it before the OS unmap;
+    // failure republishes ownership. Heap frees never wait on maintenance.
+    std::array<std::atomic<uintptr_t>, max_blocks> owned_addresses{};
+    std::array<std::atomic<bool>, max_blocks> pending_releases{};
+    std::array<std::atomic<uint64_t>, (max_blocks + 63) / 64> owned_bits{};
+    size_t next_release = 0;
     AddressIndex index{};
     NeoSwapConfig config{};
 #if defined(NEOSWAP_DONATION)
@@ -161,6 +175,9 @@ struct Broker {
     HostCounters host_stats{};
     CPUBufferCounters cpu_buffers{};
     RelayLoanCounters relay_loans{};
+    FastCounters fast{};
+    // Bounded hints, not reservations. Only the maintenance queue maps them.
+    std::array<uint64_t, 8> pending_relay_bytes{};
     std::array<CachedLoan, relay_cache_slots> relay_cache{};
     int directory = -1;
     uint64_t next_name = 1;
@@ -396,7 +413,7 @@ void* reserve_region(Broker& b, Block& block, size_t bytes, size_t alignment, si
 }
 int record_allocation(Broker& b, Block& slot, void* address, uint64_t size,
                       uint32_t owner, uint32_t kind, Backing backing, int fd, uint64_t token,
-                      std::chrono::steady_clock::time_point started, void** out) {
+                      std::chrono::steady_clock::time_point started, void** out, bool fast = false) {
     // Preserve the file region acquired before MAP_FIXED; a donor has none.
     slot.address = address; slot.size = size; slot.owner = owner; slot.kind = kind;
     slot.fd = fd; slot.backing = backing;
@@ -418,7 +435,11 @@ int record_allocation(Broker& b, Block& slot, void* address, uint64_t size,
         r.kind_allocation_count[kind].fetch_add(1, std::memory_order_relaxed);
     }
     else b.file_live_bytes += size;
-    b.index.insert(address, static_cast<size_t>(&slot - b.blocks.data()));
+    const auto slot_index = static_cast<size_t>(&slot - b.blocks.data());
+    b.index.insert(address, slot_index);
+    b.owned_addresses[slot_index].store(reinterpret_cast<uintptr_t>(address) | (fast ? uintptr_t{1} : 0),
+                                       std::memory_order_release);
+    b.owned_bits[slot_index / 64].fetch_or(uint64_t{1} << (slot_index % 64), std::memory_order_release);
     b.stats.live_bytes += size; ++b.stats.live_blocks; ++b.stats.allocation_count;
     if (b.stats.live_bytes > b.stats.peak_bytes) b.stats.peak_bytes = b.stats.live_bytes;
     auto& o = b.stats.owners[owner]; o.live_bytes += size; ++o.allocation_count;
@@ -472,7 +493,7 @@ void relay_refuse(Broker& b, uint32_t kind, std::atomic<uint64_t>& counter) {
 // whose creator exited; the host footprint is not charged for them. Any
 // refusal returns false and the caller continues with donors or files.
 bool try_relay_loan(Broker& b, uint32_t owner, uint32_t kind, uint64_t rounded, Block*& slot,
-                    void** out, std::chrono::steady_clock::time_point started) {
+                    void** out, std::chrono::steady_clock::time_point started, bool fast = false) {
     auto& r = b.relay_loans;
     const auto* api = relay_api();
     if (!api) return false;
@@ -499,8 +520,22 @@ bool try_relay_loan(Broker& b, uint32_t owner, uint32_t kind, uint64_t rounded, 
         const uint64_t token = cached.token;
         void* address = cached.address;
         cached = {};
-        record_allocation(b, *slot, address, bytes, owner, kind, Backing::relay, -1, token, started, out);
+        record_allocation(b, *slot, address, bytes, owner, kind, Backing::relay, -1, token, started, out, fast);
         return true;
+    }
+    if (fast) {
+        // Never let a miss reach create/map/scrub or a slow fallback. The
+        // existing maintenance timer can prepare one requested size off-frame.
+        if (bytes <= 16 * MiB) {
+            bool queued = false;
+            for (const auto demand : b.pending_relay_bytes) queued |= demand == bytes;
+            if (!queued) for (auto& demand : b.pending_relay_bytes) if (!demand) {
+                demand = bytes;
+                b.fast.prepare_requests.fetch_add(1, std::memory_order_relaxed);
+                break;
+            }
+        }
+        return false;
     }
     // A reuse hit above is already charged. A new interval is charged the way
     // the backend charges owner 1: live intervals plus those still parked in
@@ -529,7 +564,7 @@ bool try_relay_loan(Broker& b, uint32_t owner, uint32_t kind, uint64_t rounded, 
         return false;
     }
     r.padding_bytes.fetch_add(bytes - rounded, std::memory_order_relaxed);
-    record_allocation(b, *slot, address, bytes, owner, kind, Backing::relay, -1, token, started, out);
+    record_allocation(b, *slot, address, bytes, owner, kind, Backing::relay, -1, token, started, out, fast);
     return true;
 }
 // Returns NEOSWAP_OK when the block's relay interval is cached or released,
@@ -572,6 +607,23 @@ int allocate(uint32_t owner, uint32_t kind, uint64_t bytes, uint64_t alignment, 
     if (owner >= NEOSWAP_OWNER_COUNT) return NEOSWAP_INVALID;
     if (owner != NEOSWAP_RPCS3) return NEOSWAP_DISABLED;
     auto& b = broker();
+    const bool fast = (kind & NEOSWAP_REQUEST_FAST) != 0;
+    kind &= ~static_cast<uint32_t>(NEOSWAP_REQUEST_FAST);
+    struct FastAttempt {
+        FastCounters* counters;
+        void** output;
+        std::chrono::steady_clock::time_point start;
+        ~FastAttempt() {
+            if (!counters) return;
+            const auto us = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(
+                std::chrono::steady_clock::now() - start).count());
+            counters->total_time_us.fetch_add(us, std::memory_order_relaxed);
+            auto maximum = counters->max_time_us.load(std::memory_order_relaxed);
+            while (maximum < us && !counters->max_time_us.compare_exchange_weak(maximum, us, std::memory_order_relaxed)) {}
+            (*output ? counters->successes : counters->fallback_count).fetch_add(1, std::memory_order_relaxed);
+        }
+    } fast_attempt{fast ? &b.fast : nullptr, out, std::chrono::steady_clock::now()};
+    if (fast) b.fast.requests.fetch_add(1, std::memory_order_relaxed);
     const bool small_cpu = owner == NEOSWAP_RPCS3 && kind == NEOSWAP_CPU_CACHE &&
         bytes >= small_cpu_minimum && bytes < MiB;
     if (small_cpu && (!power_of_two(alignment) || alignment > 65536))
@@ -597,7 +649,13 @@ int allocate(uint32_t owner, uint32_t kind, uint64_t bytes, uint64_t alignment, 
         bool success = false;
         ~CPUAttempt() { if (counters && !success) counters->fallback_count.fetch_add(1, std::memory_order_relaxed); }
     } attempt{small_cpu ? &cpu : nullptr};
-    std::lock_guard guard(b.mutex);
+    std::unique_lock guard(b.mutex, std::defer_lock);
+    if (fast) {
+        if (!guard.try_lock()) {
+            b.fast.broker_busy.fetch_add(1, std::memory_order_relaxed);
+            return NEOSWAP_BUSY;
+        }
+    } else guard.lock();
     if (owner >= NEOSWAP_OWNER_COUNT || !host_kind_supported(kind) ||
         !bytes || !power_of_two(alignment) || alignment > 65536 || bytes > max_block_bytes)
         return reject(b, owner, NEOSWAP_INVALID);
@@ -663,7 +721,7 @@ int allocate(uint32_t owner, uint32_t kind, uint64_t bytes, uint64_t alignment, 
     // capacity below), with cached reuse.
     if (relay_enabled && b.next_name != std::numeric_limits<uint64_t>::max()) {
         Block* relay_slot = nullptr;
-        if (try_relay_loan(b, owner, kind, rounded, relay_slot, out, started)) {
+        if (try_relay_loan(b, owner, kind, rounded, relay_slot, out, started, fast)) {
             note_small_cpu(*relay_slot);
             return NEOSWAP_OK;
         }
@@ -690,10 +748,12 @@ int allocate(uint32_t owner, uint32_t kind, uint64_t bytes, uint64_t alignment, 
         uint64_t token = 0;
         const auto acquired = neostation::donation::pool_acquire(rounded, std::max(alignment, page), &donated, &token);
         if (acquired) {
-            const int result = record_allocation(b, *slot, donated, rounded, owner, kind, Backing::donor, -1, token, started, out);
+            const int result = record_allocation(b, *slot, donated, rounded, owner, kind, Backing::donor, -1, token, started, out, fast);
             note_small_cpu(*slot);
             return result;
         }
+        if (fast && acquired.stage == neostation::donation::Stage::pool_busy)
+            b.fast.donor_busy.fetch_add(1, std::memory_order_relaxed);
         if (small_cpu) cpu.pool_misses.fetch_add(1, std::memory_order_relaxed);
         if (acquired.stage == neostation::donation::Stage::pool_quota ||
             acquired.stage == neostation::donation::Stage::pool_unready)
@@ -704,6 +764,10 @@ int allocate(uint32_t owner, uint32_t kind, uint64_t bytes, uint64_t alignment, 
         request_donation(b, small_cpu ? std::max<uint64_t>(MiB, rounded) : rounded); // first request may precede helper proof
     }
 #endif
+    if (fast) {
+        b.fast.ready_misses.fetch_add(1, std::memory_order_relaxed);
+        return reject(b, owner, NEOSWAP_BUSY); // caller immediately uses its ordinary allocation
+    }
     if (small_cpu) return reject(b, owner, NEOSWAP_DISABLED); // no disk fallback for sub-MiB CPU requests
     if (video_frame) return reject(b, owner, NEOSWAP_DISABLED); // frames never wait for or use files
     if (!file_enabled) return reject(b, owner, NEOSWAP_DISABLED);
@@ -749,14 +813,23 @@ int allocate(uint32_t owner, uint32_t kind, uint64_t bytes, uint64_t alignment, 
     }
     return record_allocation(b, *slot, p, rounded, owner, kind, Backing::file, fd, 0, started, out);
 }
-int release(void* p) {
-    if (!p) return NEOSWAP_NOT_OWNED;
-    auto& b = broker();
-    if (!b.live_count.load(std::memory_order_acquire)) return NEOSWAP_NOT_OWNED;
-    std::lock_guard guard(b.mutex);
-    size_t found = 0;
-    if (!b.index.find(p, b.blocks, found)) return NEOSWAP_NOT_OWNED;
+int release_locked(Broker& b, size_t found) {
     Block& block = b.blocks[found];
+    // Withdraw before an OS unmap can recycle this address for an ordinary
+    // allocation. On failure the backend retains its mapping, so republish
+    // exact ownership. No new object can use this slot while we hold the lock.
+    struct OwnershipWithdrawal {
+        Broker& broker;
+        size_t slot;
+        uintptr_t owned;
+        bool released = false;
+        ~OwnershipWithdrawal() {
+            if (released) return;
+            broker.owned_addresses[slot].store(owned, std::memory_order_release);
+            broker.owned_bits[slot / 64].fetch_or(uint64_t{1} << (slot % 64), std::memory_order_release);
+        }
+    } withdrawal{b, found, b.owned_addresses[found].exchange(0, std::memory_order_acq_rel)};
+    b.owned_bits[found / 64].fetch_and(~(uint64_t{1} << (found % 64)), std::memory_order_release);
     switch (block.backing) {
 #if defined(NEOSWAP_DONATION)
     case Backing::donor: {
@@ -811,12 +884,62 @@ int release(void* p) {
     b.stats.live_bytes -= block.size; --b.stats.live_blocks;
     b.stats.owners[block.owner].live_bytes -= block.size;
     b.owner_bytes[block.owner].store(b.stats.owners[block.owner].live_bytes, std::memory_order_relaxed);
-    b.index.erase(p, b.blocks);
+    b.index.erase(block.address, b.blocks);
+    withdrawal.released = true;
     block = Block{};
     b.live_count.store(static_cast<uint32_t>(b.stats.live_blocks), std::memory_order_release);
     // No retry of close(): its descriptor may already have been recycled.
     if (fd >= 0 && ::close(fd)) { ++b.stats.io_errors; b.stats.last_result = NEOSWAP_IO; b.stats.last_errno = errno; }
     return NEOSWAP_OK;
+}
+int release(void* p) {
+    if (!p) return NEOSWAP_NOT_OWNED;
+    auto& b = broker();
+    if (!b.live_count.load(std::memory_order_acquire)) return NEOSWAP_NOT_OWNED;
+    const auto address = reinterpret_cast<uintptr_t>(p);
+    size_t found = max_blocks;
+    // 32 bitmap words at the hard maximum, then only occupied slots; never
+    // scan all 2048 address atomics for each ordinary small heap free.
+    for (size_t word = 0; word < b.owned_bits.size() && found == max_blocks; ++word) {
+      auto bits = b.owned_bits[word].load(std::memory_order_acquire);
+      while (bits) {
+        const size_t index = word * 64 + std::countr_zero(bits);
+        bits &= bits - 1;
+        const auto owned = b.owned_addresses[index].load(std::memory_order_acquire);
+        if (!owned || (owned & ~uintptr_t{1}) != address) continue;
+        if (owned & 1) {
+            // The caller quiesced all users and relinquishes the pointer.
+            // Keep its backing and quota until maintenance has really released
+            // it; never turn a failed cleanup into an ordinary free/unmap.
+            if (!b.pending_releases[index].exchange(true, std::memory_order_release))
+                b.fast.retire_requests.fetch_add(1, std::memory_order_relaxed);
+            return NEOSWAP_OK;
+        }
+        found = index;
+        break;
+      }
+    }
+    if (found == max_blocks) return NEOSWAP_NOT_OWNED;
+    std::lock_guard guard(b.mutex);
+    if (!b.index.find(p, b.blocks, found)) return NEOSWAP_NOT_OWNED;
+    return release_locked(b, found);
+}
+void maintain_fast_releases_locked(Broker& b) {
+    unsigned remaining = 32;
+    const size_t first = b.next_release;
+    for (size_t scanned = 0; scanned < max_blocks && remaining; ++scanned) {
+        const size_t index = (first + scanned) % max_blocks;
+        if (!b.pending_releases[index].exchange(false, std::memory_order_acquire)) continue;
+        --remaining;
+        b.next_release = (index + 1) % max_blocks;
+        if (release_locked(b, index) == NEOSWAP_OK)
+            b.fast.retired_loans.fetch_add(1, std::memory_order_relaxed);
+        else {
+            // No address can be reissued while failed cleanup remains owned.
+            b.pending_releases[index].store(true, std::memory_order_release);
+            b.fast.retire_failures.fetch_add(1, std::memory_order_relaxed);
+        }
+    }
 }
 int sync(void* p) {
     auto& b = broker(); std::lock_guard guard(b.mutex);
@@ -1037,6 +1160,9 @@ extern "C" uint64_t NeoSwap_LiveBytes(uint32_t owner) {
     return owner < NEOSWAP_OWNER_COUNT ? broker().owner_bytes[owner].load(std::memory_order_relaxed) : 0;
 }
 #ifdef NEOSWAP_TESTING
+extern "C" void NeoSwap_TestWithBrokerLock(void (*callback)(void*), void* context) {
+    auto& b = broker(); std::lock_guard guard(b.mutex); callback(context);
+}
 extern "C" void NeoSwap_TestFailNext(int stage) {
     auto& b = broker(); std::lock_guard guard(b.mutex); b.failure = stage;
 }
@@ -1056,6 +1182,17 @@ extern "C" int NeoSwap_TestVerifyFile(void* p, const void* expected, size_t byte
 }
 #endif
 
+extern "C" int NeoSwap_FastSnapshot(NeoSwapFastStats* output) {
+    if (!output) return NEOSWAP_INVALID;
+    const auto& f = broker().fast;
+#define COPY_FAST(name) output->name = f.name.load(std::memory_order_relaxed)
+    COPY_FAST(requests); COPY_FAST(successes); COPY_FAST(broker_busy); COPY_FAST(donor_busy);
+    COPY_FAST(ready_misses); COPY_FAST(fallback_count); COPY_FAST(total_time_us); COPY_FAST(max_time_us);
+    COPY_FAST(prepare_requests); COPY_FAST(prepared_loans); COPY_FAST(prepare_failures);
+    COPY_FAST(retire_requests); COPY_FAST(retired_loans); COPY_FAST(retire_failures);
+#undef COPY_FAST
+    return NEOSWAP_OK;
+}
 extern "C" void NeoSwap_SetCPUBufferExperiment(int enabled) {
     broker().cpu_buffers.enabled.store(enabled != 0, std::memory_order_release);
 }
@@ -1091,6 +1228,8 @@ extern "C" int NeoSwap_SetRelayHostLoanPolicy(uint64_t quota_bytes, int admitted
 #endif
 }
 extern "C" int NeoSwap_RelayLoanMaintain(uint64_t now_ms, int flush_all) {
+    auto& b = broker(); std::lock_guard guard(b.mutex);
+    maintain_fast_releases_locked(b);
 #if defined(NEOSWAP_RELAY)
     // Releases stamp cached intervals with the broker's monotonic clock; ages
     // are only meaningful against that same clock, so 0 selects it.
@@ -1098,8 +1237,47 @@ extern "C" int NeoSwap_RelayLoanMaintain(uint64_t now_ms, int flush_all) {
     // The caller decides when to drain (no session, shrinking, pressure); a
     // closed admission gate alone keeps the bounded cache ageing normally so
     // a holding sample does not hand room back and reopen the gate.
-    auto& b = broker(); std::lock_guard guard(b.mutex);
-    return relay_loan_maintain_locked(b, now_ms, flush_all != 0);
+    const int result = relay_loan_maintain_locked(b, now_ms, flush_all != 0);
+    if (flush_all) {
+        b.pending_relay_bytes.fill(0);
+        return result;
+    }
+    // One bounded mapping per existing background tick; no new worker/thread.
+    // Host cache limits and the backend quota include these prepared intervals.
+    if (!b.relay_loans.admitted.load(std::memory_order_acquire)) return result;
+    const auto* api = relay_api();
+    for (auto& demand : b.pending_relay_bytes) if (demand) {
+        const uint64_t bytes = demand;
+        const uint64_t cached_bytes = b.relay_loans.cached_bytes.load(std::memory_order_relaxed);
+        const uint64_t live_bytes = b.relay_loans.live_bytes.load(std::memory_order_relaxed);
+        const uint64_t quota = b.relay_loans.quota_bytes.load(std::memory_order_relaxed);
+        CachedLoan* slot = nullptr;
+        for (auto& cached : b.relay_cache) {
+            if (cached.token && cached.bytes == bytes) { demand = 0; break; }
+            if (!cached.token && !slot) slot = &cached;
+        }
+        if (!demand) continue;
+        if (cached_bytes + bytes > relay_cache_budget || live_bytes + cached_bytes > quota ||
+            bytes > quota - live_bytes - cached_bytes) continue; // a large hint must not starve smaller sizes
+        if (!slot || !api) break;
+        demand = 0;
+        uint64_t token = 0;
+        void* address = nullptr;
+        int prepared = api->create(relay_host_loan_owner, bytes, &token);
+        if (prepared == NEOSWAP_RELAY_OK && token)
+            prepared = api->map(token, nullptr, NEOSWAP_RELAY_READ_WRITE, &address);
+        if (prepared == NEOSWAP_RELAY_OK && address) {
+            *slot = {token, bytes, now_ms, address};
+            b.relay_loans.cached_bytes.fetch_add(bytes, std::memory_order_relaxed);
+            b.relay_loans.cached_blocks.fetch_add(1, std::memory_order_relaxed);
+            b.fast.prepared_loans.fetch_add(1, std::memory_order_relaxed);
+        } else {
+            if (token && api->release(token) != NEOSWAP_RELAY_OK) (void)api->retire(token);
+            b.fast.prepare_failures.fetch_add(1, std::memory_order_relaxed);
+        }
+        break;
+    }
+    return result;
 #else
     (void)now_ms; (void)flush_all; return NEOSWAP_DISABLED;
 #endif

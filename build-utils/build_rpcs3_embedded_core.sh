@@ -126,6 +126,8 @@ python3 "$PWD/test/rpcs3_armsx3_performance_patch_test.py" "$SRC"
 HOST_CXX="$(xcrun --sdk macosx --find clang++)"
 HOST_MACOS_SDK="$(xcrun --sdk macosx --show-sdk-path)"
 env -u SDKROOT CXX="$HOST_CXX" HOST_MACOS_SDK="$HOST_MACOS_SDK" \
+  python3 "$PWD/test/rpcs3_spu_warmup_test.py" "$SRC" --sanitize
+env -u SDKROOT CXX="$HOST_CXX" HOST_MACOS_SDK="$HOST_MACOS_SDK" \
   python3 "$PWD/test/rpcs3_shader_storage_test.py" "$SRC"
 env -u SDKROOT CXX="$HOST_CXX" HOST_MACOS_SDK="$HOST_MACOS_SDK" \
   python3 "$PWD/test/rpcs3_source_archive_test.py" "$SRC"

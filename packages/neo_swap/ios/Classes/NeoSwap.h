@@ -16,7 +16,10 @@ enum NeoSwapOwner {
     NEOSWAP_RPCS3 = 0, NEOSWAP_DOLPHIN = 1, NEOSWAP_ARMSX2 = 2,
     NEOSWAP_DUSKLIGHT = 3, NEOSWAP_KARTPAD = 4, NEOSWAP_PROBE = 5
 };
-enum NeoSwapKind { NEOSWAP_CPU_DATA = 1, NEOSWAP_CPU_CACHE = 2 };
+/* Additive request flag on ABI v1. An older host rejects the unknown kind,
+ * preserving ordinary allocator fallback. Fast requests may only borrow already
+ * mapped RAM and may never wait for a lock, map, donor, relay or file operation. */
+enum NeoSwapKind { NEOSWAP_CPU_DATA = 1, NEOSWAP_CPU_CACHE = 2, NEOSWAP_REQUEST_FAST = 0x40000000u };
 enum NeoSwapResult {
     NEOSWAP_OK = 0, NEOSWAP_NOT_OWNED = 1,
     NEOSWAP_DISABLED = -1, NEOSWAP_INVALID = -2, NEOSWAP_QUOTA = -3,
@@ -46,7 +49,9 @@ typedef struct NeoSwapAPI {
     int (*allocate)(uint32_t owner, uint32_t kind, uint64_t bytes,
                     uint64_t alignment, void** address);
     /* ONLY NOT_OWNED permits a caller to use its ordinary free(). Any other
-     * failure retains ownership and must not be turned into a heap free. */
+     * failure retains ownership and must not be turned into a heap free.
+     * FAST loans: OK transfers cleanup to host maintenance; the pointer must
+     * never be touched again. Mapping/quota remain owned until real retirement. */
     int (*release)(void* address);
     int (*sync)(void* address);
     int (*enabled)(uint32_t owner);
@@ -65,6 +70,7 @@ NEOSWAP_PUBLIC void NeoSwap_RegisterClient(uint32_t owner);
 NEOSWAP_PUBLIC uint64_t NeoSwap_LiveBytes(uint32_t owner);
 #ifdef NEOSWAP_TESTING
 /* Fault injection is compiled out of deliverable libraries. */
+void NeoSwap_TestWithBrokerLock(void (*callback)(void*), void* context);
 void NeoSwap_TestFailNext(int stage); /* 1=open, 2=reserve, 3=map, 4=unmap, 5=sync */
 int NeoSwap_TestVerifyFile(void* address, const void* expected, size_t bytes);
 #endif

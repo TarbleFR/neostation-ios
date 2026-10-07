@@ -41,7 +41,7 @@ inline void* try_allocate_kind(uint32_t owner, uint32_t kind, size_t bytes, size
     }
     void* ptr = nullptr;
     eligible_attempts.fetch_add(1, std::memory_order_relaxed);
-    const int result = api->allocate(owner, kind, bytes, alignment, &ptr);
+    const int result = api->allocate(owner, kind | NEOSWAP_REQUEST_FAST, bytes, alignment, &ptr);
     last_result.store(result, std::memory_order_relaxed);
     if (result == NEOSWAP_OK && ptr) {
         successful_allocations.fetch_add(1, std::memory_order_relaxed);
@@ -75,7 +75,7 @@ inline void* try_allocate_cpu(uint32_t owner, size_t bytes, size_t alignment) no
     }
     void* pointer = nullptr;
     eligible_attempts.fetch_add(1, std::memory_order_relaxed);
-    const int result = api->allocate(owner, NEOSWAP_CPU_CACHE, bytes, alignment, &pointer);
+    const int result = api->allocate(owner, NEOSWAP_CPU_CACHE | NEOSWAP_REQUEST_FAST, bytes, alignment, &pointer);
     last_result.store(result, std::memory_order_relaxed);
     if (result == NEOSWAP_OK && pointer) {
         successful_allocations.fetch_add(1, std::memory_order_relaxed);
