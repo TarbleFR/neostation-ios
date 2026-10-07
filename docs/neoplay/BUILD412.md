@@ -1,9 +1,20 @@
 # NeoStation — Build 412 (cycle God of War III)
 
 Candidat privé distinct de l'IPA 411 (identité de référence : commit
-`8c63c682`, run `37605768644`, SHA-256 `da40c7a7…`, artefact conservé jusqu'au
-10 octobre ; le réempaquetage du mainteneur sur `d317c956`, run `37618048149`,
-a échoué à l'attente des preuves). Aucune validation sur iPhone
+`8c63c682`, run `37605768644`, SHA-256 `da40c7a7…` ; le réempaquetage du
+mainteneur sur `d317c956`, run `37618048149`, a échoué à l'attente des
+preuves). Le 7 octobre 2026 vers 13:50 UTC, l'enregistrement du run
+`37605768644` et tous les runs antérieurs à 11:51 UTC (dont l'IPA 410
+`37541424599`, le Core 411 `37595624383` et les preuves 411) ont été supprimés
+de GitHub ; l'artefact IPA 411 n'est donc plus téléchargeable et aucun autre
+run Build 411 réussi n'est conservé (les runs 411 restants ont échoué, été
+annulés ou ignorés). La porte « Build 411 terminée » du workflow garde ses
+contrôles quand l'enregistrement existe (succès, commit exact, rétention) ;
+sur réponse 404, la référence devient l'identité documentée dans
+`BUILD411.md` (run, commit, SHA-256), confirmée par ce que GitHub conserve :
+le commit `8c63c682` est un ancêtre du candidat et aucun run d'empaquetage
+Build 411 n'est encore actif ; toute autre erreur d'API bloque. Comportement
+exécuté par `test/neoswap_ipa_previous_build_gate_test.py`. Aucune validation sur iPhone
 physique n'est revendiquée dans cette build : les preuves sont celles de la CI
 et de l'analyse des journaux iPhone de Build 411 du 7 octobre 2026.
 

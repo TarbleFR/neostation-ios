@@ -330,6 +330,19 @@ static void RPCS3Log(void* context, int32_t level, const char* message) {
   if (!bridge || !message) return;
 
   // NEOSTATION_BUILD283_BOUNDED_CORE_LOG
+  // One-time boot facts that every device log must keep whatever the budget
+  // or the 2 MiB diagnostic restart: the renderer's GPU/driver line (the only
+  // on-device attestation of the linked MoltenVK version), the resolved
+  // experimental boot policy and the God of War III MLAA bypass applications.
+  // Mirrored before the budget filter below, which the boot-stability test
+  // compiles on its own as plain C++ from `const BOOL profiler` onwards.
+  if (strstr(message, "Found Vulkan-compatible GPU") != nullptr) {
+    RPCS3Milestone(@"renderer_detected", [NSString stringWithUTF8String:message] ?: @"");
+  } else if (strstr(message, "Resolved boot policy") != nullptr) {
+    RPCS3Milestone(@"boot_policy", [NSString stringWithUTF8String:message] ?: @"");
+  } else if (strstr(message, "Applied iOS God of War III") != nullptr) {
+    RPCS3Milestone(@"gow3_mlaa_bypass", [NSString stringWithUTF8String:message] ?: @"");
+  }
   // SPUPROF and RANGELOCKPROF are computed by the Core every report period
   // but were never exported: the 7 October 2026 God of War III analysis needs
   // them to attribute SPU compile time and range-lock blockers.
@@ -338,17 +351,6 @@ static void RPCS3Log(void* context, int32_t level, const char* message) {
       strstr(message, "COREPROF_RESILIENCE ") != nullptr ||
       strstr(message, "SPUPROF ") != nullptr ||
       strstr(message, "RANGELOCKPROF ") != nullptr;
-  // One-time boot facts that every device log must keep whatever the budget
-  // or the 2 MiB diagnostic restart: the renderer's GPU/driver line (the only
-  // on-device attestation of the linked MoltenVK version), the resolved
-  // experimental boot policy and the God of War III MLAA bypass applications.
-  if (strstr(message, "Found Vulkan-compatible GPU") != nullptr) {
-    RPCS3Milestone(@"renderer_detected", [NSString stringWithUTF8String:message] ?: @"");
-  } else if (strstr(message, "Resolved boot policy") != nullptr) {
-    RPCS3Milestone(@"boot_policy", [NSString stringWithUTF8String:message] ?: @"");
-  } else if (strstr(message, "Applied iOS God of War III") != nullptr) {
-    RPCS3Milestone(@"gow3_mlaa_bypass", [NSString stringWithUTF8String:message] ?: @"");
-  }
   // Core already emits bounded video archive/unmap/restore notices. Keep them
   // under the ordinary log budget so device logs can measure real RAM release.
   const BOOL videoArchive = strstr(message, "NEOSWAP_VDEC ") != nullptr;

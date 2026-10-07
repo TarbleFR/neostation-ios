@@ -472,6 +472,7 @@ SUPPORT_FILES |= {
     'test/neoplay/transport_tests.swift',
     'test/neoplay/native_tests.swift',
     'test/neoplay_build397_integration_test.py',
+    'test/neoswap_ipa_previous_build_gate_test.py',
     'test/neoplay_companion_contract_test.py',
     'test/neoplay_companion_test.dart',
     'test/neoplay_config_test.py',
@@ -713,6 +714,59 @@ def _build412_line(line):
 IPA_WORKFLOW_BUILD412_LINES = tuple((new, _build412_line(new)) for _old, new in IPA_WORKFLOW_BUILD411_LINES)
 assert all(old != new for old, new in IPA_WORKFLOW_BUILD412_LINES)
 assert IPA_WORKFLOW_BUILD412_LINES[-1][1] == '          cp docs/neoplay/BUILD412.md build/private-test/Notes-NeoPlay-Build412.md\n'
+# 7 October 2026, 13:52 UTC: the Build411 run record 37605768644 (and every
+# workflow run before 11:51 UTC) was deleted from GitHub after Build411 had
+# succeeded, so the previous-build gate received HTTP 404. The gate keeps the
+# same run id, commit, success and retention checks whenever the record
+# exists; on a 404 it verifies the documented Build411 identity (run, commit
+# and NeoStation.ipa SHA-256) in docs/neoplay/BUILD411.md at the packaged
+# commit and continues, because nothing of Build411 can be cancelled any more.
+# Any other API failure still blocks. Behaviour executed by
+# test/neoswap_ipa_previous_build_gate_test.py against a fake gh.
+IPA_WORKFLOW_BUILD412_PREVIOUS_RECORD_LINES = (
+    ('          import json, subprocess, time\n'
+     '          from datetime import datetime, timedelta, timezone\n'
+     "          repo = 'TarbleFR/neostation-ios'\n"
+     '          run_id = 37605768644\n'
+     "          expected_sha = '8c63c682946b7ad736d5391086016399100c4bd9'\n"
+     '          deadline = time.monotonic() + 3600\n'
+     '          while True:\n'
+     "              run = json.loads(subprocess.check_output(['gh','api',f'repos/{repo}/actions/runs/{run_id}']))\n",
+     '          import base64, json, os, subprocess, time\n'
+     '          from datetime import datetime, timedelta, timezone\n'
+     "          repo = 'TarbleFR/neostation-ios'\n"
+     '          run_id = 37605768644\n'
+     "          expected_sha = '8c63c682946b7ad736d5391086016399100c4bd9'\n"
+     "          ipa_sha256 = 'da40c7a774d4bf3e9766111e5e69b7d1a69ad1b5c3d4d67e0833015944d9c8ec'\n"
+     '          def api(endpoint):\n'
+     "              return json.loads(subprocess.check_output(['gh','api',endpoint]))\n"
+     '          def fetch_run():\n'
+     "              probe = subprocess.run(['gh','api',f'repos/{repo}/actions/runs/{run_id}'], capture_output=True, text=True)\n"
+     "              if probe.returncode != 0 and 'HTTP 404' in probe.stderr:\n"
+     '                  # The successful Build411 run record was deleted from GitHub on\n'
+     '                  # 7 October 2026 (with every run before 11:51 UTC) and no other\n'
+     '                  # successful Build411 run is retained. The reference is then the\n'
+     '                  # documented Build411 identity, checked against what GitHub still\n'
+     '                  # holds: the packaged Build411 commit is an ancestor of this\n'
+     '                  # candidate, no Build411 packaging run is still active (nothing\n'
+     '                  # can be cancelled) and docs/neoplay/BUILD411.md at this exact\n'
+     '                  # commit carries the run, commit and NeoStation.ipa SHA-256.\n'
+     '                  compare = api(f\'repos/{repo}/compare/{expected_sha}...{os.environ["GITHUB_SHA"]}\')\n'
+     "                  assert compare['status'] in ('ahead', 'identical'), 'Build411 commit is not an ancestor of this candidate: ' + compare['status']\n"
+     "                  rows = api(f'repos/{repo}/actions/workflows/neoswap-ipa.yml/runs?per_page=100')['workflow_runs']\n"
+     "                  active = [str(row['id']) for row in rows if 'Build 411' in row['name'] and row['status'] != 'completed']\n"
+     "                  assert not active, 'A Build411 packaging run is still active: ' + ', '.join(active)\n"
+     '                  notes = base64.b64decode(api(f\'repos/{repo}/contents/docs/neoplay/BUILD411.md?ref={os.environ["GITHUB_SHA"]}\')[\'content\']).decode(\'utf-8\')\n'
+     '                  for token in (str(run_id), expected_sha, ipa_sha256):\n'
+     "                      assert token in notes, 'Build411 identity missing from docs/neoplay/BUILD411.md: ' + token\n"
+     "                  print('Build411 run record deleted after its success; documented identity verified (run ' + str(run_id) + ', commit ' + expected_sha + ', NeoStation.ipa SHA-256 ' + ipa_sha256 + '), Build411 commit is an ancestor of this candidate, no Build411 run active', flush=True)\n"
+     '                  raise SystemExit(0)\n'
+     '              probe.check_returncode()\n'
+     '              return json.loads(probe.stdout)\n'
+     '          deadline = time.monotonic() + 3600\n'
+     '          while True:\n'
+     '              run = fetch_run()\n'),
+)
 IPA_WORKFLOW_RUNTIME_PREPARATION_LINES = (
     ('            test/native/rpcs3_spu_branch_analyzer_test.cpp \\\n',
      '            test/native/rpcs3_spu_branch_analyzer_test.cpp \\\n'
@@ -731,6 +785,9 @@ for path in ARMSX2_INTEGRATION_FILES:
             text = text.replace(old, new, 1)
         for old, new in IPA_WORKFLOW_BUILD412_LINES:
             assert text.count(old) == 1, 'Build412 IPA workflow line expected once: ' + old
+            text = text.replace(old, new, 1)
+        for old, new in IPA_WORKFLOW_BUILD412_PREVIOUS_RECORD_LINES:
+            assert text.count(old) == 1, 'Build412 previous-record gate block expected once: ' + old
             text = text.replace(old, new, 1)
         for old, new in IPA_WORKFLOW_RUNTIME_PREPARATION_LINES:
             assert text.count(old) == 1, 'Runtime acceptance workflow line expected once: ' + old

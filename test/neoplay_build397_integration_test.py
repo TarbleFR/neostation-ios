@@ -66,8 +66,9 @@ REVIEWED_RPCS3_HOST_POSTIMAGES = {
     # milestones as renderer_detected (MoltenVK attestation). Nothing else.
     # Plus: SPUPROF/RANGELOCKPROF forwarded like COREPROF; boot_policy and
     # gow3_mlaa_bypass milestones; host_cpu_topology milestone at game boot.
-    # Build412 graph: RPCS3ProcessFootprintBytes feeds the overlay's device RAM line.
-    'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm': '0b04bf77f642f3b4d8e8bc800d412a991b9ccdb77a258cefd8edac67df239a05',
+    # Build412 graph: RPCS3ProcessFootprintBytes feeds the overlay's device RAM line;
+    # boot milestones are mirrored before the budget filter the boot-stability test compiles.
+    'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm': '476df0044014f4104b1187d1d24b96be0182371a0dabca3a146b6658cc8fe530',
     'packages/rpcs3_internal_bridge/ios/Classes/RPCS3PerformanceSnapshot.h': 'badde59ea1202e288e48bd8c318d61fde82b764815a83484da37db075be69c79',
 }
 APPROVED_RPCS3_MENU_FILES = frozenset({
@@ -279,6 +280,16 @@ class Build398Integration(unittest.TestCase):
         self.assertIn("'neoplay-check.yml',", text)
         self.assertIn('head_sha={sha}', text)
         self.assertLess(text.index('Require completed Build 411'), text.index('Wait for exact-SHA validation workflows'))
+        # 7 October 2026: the Build411 run record was deleted from GitHub after
+        # its success; on HTTP 404 the gate verifies the documented identity
+        # (run, commit, NeoStation.ipa SHA-256) and any other failure still blocks.
+        self.assertIn("ipa_sha256 = 'da40c7a774d4bf3e9766111e5e69b7d1a69ad1b5c3d4d67e0833015944d9c8ec'", text)
+        self.assertIn("if probe.returncode != 0 and 'HTTP 404' in probe.stderr:", text)
+        self.assertIn("contents/docs/neoplay/BUILD411.md?ref=", text)
+        self.assertIn("compare/{expected_sha}...{os.environ[\"GITHUB_SHA\"]}", text)
+        self.assertIn("if 'Build 411' in row['name'] and row['status'] != 'completed']", text)
+        self.assertIn('probe.check_returncode()', text)
+        subprocess.run([sys.executable, str(ROOT / 'test/neoswap_ipa_previous_build_gate_test.py')], cwd=ROOT, check=True, timeout=60)
         self.assertIn('cp docs/neoplay/BUILD412.md build/private-test/Notes-NeoPlay-Build412.md', text)
         # The Build412 Core (writer-lock attribution): its inputs no longer match the Build411 Core pin.
         self.assertIn("RPCS3_CORE_HOST_SHA: afb33454db50236485bd5ec963a722dcb5f65610", text)
