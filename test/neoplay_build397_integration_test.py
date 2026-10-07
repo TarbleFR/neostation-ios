@@ -48,7 +48,9 @@ BUILD410_STREAM_POSTIMAGES = {
 # The receiver leaves old senders' SPS untouched without the new promise.
 POST410_STREAM_POSTIMAGES = {
     # Build411: restore the reviewed Windows local-output attenuation lifecycle.
-    'packages/neoplay_bridge/ios/Classes/NPController.swift': '5544f66f9cb6594b6c1f3f13a2d00dedbcdc858b6359d0913fb33a2d71a33c33',
+    # Committed postimage of maintainer commit 48f582df (unchanged through
+    # e7ea6587); the value pinned in e7ea6587 matched no committed revision.
+    'packages/neoplay_bridge/ios/Classes/NPController.swift': '9b0fa3e71c8515d961bd72442dc072bdeb15ba54367225de36ddcc68f5048241',
     'packages/neoplay_bridge/ios/Classes/NPCapture.swift': 'b3b553635df1beddf20d55a6534fa150d1dc52000436e053ae0ddafea4275d6f',
     'packages/neoplay_bridge/ios/Classes/NPFrameEncoder.swift': '19ec5f47ae5474ea874ed676088e2fd2bffab9d908e04db2690e57051eceddaf',
     'packages/neoplay_bridge/ios/Classes/NPWindowsTransport.swift': '6f7393e812c8799cffa652c7bb4b8eae2732238a862c5d00d45ed9a5a20c12b8',
@@ -57,7 +59,12 @@ REVIEWED_RPCS3_HOST_POSTIMAGES = {
     # Reviewed post410 host: 16 MiB/0 ms readiness sample, early donor campaign
     # notification and explicit donor/relay/ordinary diagnostics. These four
     # bounded regions leave menu, JIT, source binding and metrics ownership intact.
-    'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm': '12da5b074ab98d10c9b2abbf325ba5e2ad414c303725ce2acbef48dae5f36ac1',
+    # 7 October 2026 (post-411): the performance summary measures the 30 fps
+    # target as a hold ratio, below-target sample count, longest below-target
+    # run and mean (RPCS3FrameRateHold, same gated 1 Hz samples), and the
+    # renderer's one-time GPU/driver line is mirrored into the durable
+    # milestones as renderer_detected (MoltenVK attestation). Nothing else.
+    'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm': 'c8cd4384204fe745c7871a7d21427bc331ebe8cacb8138f8669acc8f4638ca38',
     'packages/rpcs3_internal_bridge/ios/Classes/RPCS3PerformanceSnapshot.h': 'badde59ea1202e288e48bd8c318d61fde82b764815a83484da37db075be69c79',
 }
 APPROVED_RPCS3_MENU_FILES = frozenset({
@@ -165,6 +172,8 @@ REVIEWED_POST410_POSTIMAGES = {
     # failed session and is measured into the evidence; nothing else changes.
     'native/neoswap-donation/VulkanDonationProbe.h': '1b96b5e27b9bfc8cfbd8293b049b580043ce51ca5511ceaafa657ed4e4744999',
     'native/neoswap-donation/RetirementProof.h': '40299400ff8269f95dd5de13d9221b581965206d13ccf0650821593fe5f53dcd',
+    # Host-side 30 fps hold arithmetic for the performance summary (7 October 2026).
+    'packages/rpcs3_internal_bridge/ios/Classes/RPCS3FrameRateHold.h': '3f4d82b56d0cad359c73a4923979dd21202e6bb270e086d5cbdc188aff9f219a',
 }
 APPROVED_POST410_FILES = frozenset(REVIEWED_POST410_POSTIMAGES)
 

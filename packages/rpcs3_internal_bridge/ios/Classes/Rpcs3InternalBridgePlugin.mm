@@ -13,6 +13,7 @@
 #import "RPCS3GameInputController.h"
 #import "RPCS3PerformanceOverlay.h"
 #include "RPCS3PerformanceSnapshot.h"
+#include "RPCS3FrameRateHold.h"
 #include <atomic>
 #include "NeoSwapUsagePolicy.h"
 #import "RPCS3InGameLocalization.h"
@@ -245,6 +246,7 @@ static UIViewController* RPCS3RootViewController(void) {
   uint64_t _diagnosticPeakMemory;
   uint64_t _diagnosticMinimumAvailableMemory;
   NSInteger _diagnosticWorstThermalState;
+  RPCS3FrameRateHold _diagnosticFrameRateHold;
   rpcs3_ios_api _api;
   int32_t (*_neoSwapClientStats)(NeoSwapClientStats*);
   neostation::rpcs3::early_escrow::EarlyAddressSpaceEscrow _jitEscrow;
@@ -296,6 +298,12 @@ static void RPCS3Log(void* context, int32_t level, const char* message) {
   const BOOL profiler =
       strstr(message, "COREPROF ") != nullptr ||
       strstr(message, "COREPROF_RESILIENCE ") != nullptr;
+  // The renderer's one-time GPU/driver line is the only on-device attestation
+  // of the linked MoltenVK version. The 2 MiB diagnostic log restarts during a
+  // long session, so mirror that line into the durable milestones as well.
+  if (strstr(message, "Found Vulkan-compatible GPU") != nullptr) {
+    RPCS3Milestone(@"renderer_detected", [NSString stringWithUTF8String:message] ?: @"");
+  }
   // Core already emits bounded video archive/unmap/restore notices. Keep them
   // under the ordinary log budget so device logs can measure real RAM release.
   const BOOL videoArchive = strstr(message, "NEOSWAP_VDEC ") != nullptr;
@@ -707,6 +715,7 @@ static void RPCS3Progress(void* context,
   _diagnosticPeakMemory = 0;
   _diagnosticMinimumAvailableMemory = UINT64_MAX;
   _diagnosticWorstThermalState = NSProcessInfoThermalStateNominal;
+  _diagnosticFrameRateHold = {};
 
   dispatch_source_t timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, _runtimeQueue);
   _diagnosticPerformanceTimer = timer;
@@ -749,6 +758,7 @@ static void RPCS3Progress(void* context,
       }
       strongSelf->_diagnosticFpsTotal += metrics.frames_per_second;
       strongSelf->_diagnosticPerformanceSamples++;
+      strongSelf->_diagnosticFrameRateHold.record(metrics.frames_per_second);
     }
 
     NSString* fpsDiagnostic = fpsValid
@@ -802,12 +812,18 @@ static void RPCS3Progress(void* context,
   _performanceSnapshot.end();
   if (_diagnosticPerformanceSamples > 0) {
     const double average = _diagnosticFpsTotal / (double)_diagnosticPerformanceSamples;
+    // NEOSTATION_RPCS3_FPS_HOLD_V1: the 30 fps target is measured as a hold
+    // ratio and as the longest run below it, not only as an average.
     RPCS3Diagnostic(@"performance_summary", [NSString stringWithFormat:
-        @"title=%@ samples=%llu average_fps=%.2f minimum_fps=%.2f peak_memory=%llu minimum_available=%llu worst_thermal=%ld",
+        @"title=%@ samples=%llu average_fps=%.2f minimum_fps=%.2f peak_memory=%llu minimum_available=%llu worst_thermal=%ld fps_target=%.0f fps_hold=%.1f%% below_target_samples=%llu longest_below_target_run_s=%llu below_target_mean_fps=%.2f constant=%d",
         self.activeTitleId ?: @"", (unsigned long long)_diagnosticPerformanceSamples,
         average, _diagnosticMinimumFps, (unsigned long long)_diagnosticPeakMemory,
         (unsigned long long)(_diagnosticMinimumAvailableMemory == UINT64_MAX ? 0 : _diagnosticMinimumAvailableMemory),
-        (long)_diagnosticWorstThermalState]);
+        (long)_diagnosticWorstThermalState,
+        _diagnosticFrameRateHold.target, _diagnosticFrameRateHold.holdRatio() * 100.0,
+        (unsigned long long)_diagnosticFrameRateHold.belowSamples(),
+        (unsigned long long)_diagnosticFrameRateHold.longestBelowRun,
+        _diagnosticFrameRateHold.belowMeanFps(), _diagnosticFrameRateHold.constant() ? 1 : 0]);
   }
   _diagnosticPerformanceSamples = 0;
 }

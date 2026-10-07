@@ -63,13 +63,32 @@ for path in (ROOT / "packages/rpcs3_internal_bridge").rglob("*"):
             readers.append(path)
 assert readers == [CLASSES / "Rpcs3InternalBridgePlugin.mm"], readers
 
+# NEOSTATION_RPCS3_FPS_HOLD_V1: the summary measures the 30 fps target as a hold
+# ratio and the longest run below it, from the same gated 1 Hz samples; the
+# renderer's GPU/driver line is mirrored into the durable milestones.
+summary = plugin.split("- (void)stopDiagnosticPerformanceSampling", 1)[1].split("_diagnosticPerformanceSamples = 0;", 1)[0]
+assert "strongSelf->_diagnosticFrameRateHold.record(metrics.frames_per_second);" in producer
+assert producer.index("NeoSwapFPSValid(metrics.frames_per_second, metrics.valid_fields)") < producer.index("_diagnosticFrameRateHold.record(")
+assert "_diagnosticFrameRateHold = {};" in producer
+for token in ("fps_target=%.0f", "fps_hold=%.1f%%", "below_target_samples=%llu",
+              "longest_below_target_run_s=%llu", "below_target_mean_fps=%.2f", "constant=%d",
+              "_diagnosticFrameRateHold.holdRatio() * 100.0", "_diagnosticFrameRateHold.longestBelowRun",
+              "_diagnosticFrameRateHold.constant() ? 1 : 0"):
+    assert token in summary, token
+assert 'RPCS3Milestone(@"renderer_detected", [NSString stringWithUTF8String:message] ?: @"");' in plugin
+log_handler = plugin.split("static void RPCS3Log(void* context, int32_t level, const char* message) {", 1)[1].split("RPCS3Diagnostic(@\"core_log\", text);", 1)[0]
+assert 'strstr(message, "Found Vulkan-compatible GPU")' in log_handler
+assert log_handler.index('renderer_detected') < log_handler.index('if (level > 2 && !profiler && !videoArchive) return;')
+assert (CLASSES / "RPCS3FrameRateHold.h").read_text().count("double target = 30.0;") == 1
+
 compiler = os.environ.get("CXX") or shutil.which("clang++") or shutil.which("g++")
 assert compiler, "A C++ compiler is required for the behavioral regression"
 with tempfile.TemporaryDirectory(prefix="rpcs3-snapshot-") as temporary:
-    binary = Path(temporary) / "snapshot-test"
-    subprocess.run([compiler, "-std=c++20", "-O1", "-g", "-Wall", "-Wextra", "-Werror",
-                    "-fsanitize=address,undefined", "-I" + str(CLASSES),
-                    str(ROOT / "test/rpcs3_performance_snapshot_test.cpp"),
-                    "-o", str(binary)], check=True)
-    subprocess.run([str(binary)], check=True)
-print("PASS: production bridge has one Core reader; 1Hz sampling and 0.5s overlay remain independent")
+    for source, name in (("test/rpcs3_performance_snapshot_test.cpp", "snapshot-test"),
+                         ("test/rpcs3_frame_rate_hold_test.cpp", "frame-rate-hold-test")):
+        binary = Path(temporary) / name
+        subprocess.run([compiler, "-std=c++20", "-O1", "-g", "-Wall", "-Wextra", "-Werror",
+                        "-fsanitize=address,undefined", "-I" + str(CLASSES),
+                        str(ROOT / source), "-o", str(binary)], check=True)
+        subprocess.run([str(binary)], check=True)
+print("PASS: production bridge has one Core reader; 1Hz sampling and 0.5s overlay remain independent; 30 fps hold summary and renderer milestone verified")

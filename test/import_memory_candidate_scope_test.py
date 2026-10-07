@@ -504,9 +504,14 @@ PRODUCTION_FILES |= {
     'tools/neoplay-receiver/desktop.mjs',
     # Maintainer commit efecbfc4: receiver discovery helper shared by the page.
     'tools/neoplay-receiver/discovery.mjs',
+    # 7 October 2026: 30 fps hold arithmetic for the RPCS3 performance summary.
+    'packages/rpcs3_internal_bridge/ios/Classes/RPCS3FrameRateHold.h',
 }
 SUPPORT_FILES |= {
     'tools/neoplay-receiver/test/discovery.test.mjs',
+    'test/rpcs3_frame_rate_hold_test.cpp',
+    # Maintainer commit 721fd4b7: local-output attenuation tests for the sender.
+    'test/neoplay/local_audio_tests.swift',
 }
 SUPPORT_FILES |= {
     'docs/neoplay/RECEIVER-VALIDATION.md',

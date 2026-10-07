@@ -228,3 +228,20 @@ catalogues ; `memoryDevice` les remplace dans les douze langues. Vérifications 
 saturation), `test/rpcs3_neoswap_localizations_test.py` (douze catalogues, deux
 séries, compilation UIKit sur macOS) et `test/neoswap_donor_contract_test.py`.
 L'affichage n'a pas été validé sur iPhone dans cette session.
+
+## Mesure du maintien de 30 fps et attestation du moteur de rendu (7 octobre 2026)
+
+`performance_summary` ajoute, à partir des mêmes échantillons 1 Hz déjà
+filtrés par `NeoSwapFPSValid` : `fps_target=30`, `fps_hold` (part des
+échantillons à 29,5 fps ou plus), `below_target_samples`,
+`longest_below_target_run_s` (plus longue suite de secondes sous la cible),
+`below_target_mean_fps` et `constant` (1 seulement si chaque échantillon a tenu
+la cible). Calcul hôte pur (`RPCS3FrameRateHold.h`), sans lecture
+supplémentaire du cœur ; test de comportement `test/rpcs3_frame_rate_hold_test.cpp`
+exécuté par `test/rpcs3_performance_snapshot_test.py`.
+
+La ligne unique du cœur « Found Vulkan-compatible GPU: … running on driver
+1.4.2 » (niveau `always`, déjà transmise au journal de diagnostic) est aussi
+recopiée dans les jalons durables sous `renderer_detected`. Le journal de
+diagnostic redémarre à 2 Mio pendant une longue session, ce qui explique
+l'absence de cette attestation MoltenVK dans l'export reçu le 7 octobre.
