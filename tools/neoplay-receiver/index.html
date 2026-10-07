@@ -1,4 +1,53 @@
-<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>NeoPlay Receiver</title>
-<style>html,body{margin:0;background:#070d18;color:#eef3ff;font:16px system-ui;height:100%}video,canvas{display:block;width:100%;height:100%;object-fit:contain;background:black}#stage{position:relative;height:calc(100% - 110px)}header{height:90px;padding:10px 20px;display:flex;gap:18px;align-items:center;flex-wrap:wrap}button{font:inherit;padding:9px 14px;cursor:pointer}#status{font-size:13px}#pin{font:26px monospace;letter-spacing:4px}#stage:fullscreen{height:100%;width:100%;background:black}[hidden]{display:none}</style>
-<header><strong>NeoPlay</strong><button id="ready">Ready / Prêt</button><button id="full">Full screen / Plein écran</button><button id="stop">Disconnect / Déconnecter</button><span id="pin"></span><span id="status">Start the receiver, then select this PC in NeoStation. No microphone is captured.</span></header>
-<div id="stage"><video id="video" playsinline></video><canvas id="canvas" hidden></canvas></div><div id="auth" hidden data-token="__VIEWER_TOKEN__"></div><script type="module" src="/player.mjs"></script></html>
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NeoPlay</title>
+<style>
+:root{color-scheme:dark;--bg:#090b10;--panel:#11151d;--panel2:#151a24;--line:#242b38;--text:#f4f7fb;--muted:#8e99aa;--accent:#7b8cff;--accent2:#9b7cff;--ok:#4fd1a5}
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:radial-gradient(circle at 15% 0%,#161b2e 0,#090b10 35%,#07090d 100%);color:var(--text);font:14px Inter,Segoe UI,system-ui,sans-serif}
+body{display:grid;grid-template-columns:250px 1fr}
+aside{border-right:1px solid var(--line);background:rgba(10,13,19,.92);padding:26px 18px;display:flex;flex-direction:column;gap:24px}
+.brand{display:flex;align-items:center;gap:12px;font-size:20px;font-weight:700;letter-spacing:-.4px}.logo{width:34px;height:34px;border-radius:10px;background:linear-gradient(145deg,var(--accent),var(--accent2));box-shadow:0 8px 30px rgba(123,140,255,.25);display:grid;place-items:center;font-weight:800}.sub{color:var(--muted);font-size:12px;margin-top:2px}
+.nav{display:grid;gap:8px}.navitem{padding:11px 12px;border-radius:10px;color:#cbd3df}.navitem.active{background:#171d29;color:white;border:1px solid #252d3a}
+.device{margin-top:auto;padding:14px;border:1px solid var(--line);border-radius:14px;background:#0f131b}.dot{width:8px;height:8px;border-radius:50%;background:var(--ok);box-shadow:0 0 10px rgba(79,209,165,.7);display:inline-block;margin-right:7px}
+main{padding:22px;display:grid;grid-template-rows:auto 1fr;gap:18px;min-width:0}
+header{display:flex;align-items:center;justify-content:space-between;padding:0 4px}.title h1{font-size:22px;margin:0;letter-spacing:-.5px}.title p{margin:5px 0 0;color:var(--muted)}
+.actions{display:flex;gap:9px}button{border:1px solid var(--line);background:#141923;color:#eaf0f8;border-radius:10px;padding:9px 13px;font:inherit;cursor:pointer}button:hover{background:#1b2230}.primary{border-color:#5667e8;background:linear-gradient(135deg,#596cf0,#7f64ef);box-shadow:0 8px 24px rgba(94,106,238,.18)}
+.workspace{display:grid;grid-template-columns:minmax(0,1fr) 310px;gap:18px;min-height:0}
+.player{position:relative;border:1px solid var(--line);border-radius:18px;overflow:hidden;background:#050608;min-height:0;box-shadow:0 18px 60px rgba(0,0,0,.28)}
+#stage{position:absolute;inset:0}video,canvas{display:block;width:100%;height:100%;object-fit:contain;background:#030405}#stage:fullscreen{background:#000}
+.empty{position:absolute;inset:0;display:grid;place-items:center;pointer-events:none}.emptybox{text-align:center;color:var(--muted);max-width:360px}.screenicon{width:58px;height:42px;border:2px solid #31394a;border-radius:8px;margin:0 auto 16px;position:relative}.screenicon:after{content:"";position:absolute;width:22px;height:2px;background:#31394a;bottom:-10px;left:16px}
+.side{display:grid;grid-template-rows:auto auto 1fr;gap:14px;min-height:0}.card{background:linear-gradient(180deg,rgba(20,25,35,.96),rgba(14,18,25,.96));border:1px solid var(--line);border-radius:16px;padding:17px}.label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.09em}.pin{font:600 32px ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:7px;margin:9px 0 5px}.status{margin-top:9px;color:#cbd4e2;line-height:1.45}.hint{font-size:12px;color:var(--muted);line-height:1.5;margin-top:8px}.metric{display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid #202633}.metric:last-child{border-bottom:0}.value{color:#dfe6f1}.badge{display:inline-flex;align-items:center;gap:7px;padding:6px 10px;border-radius:999px;background:#101d1a;color:#9ae8cb;border:1px solid #1e4438;font-size:12px}
+#auth{display:none}
+@media(max-width:900px){body{grid-template-columns:1fr}aside{display:none}.workspace{grid-template-columns:1fr}.side{display:none}}
+</style>
+</head>
+<body>
+<aside>
+  <div><div class="brand"><div class="logo">N</div><div>NeoPlay<div class="sub">Desktop Receiver</div></div></div></div>
+  <div class="nav"><div class="navitem active">Réception</div><div class="navitem">Connexion locale</div><div class="navitem">Diagnostics</div></div>
+  <div class="device"><div><span class="dot"></span>Service actif</div><div class="sub">Réseau local uniquement</div></div>
+</aside>
+<main>
+  <header>
+    <div class="title"><h1>Réception NeoStation</h1><p>Diffuse ton écran iPhone vers ce PC avec une latence minimale.</p></div>
+    <div class="actions"><button id="full">Plein écran</button><button id="stop">Déconnecter</button><button id="ready" class="primary">Activer NeoPlay</button></div>
+  </header>
+  <section class="workspace">
+    <div class="player">
+      <div id="stage"><video id="video" playsinline></video><canvas id="canvas" hidden></canvas></div>
+      <div class="empty"><div class="emptybox"><div class="screenicon"></div><strong>En attente de NeoStation iOS</strong><div class="hint">Ouvre NeoPlay dans NeoStation, sélectionne ce PC puis saisis le code affiché.</div></div></div>
+    </div>
+    <div class="side">
+      <div class="card"><div class="label">Code d’association</div><div id="pin" class="pin">------</div><div class="hint">Valide 5 minutes. Il change après chaque session.</div></div>
+      <div class="card"><div class="label">État</div><div class="badge"><span class="dot"></span>Prêt</div><div id="status" class="status">Initialisation du récepteur local…</div></div>
+      <div class="card"><div class="label">Session</div><div class="metric"><span>Transport</span><span class="value">LAN sécurisé par code</span></div><div class="metric"><span>Vidéo</span><span class="value">H.264 faible latence</span></div><div class="metric"><span>Audio</span><span class="value">PCM synchronisé</span></div><div class="hint">NeoPlay reste local au réseau. Aucun compte ni relais Internet n’est nécessaire pour la session Windows.</div></div>
+    </div>
+  </section>
+</main>
+<div id="auth" data-token="__VIEWER_TOKEN__"></div>
+<script type="module" src="/player.mjs"></script>
+</body>
+</html>

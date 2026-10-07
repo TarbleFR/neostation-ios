@@ -128,19 +128,19 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Build and verify NeoPlay Receiver 0.4.2
+      - name: Build and verify NeoPlay 0.5.0
         working-directory: tools/neoplay-receiver
         run: |
           npm ci --ignore-scripts
           node build-executable.mjs
-          ./dist/NeoPlay-Receiver-0.4.2.exe --smoke-test
-          ./dist/NeoPlay-Receiver-0.4.2.exe --port-conflict-test
+          ./dist/NeoPlay-0.5.0.exe --smoke-test
+          ./dist/NeoPlay-0.5.0.exe --port-conflict-test
       - uses: actions/upload-artifact@v4
         with:
-          name: NeoPlay-Receiver-0.4.2-${{ github.sha }}
+          name: NeoPlay-0.5.0-${{ github.sha }}
           overwrite: true
           path: |
-            tools/neoplay-receiver/dist/NeoPlay-Receiver-0.4.2.exe
+            tools/neoplay-receiver/dist/NeoPlay-0.5.0.exe
             tools/neoplay-receiver/dist/build.json
           if-no-files-found: error
           retention-days: 30

@@ -8,7 +8,7 @@ import { createReceiver } from './server.mjs';
 
 async function main() {
   const assets = isSea() ? Object.fromEntries(['index.html','player.mjs','presenter.mjs','protocol.mjs','audio-ring.mjs','audio-worklet.mjs','diagnostics.mjs','h264-sps.mjs'].map(name => [name,getAsset(name,'utf8')])) : null;
-  const receiverName = `NeoPlay — ${hostname()} · 0.4.2`;
+  const receiverName = `NeoPlay — ${hostname()} · 0.5.0`;
   const smoke = process.argv.includes('--smoke-test');
   const conflictTest = process.argv.includes('--port-conflict-test');
   let blocker = null;
@@ -45,7 +45,7 @@ async function main() {
     await receiver.close(); console.log('NEOPLAY_PACKAGED_ASSETS_OK'); return;
   }
   const url = `http://127.0.0.1:${receiver.port}`;
-  console.log(`NeoPlay Receiver 0.4.2\n${url}\nKeep this window open while playing.`);
+  console.log(`NeoPlay 0.5.0\n${url}\nKeep this window open while playing.`);
   const roots = [process.env.ProgramFiles, process.env['ProgramFiles(x86)'], process.env.LOCALAPPDATA].filter(Boolean);
   const browser = roots.flatMap(root => ['Microsoft/Edge/Application/msedge.exe','Google/Chrome/Application/chrome.exe'].map(path => join(root,path))).find(existsSync);
   if (browser) spawn(browser, [`--app=${url}`], {detached:true,stdio:'ignore'}).unref();

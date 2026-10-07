@@ -6,6 +6,7 @@ import { hostname } from 'node:os';
 import { Bonjour } from 'bonjour-service';
 import { WebSocketServer, WebSocket } from 'ws';
 import { VERSION, MAX_PACKET, MAX_BUFFERED, displayLimits, validatePacket, isInitialization } from './protocol.mjs';
+import { discoveryAddress, discoveryHost } from './discovery.mjs';
 const local = address => ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(address);
 const same = (a, b) => { if (typeof a !== 'string' || typeof b !== 'string') return false; const x=Buffer.from(a), y=Buffer.from(b); return x.length === y.length && timingSafeEqual(x,y); };
 const token = () => randomBytes(24).toString('hex');
@@ -88,8 +89,11 @@ export async function createReceiver({port = 17642, host = '0.0.0.0', advertise 
   });
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(port, host, resolve); });
   const actualPort = server.address().port;
-  const bonjour = advertise ? new Bonjour() : null;
-  bonjour?.publish({name, type:'neoplay', protocol:'tcp', port:actualPort, txt:{v:'1', kind:'windows', id:receiverId}});
+  const address = advertise ? discoveryAddress() : null;
+  const bonjour = address ? new Bonjour({interface:address}) : null;
+  const service = bonjour?.publish({name, type:'neoplay', protocol:'tcp', port:actualPort,
+    host:discoveryHost(hostname()), disableIPv6:true, txt:{v:'1', kind:'windows', id:receiverId}});
+  service?.on('up', () => console.log(`NeoPlay discovery: ${address}, ${service.host}:${actualPort}`));
   return {port:actualPort, viewerToken, get pin(){return pin;}, async close(){ wss.clients.forEach(s => s.terminate()); wss.close(); bonjour?.unpublishAll(); bonjour?.destroy(); await new Promise(resolve => server.close(resolve)); }};
 }
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
