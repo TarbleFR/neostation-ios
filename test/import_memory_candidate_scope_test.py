@@ -12,7 +12,7 @@ BASE = '3ccde925351b3e59985ba466e013e87a857d6ad0'
 MANIFEST_PATH = 'native/import-memory-candidate.json'
 manifest = json.loads((ROOT / MANIFEST_PATH).read_text())
 assert manifest['baseline'] == BASE
-assert manifest['target_build'] == 410
+assert manifest['target_build'] == 411
 assert manifest['swap_research']['branch'] == 'swap'
 assert manifest['swap_research']['scope'] == 'RPCS3 only'
 # Build409: relay owner 1 serves identifiable host allocations of the same
@@ -460,6 +460,7 @@ SUPPORT_FILES |= {
     'docs/neoplay/APPLE_TV_AND_CONTROLLER_BATTERY.md',
     'docs/neoplay/BUILD397.md',
     'docs/neoplay/BUILD410.md',
+    'docs/neoplay/BUILD411.md',
     'docs/neoplay/README.md',
     'docs/neoplay/companion-validation-2026-10-02.json',
     'docs/neoplay/validation-2026-10-02.json',
@@ -623,6 +624,56 @@ IPA_WORKFLOW_BUILD410_LINES = (
     ('          cp docs/neoplay/BUILD397.md build/private-test/Notes-NeoPlay-Build397.md\n',
      '          cp docs/neoplay/BUILD410.md build/private-test/Notes-NeoPlay-Build410.md\n'),
 )
+# Build411 candidate lines, applied on top of the Build410 lines: the build
+# number, the required previous packaged build (410, run 37541424599 on
+# f5478b03, artifact Build-410) and its retention wording, the successful
+# post-410 RPCS3 Core (run 37595624383 on d9589fa2, whose patched inputs the
+# Build409 Core no longer matches) and the Build411 notes. Each pair applies
+# exactly once; everything else stays the reviewed ARMSX2 postimage.
+IPA_PREVIOUS_ARTIFACT_RETENTION_BLOCK_411 = (
+    IPA_PREVIOUS_ARTIFACT_RETENTION_BLOCK
+    .replace("print('Build409 completed successfully; its IPA artifact is preserved', flush=True)",
+             "print('Build410 completed successfully; its IPA artifact is preserved', flush=True)")
+    .replace('# build and Build410 cancels nothing of it; an absence before the',
+             '# build and Build411 cancels nothing of it; an absence before the')
+    .replace("'Build409 IPA artifact is absent before its 3-day retention elapsed'",
+             "'Build410 IPA artifact is absent before its 3-day retention elapsed'")
+    .replace("print('Build409 completed successfully; its IPA artifact expired by retention on '",
+             "print('Build410 completed successfully; its IPA artifact expired by retention on '")
+)
+assert IPA_PREVIOUS_ARTIFACT_RETENTION_BLOCK_411.count('Build410') == 3 and IPA_PREVIOUS_ARTIFACT_RETENTION_BLOCK_411.count('Build411') == 1
+IPA_WORKFLOW_BUILD411_LINES = (
+    ('name: NeoStation NeoSwap + NeoPlay private • Build 410\n',
+     'name: NeoStation NeoSwap + NeoPlay private • Build 411\n'),
+    ('run-name: NeoStation NeoSwap + NeoPlay private • Build 410 • ${{ github.sha }}\n',
+     'run-name: NeoStation NeoSwap + NeoPlay private • Build 411 • ${{ github.sha }}\n'),
+    ("        default: '410'\n", "        default: '411'\n"),
+    ('  group: neostation-neoswap-neoplay-build410\n', '  group: neostation-neoswap-neoplay-build411\n'),
+    ('      - name: Require completed Build 409 without cancelling its run\n',
+     '      - name: Require completed Build 410 without cancelling its run\n'),
+    ('          run_id = 37516862241\n', '          run_id = 37541424599\n'),
+    ("          expected_sha = 'e5c3dcef358fdfe46480ae1dcf6e6c1a978a6b6f'\n",
+     "          expected_sha = 'f5478b036878e5727a035086faff97d0581931cf'\n"),
+    ("'Build409 did not succeed; inspect it before packaging Build410'",
+     "'Build410 did not succeed; inspect it before packaging Build411'"),
+    ("raise SystemExit('Timed out waiting for Build409; no build was cancelled')",
+     "raise SystemExit('Timed out waiting for Build410; no build was cancelled')"),
+    ("print('Build409 is still running; Build410 packaging remains gated', flush=True)",
+     "print('Build410 is still running; Build411 packaging remains gated', flush=True)"),
+    ("expected = 'NeoStation-NeoSwap-NeoPlay-Build-409-' + expected_sha",
+     "expected = 'NeoStation-NeoSwap-NeoPlay-Build-410-' + expected_sha"),
+    (IPA_PREVIOUS_ARTIFACT_RETENTION_BLOCK, IPA_PREVIOUS_ARTIFACT_RETENTION_BLOCK_411),
+    ('    name: Neostation iOS 0.0.2 private IPA (410)\n', '    name: Neostation iOS 0.0.2 private IPA (411)\n'),
+    ("      BUILD_NUMBER: ${{ inputs.build_number || '410' }}\n",
+     "      BUILD_NUMBER: ${{ inputs.build_number || '411' }}\n"),
+    ('      ARTIFACT_NAME: NeoStation-NeoSwap-NeoPlay-Build-410-${{ github.sha }}\n',
+     '      ARTIFACT_NAME: NeoStation-NeoSwap-NeoPlay-Build-411-${{ github.sha }}\n'),
+    ('      RPCS3_CORE_HOST_SHA: 1a307a0f7a353c48496c438d9b8ac7c8260600f7\n',
+     '      RPCS3_CORE_HOST_SHA: d9589fa209de26cce8c53ec2bc40f93b4d154836\n'),
+    ("      RPCS3_CORE_RUN_ID: '37491042733'\n", "      RPCS3_CORE_RUN_ID: '37595624383'\n"),
+    ('          cp docs/neoplay/BUILD410.md build/private-test/Notes-NeoPlay-Build410.md\n',
+     '          cp docs/neoplay/BUILD411.md build/private-test/Notes-NeoPlay-Build411.md\n'),
+)
 # The historical ARMSX2/Build410 postimage remains fully checked. These exact
 # acceptance-test additions are the only current workflow delta at this stage;
 # a new Core artifact pin is added only after its build succeeds.
@@ -638,6 +689,9 @@ for path in ARMSX2_INTEGRATION_FILES:
         text = reviewed.decode('utf-8')
         for old, new in IPA_WORKFLOW_BUILD410_LINES:
             assert text.count(old) == 1, 'Reviewed IPA workflow line expected once: ' + old
+            text = text.replace(old, new, 1)
+        for old, new in IPA_WORKFLOW_BUILD411_LINES:
+            assert text.count(old) == 1, 'Build411 IPA workflow line expected once: ' + old
             text = text.replace(old, new, 1)
         for old, new in IPA_WORKFLOW_RUNTIME_PREPARATION_LINES:
             assert text.count(old) == 1, 'Runtime acceptance workflow line expected once: ' + old
@@ -778,11 +832,13 @@ for workflow_path in ('.github/workflows/neoswap-ipa.yml', '.github/workflows/io
     if workflow_path == '.github/workflows/neoswap-ipa.yml':
         # Related owned-GLSL consumer requires this exact newly built Core;
         # success and complete identity remain mandatory before IPA assembly.
-        # Build409 Core: built from 1a307a0 (NeoSwapClient.h kinds 3/4, Vulkan
-        # host-visible import, VDEC frame loans); its inputs are byte-identical
-        # at every later host commit, which neo_swap_core_pin_test verifies.
-        assert re.findall(r'(?m)^      RPCS3_CORE_HOST_SHA: (.+)$', workflow) == ['1a307a0f7a353c48496c438d9b8ac7c8260600f7']
-        assert re.findall(r'(?m)^      RPCS3_CORE_RUN_ID: (.+)$', workflow) == ["'37491042733'"]
+        # Post-410 Core (Build411): built from d9589fa2 (SPU warmup gated by
+        # llvm_precompilation, ready-only NeoSwap loans, explicit cfg_bool
+        # accessors); the Build409 Core no longer matches these patched inputs.
+        # Its inputs are byte-identical at every later host commit, which
+        # neo_swap_core_pin_test verifies against the pinned commit.
+        assert re.findall(r'(?m)^      RPCS3_CORE_HOST_SHA: (.+)$', workflow) == ['d9589fa209de26cce8c53ec2bc40f93b4d154836']
+        assert re.findall(r'(?m)^      RPCS3_CORE_RUN_ID: (.+)$', workflow) == ["'37595624383'"]
         assert "assert result['head_sha']==os.environ['RPCS3_CORE_HOST_SHA']" in workflow
         assert "assert result['conclusion']=='success'" in workflow
         assert 'validate_core_input_identity(identity)' in workflow

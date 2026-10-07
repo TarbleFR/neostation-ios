@@ -3,6 +3,21 @@ import XCTest
 
 // Build410: receiver ceilings, link tiers and the adapter that moves between them.
 final class NeoPlayStreamPolicyTests: XCTestCase {
+    // Post-410: a receiver window resize or full screen only reports a new
+    // display size; the sender's encoded size depends on the capture and the
+    // ceiling alone, so NPCapture.restartEncodersIfOutputChanges finds nothing
+    // to restart and neither the pictures nor the sound are interrupted.
+    func testEncodedSizeNeverFollowsTheReceiverWindowSoResizeAndFullScreenRestartNothing() {
+        let phone = NPSize(width: 2868, height: 1320)
+        let windows = [NPSize(width: 640, height: 360), NPSize(width: 1280, height: 720), NPSize(width: 1920, height: 1080), NPSize(width: 2560, height: 1440), NPSize(width: 3840, height: 2160), NPSize(width: 7680, height: 4320)]
+        for (tier, receiverMax) in [(NPPolicy.Tier.native, NPPolicy.nativeCap), (.full, NPPolicy.nativeCap), (.half, NPPolicy.nativeCap), (.native, NPPolicy.legacyCap)] {
+            let cap = NPPolicy.cap(tier: tier, receiverMax: receiverMax)
+            let sizes = windows.map { NPPolicy.encodeSize(source: phone, display: $0, cap: cap) }
+            XCTAssertTrue(sizes.allSatisfy { $0 == sizes[0] }, "tier \(tier): every window size encodes \(sizes[0]), got \(sizes)")
+        }
+        XCTAssertEqual(NPPolicy.encodeSize(source: phone, display: NPSize(width: 640, height: 360), cap: NPPolicy.cap(tier: .native, receiverMax: NPPolicy.nativeCap)), phone, "a small window still receives the native capture")
+        XCTAssertEqual(NPPolicy.encodeSize(source: phone, display: NPSize(width: 7680, height: 4320), cap: NPPolicy.cap(tier: .native, receiverMax: NPPolicy.legacyCap)), NPSize(width: 1920, height: 882), "a MediaSource receiver keeps its 1080p ceiling whatever its window")
+    }
     func testFramesReceiverDecodesTheNativeCaptureAndMediaSourceKeeps1080p() {
         let phone = NPSize(width: 2868, height: 1320) // iPhone 16 Pro Max display, ReplayKit bound
         let frames = NPPolicy.cap(tier: .native, receiverMax: NPSize(width: 7680, height: 4320))

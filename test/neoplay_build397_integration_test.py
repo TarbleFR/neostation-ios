@@ -158,7 +158,10 @@ REVIEWED_POST410_POSTIMAGES = {
     'packages/neo_swap/ios/Classes/NeoSwap.h': '88b334240200a68775aef35f1f5d632e04b8fcc43e504d42f65096760c7c292c',
     # Standalone Vulkan proof supplies the app's missing maintenance ticks;
     # success still requires every queued FAST loan and host/pool byte retired.
-    'native/neoswap-donation/VulkanDonationProbe.h': '0d03f19b97f73909392399def58cbccdc3ca9fbcd6d7bd99c7095567d380320b',
+    # Post-410 (Build411): the post-GPU ledger wait follows the session's own
+    # six-second heartbeat tolerance (twice, with margin), ends at once on a
+    # failed session and is measured into the evidence; nothing else changes.
+    'native/neoswap-donation/VulkanDonationProbe.h': '1b96b5e27b9bfc8cfbd8293b049b580043ce51ca5511ceaafa657ed4e4744999',
     'native/neoswap-donation/RetirementProof.h': '40299400ff8269f95dd5de13d9221b581965206d13ccf0650821593fe5f53dcd',
 }
 APPROVED_POST410_FILES = frozenset(REVIEWED_POST410_POSTIMAGES)
@@ -247,16 +250,19 @@ class Build398Integration(unittest.TestCase):
         self.assertIn('version: 0.0.2+399', pubspec)
     def test_full_ipa_requires_previous_build_and_both_exact_evidence_suites(self):
         text = (ROOT/'.github/workflows/neoswap-ipa.yml').read_text()
-        self.assertIn('neostation-neoswap-neoplay-build410', text)
+        self.assertIn('neostation-neoswap-neoplay-build411', text)
         self.assertNotIn('group: neostation-neoswap-private\n', text)
-        self.assertIn('run_id = 37516862241', text)
+        self.assertIn('run_id = 37541424599', text)
         self.assertIn("run['conclusion'] == 'success'", text)
-        self.assertIn('e5c3dcef358fdfe46480ae1dcf6e6c1a978a6b6f', text)
-        self.assertIn("expected = 'NeoStation-NeoSwap-NeoPlay-Build-409-' + expected_sha", text)
+        self.assertIn('f5478b036878e5727a035086faff97d0581931cf', text)
+        self.assertIn("expected = 'NeoStation-NeoSwap-NeoPlay-Build-410-' + expected_sha", text)
         self.assertIn("'neoplay-check.yml',", text)
         self.assertIn('head_sha={sha}', text)
-        self.assertLess(text.index('Require completed Build 409'), text.index('Wait for exact-SHA validation workflows'))
-        self.assertIn('cp docs/neoplay/BUILD410.md build/private-test/Notes-NeoPlay-Build410.md', text)
+        self.assertLess(text.index('Require completed Build 410'), text.index('Wait for exact-SHA validation workflows'))
+        self.assertIn('cp docs/neoplay/BUILD411.md build/private-test/Notes-NeoPlay-Build411.md', text)
+        # The post-410 Core: its patched inputs no longer match the Build409 Core pin.
+        self.assertIn("RPCS3_CORE_HOST_SHA: d9589fa209de26cce8c53ec2bc40f93b4d154836", text)
+        self.assertIn("RPCS3_CORE_RUN_ID: '37595624383'", text)
         self.assertIn('needs: wait-evidence', text)
         self.assertIn("xcode-version: '26.3'", text)
         self.assertLess(text.index('python3 build-utils/configure_neoplay_ios.py'), text.index('pod install --project-directory=ios'))
@@ -326,7 +332,7 @@ class Build398Integration(unittest.TestCase):
         self.assertIn('if kind == 4 && (bytesFull || packets.count >= Self.maxQueuedPackets) || (kind == 5 && audioQueued >= Self.maxQueuedAudio)', transport)
         self.assertIn('onShed?(1, kind); return', transport)
         self.assertIn('case "keyframe": onKeyRequest?()', transport)  # a viewer behind its decoder gets a key picture
-        for name, needle in (('protocol.mjs', "frames ? 7680 : 1920"), ('player.mjs', "new AudioWorkletNode(audio, 'neoplay-audio'"), ('player.mjs', "import { audioTime, isLive, choose, overflow } from './presenter.mjs'"), ('presenter.mjs', 'export function audioTime(clock, now, latencyUs = 0)'), ('audio-ring.mjs', 'class AudioRing'), ('audio-ring.mjs', 'if (!this.primed) {'), ('server.mjs', 'isInitialization(kind)'), ('server.mjs', "if (message.type === 'keyframe') send(sender, {type:'keyframe'})")):
+        for name, needle in (('protocol.mjs', "frames ? 7680 : 1920"), ('player.mjs', "new AudioWorkletNode(audio, 'neoplay-audio'"), ('player.mjs', "import { audioTime, isLive, choose, overflow, engineFor } from './presenter.mjs'"), ('player.mjs', 'const build = engineFor(packet[0], engine?.mode);'), ('presenter.mjs', 'export function engineFor(kind, currentMode)'), ('presenter.mjs', 'export function audioTime(clock, now, latencyUs = 0)'), ('audio-ring.mjs', 'class AudioRing'), ('audio-ring.mjs', 'if (!this.primed) {'), ('server.mjs', 'isInitialization(kind)'), ('server.mjs', "if (message.type === 'keyframe') send(sender, {type:'keyframe'})")):
             self.assertIn(needle, (ROOT / 'tools/neoplay-receiver' / name).read_text(), name)
         workflow = (ROOT / '.github/workflows/neoplay-check.yml').read_text()
         self.assertIn('node playback-smoke.mjs ../../build/neoplay-fixtures/frames.json', workflow)
@@ -348,9 +354,10 @@ class Build398Integration(unittest.TestCase):
         self.assertIn('failure = nil', request)
     def test_candidate_identity_remains_honest(self):
         data = json.loads((ROOT/'native/import-memory-candidate.json').read_text())
-        self.assertEqual(data['target_build'], 410)
-        self.assertEqual(data['neoplay_integration']['previous_build_run_id'], 37516862241)
+        self.assertEqual(data['target_build'], 411)
+        self.assertEqual(data['neoplay_integration']['previous_build_run_id'], 37541424599)
         self.assertTrue(any(entry.startswith('Build410:') for entry in data['scope']))
+        self.assertTrue(any(entry.startswith('Build411:') for entry in data['scope']))
         self.assertEqual(data['neoplay_integration']['frames_protocol_source'], FRAMES)
         self.assertEqual(data['neoplay_integration']['preserved_neoswap_base'], BASE)
         self.assertEqual(data['neoplay_integration']['source'], FEATURE)

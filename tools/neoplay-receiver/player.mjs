@@ -1,5 +1,5 @@
 import { mp4Mime, MAX_BUFFERED, displayLimits, KIND, parseConfig, parseVideo, parseAudio } from './protocol.mjs';
-import { audioTime, isLive, choose, overflow } from './presenter.mjs';
+import { audioTime, isLive, choose, overflow, engineFor } from './presenter.mjs';
 import { ReceiverDiagnostics } from './diagnostics.mjs';
 import { noReorderDescription } from './h264-sps.mjs';
 const video = document.querySelector('#video'), canvas = document.querySelector('#canvas'), status = document.querySelector('#status');
@@ -10,7 +10,7 @@ const say = text => { status.textContent = text; };
 const framesCapable = typeof VideoDecoder !== 'undefined' && typeof EncodedVideoChunk !== 'undefined' && typeof AudioWorkletNode !== 'undefined' && typeof AudioContext !== 'undefined';
 const segmentsCapable = typeof MediaSource !== 'undefined' && MediaSource.isTypeSupported('video/mp4; codecs="avc1.42E02A, mp4a.40.2"');
 let socket, engine = null, audioContext = null, workletReady = null, diagnostics = null, lastDiagnostics = null;
-const debug = { error: null, stats: () => engine?.stats() ?? null, diagnostics: () => diagnostics?.export() ?? lastDiagnostics, get audioNode() { return engine?.audioNode ?? null; }, get mode() { return engine?.mode ?? null; }, get audio() { return audioContext ? { state: audioContext.state, sampleRate: audioContext.sampleRate, baseLatency: audioContext.baseLatency, outputLatency: audioContext.outputLatency } : null; } };
+const debug = { error: null, engines: 0, stats: () => engine?.stats() ?? null, diagnostics: () => diagnostics?.export() ?? lastDiagnostics, get audioNode() { return engine?.audioNode ?? null; }, get mode() { return engine?.mode ?? null; }, get audio() { return audioContext ? { state: audioContext.state, sampleRate: audioContext.sampleRate, baseLatency: audioContext.baseLatency, outputLatency: audioContext.outputLatency } : null; } };
 const fail = error => { debug.error = error?.message ?? String(error); say(debug.error); };
 window.neoplayDebug = debug;
 function closeMedia() {
@@ -37,7 +37,7 @@ function createFramesEngine(senderNeverReorders) {
   let decoder = null, config = null, node = null, waitKey = true, acknowledged = false, raf = 0, closed = false;
   const queue = []; // decoded VideoFrames waiting for presentation, oldest first
   const clock = { pts: null, updatedAt: 0, lastPts: null, running: false, latencyUs: 0, fillSeconds: 0, targetSeconds: 0.08, ratio: 1, stats: null };
-  const counters = { pictures: 0, decoded: 0, presented: 0, freeRun: 0, droppedLate: 0, droppedQueue: 0, pcmPackets: 0, keyRequests: 0, decodeErrors: 0, recoveries: 0, reconfigures: 0, discontinuities: 0, spsRestrictions: 0 };
+  const counters = { pictures: 0, decoded: 0, presented: 0, freeRun: 0, droppedLate: 0, droppedQueue: 0, flushedPictures: 0, pcmPackets: 0, keyRequests: 0, decodeErrors: 0, recoveries: 0, configurations: 0, reconfigures: 0, audioNodes: 0, discontinuities: 0, spsRestrictions: 0 };
   let settings = null, lastKeyRequest = 0;
   const context = canvas.getContext('2d', { alpha: false, desynchronized: true });
   video.hidden = true; canvas.hidden = false;
@@ -94,14 +94,17 @@ function createFramesEngine(senderNeverReorders) {
     if (closed) return;
     // A later configuration (a link tier change) reconfigures in place: the
     // audio ring and its clock continue, only the picture decoder restarts.
-    if (config) counters.reconfigures++;
+    if (config) counters.reconfigures++; counters.configurations++;
     config = next; settings = candidate;
-    for (const frame of queue) frame.close(); queue.length = 0;
+    // Pictures already decoded, and those still inside the old decoder, are
+    // presented on the shared clock: a quality change never discards the
+    // picture about to be shown. Only the decoder itself is replaced.
+    if (decoder && decoder.state === 'configured') { const before = counters.decoded; try { await decoder.flush(); } catch {} counters.flushedPictures += counters.decoded - before; if (closed) return; }
     createDecoder();
     canvas.width = config.width; canvas.height = config.height;
     const audio = await ensureAudio(); if (closed) return;
     if (!node) {
-      node = new AudioWorkletNode(audio, 'neoplay-audio', { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2] });
+      node = new AudioWorkletNode(audio, 'neoplay-audio', { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2] }); counters.audioNodes++;
       node.port.onmessage = ({ data }) => { if (data.type !== 'clock') return; if (data.pts !== null && data.pts !== clock.lastPts) { clock.updatedAt = performance.now(); clock.lastPts = data.pts; } clock.pts = data.pts; clock.running = data.running === true; clock.latencyUs = ((audio.outputLatency || 0) + (audio.baseLatency || 0)) * 1e6; clock.fillSeconds = data.fillSeconds; clock.targetSeconds = data.targetSeconds ?? clock.targetSeconds; clock.ratio = data.ratio; clock.stats = data.stats; schedule(); };
       node.connect(audio.destination);
     }
@@ -217,7 +220,8 @@ document.querySelector('#ready').onclick = () => {
       // A new fMP4 initialization restarts MediaSource. A later frames configuration
       // (a link tier change) reconfigures the running frames engine in place: its
       // sound and clock continue; only a protocol change builds a new engine.
-      if (packet[0] === KIND.INIT || (packet[0] === KIND.CONFIG && engine?.mode !== 'frames')) { closeMedia(); diagnostics = new ReceiverDiagnostics(); engine = packet[0] === KIND.CONFIG ? createFramesEngine(senderNeverReorders) : createSegmentsEngine(); }
+      const build = engineFor(packet[0], engine?.mode);
+      if (build) { closeMedia(); diagnostics = new ReceiverDiagnostics(); debug.engines++; engine = build === 'frames' ? createFramesEngine(senderNeverReorders) : createSegmentsEngine(); }
       if (!engine) return;
       const current = engine, currentDiagnostics = diagnostics, receivedAt = performance.now();
       currentDiagnostics.received(packet, receivedAt);

@@ -238,14 +238,28 @@ static NSDictionary* runVulkanDonationProbe(NeoSwapDonorSession* session, uint64
   }
   evidence[@"stage"] = @"vulkan_fresh_donor_ledger";
   const auto epoch = vulkanDonorLedgerEpoch.load(std::memory_order_acquire);
-  const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(4);
   // One update may already be in flight at the fence. The donor permits only
   // one pending update: its second new reply necessarily measures pages after
   // completion, rather than merely delivering an older sample afterwards.
+  // The donor heartbeat is one update per second and the session itself
+  // tolerates six seconds without one before it fails (3102); two such
+  // tolerances plus a margin bound this wait. A fixed four seconds was missed
+  // on a loaded runner while the same sources passed one commit earlier. A
+  // failed session ends the wait at once and is reported as such; the wait
+  // is measured into the evidence.
+  const auto waitStarted = std::chrono::steady_clock::now();
+  const auto deadline = waitStarted + std::chrono::seconds(15);
+  bool sessionFailed = false;
   while (vulkanDonorLedgerEpoch.load(std::memory_order_acquire) < epoch + 2 &&
-         std::chrono::steady_clock::now() < deadline) usleep(20000);
+         std::chrono::steady_clock::now() < deadline) {
+    if (session.snapshot.state == NeoSwapDonorStateFailed) { sessionFailed = true; break; }
+    usleep(20000);
+  }
+  const auto ledgerWaitMs = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - waitStarted).count();
+  evidence[@"vulkanDonorLedgerWaitMs"] = @(ledgerWaitMs);
+  require(!sessionFailed, "Vulkan donor session failed while the proof awaited its post-GPU ledger");
   require(vulkanDonorLedgerEpoch.load(std::memory_order_acquire) >= epoch + 2,
-          "Vulkan proof received no fresh authenticated donor ledger after GPU completion");
+          "Vulkan proof received no fresh authenticated donor ledger within 15 s after GPU completion");
   const auto finalDonor = session.snapshot;
   evidence[@"vulkanDonorResidentAfterGPUBytes"] = @(finalDonor.donatedResidentBytes);
   evidence[@"vulkanDonorCompressedAfterGPUBytes"] = @(finalDonor.donatedCompressedBytes);
@@ -295,7 +309,7 @@ static NSDictionary* runVulkanDonationProbe(NeoSwapDonorSession* session, uint64
       @"allocatedDiskBytesDuringGPU":@(broker.allocated_disk_bytes),
       @"fileArenaConfigured":@NO,
       @"rendererBudgetDuringGPU":@(target), @"rendererBudgetAfterRetirement":@0,
-      @"donorLedgerRefreshedAfterGPU":@YES,
+      @"donorLedgerRefreshedAfterGPU":@YES, @"donorLedgerWaitMs":@(ledgerWaitMs),
       @"donorResidentAfterGPUBytes":@(finalDonor.donatedResidentBytes),
       @"donorCompressedAfterGPUBytes":@(finalDonor.donatedCompressedBytes),
       @"hostNonvolatileDeltaBytes":@(nonvolatile), @"hostFootprintDeltaBytes":@(physicalDelta),

@@ -1,3 +1,4 @@
+import { KIND } from './protocol.mjs';
 // Pure presentation logic of the frames engine, shared with the Node tests.
 // Picture timestamps and audio times are microseconds on the sender's clock;
 // `now` values are milliseconds from performance.now().
@@ -35,4 +36,14 @@ export function overflow(timestamps, { spanUs = SPAN_US, maxQueue = MAX_QUEUE } 
   let drop = 0;
   while (timestamps.length - drop > 1 && (timestamps.length - drop > maxQueue || timestamps[timestamps.length - 1] - timestamps[drop] > spanUs)) drop++;
   return drop;
+}
+// Which engine a media packet needs. A fMP4 initialization always restarts
+// MediaSource. A frames configuration builds the frames engine only when none
+// runs: a later configuration (a link tier change) reconfigures the running
+// engine in place, so its audio node, ring and clock continue. Pictures and
+// sound never build an engine.
+export function engineFor(kind, currentMode) {
+  if (kind === KIND.INIT) return 'segments';
+  if (kind === KIND.CONFIG) return currentMode === 'frames' ? null : 'frames';
+  return null;
 }

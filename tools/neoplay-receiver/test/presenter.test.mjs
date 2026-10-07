@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { audioTime, isLive, choose, overflow, LEAD_US, SPAN_US, MAX_QUEUE } from '../presenter.mjs';
+import { audioTime, isLive, choose, overflow, engineFor, LEAD_US, SPAN_US, MAX_QUEUE } from '../presenter.mjs';
+import { KIND } from '../protocol.mjs';
 // Presentation of a picture train against an audio clock posted every 21.33 ms
 // (8 quanta of 128 frames at 48 kHz), one presentation per display refresh.
 // Pictures arrive on time and the sound carries a cushion, so the clock runs
@@ -63,4 +64,10 @@ test('decoded pictures are bounded by time and by count, oldest out first', () =
   assert.equal(overflow(sixty), 10); // 500 ms at 60 fps: 30 pictures
   assert.equal(overflow(fast), 40 - MAX_QUEUE); // 325 ms at 120 fps: the count bound
   assert.equal(overflow([0, SPAN_US + 1]), 1); assert.equal(overflow([0, SPAN_US]), 0); assert.equal(overflow([0]), 0);
+});
+test('a later frames configuration reuses the running engine; only an initialization or a protocol change builds one', () => {
+  assert.equal(engineFor(KIND.INIT, null), 'segments'); assert.equal(engineFor(KIND.INIT, 'frames'), 'segments'); assert.equal(engineFor(KIND.INIT, 'segments'), 'segments');
+  assert.equal(engineFor(KIND.CONFIG, null), 'frames'); assert.equal(engineFor(KIND.CONFIG, 'segments'), 'frames');
+  assert.equal(engineFor(KIND.CONFIG, 'frames'), null, 'a quality change keeps the audio node, ring and clock');
+  for (const kind of [KIND.VIDEO, KIND.AUDIO, KIND.SEGMENT]) { assert.equal(engineFor(kind, 'frames'), null); assert.equal(engineFor(kind, null), null); }
 });

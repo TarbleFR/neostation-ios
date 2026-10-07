@@ -78,7 +78,7 @@ final class NeoPlayFrameEncoderTests: XCTestCase {
         XCTAssertEqual(lower.output, NPSize(width: 320, height: 240))
         lower.onError = { error in lock.lock(); failure = error; lock.unlock() }
         lower.onPacket = videoPacket
-        for frame in 150..<210 {
+        for frame in 150..<180 {
             let time = CMTime(value: Int64(frame + 300), timescale: 30)
             lower.append(try helper.makeVideo(frame: frame, time: time), video: true)
             lower.append(try helper.makeAudio(frame: frame, time: time), video: false)
@@ -86,42 +86,60 @@ final class NeoPlayFrameEncoderTests: XCTestCase {
         }
         Thread.sleep(forTimeInterval: 0.5)
         lower.cancel()
+        // Post-410: a second successive change, back up to the full picture, on
+        // the same PCM session: the receiver reconfigures twice and sound tiles
+        // across both changes (several quality changes, one audio session).
+        let restored = try NPFrameEncoder(source: NPSize(width: 640, height: 480), display: NPSize(width: 1920, height: 1080), cap: NPPolicy.legacyCap, pcm: pcm)
+        XCTAssertEqual(restored.output, NPSize(width: 640, height: 480))
+        restored.onError = { error in lock.lock(); failure = error; lock.unlock() }
+        restored.onPacket = videoPacket
+        for frame in 180..<240 {
+            let time = CMTime(value: Int64(frame + 300), timescale: 30)
+            restored.append(try helper.makeVideo(frame: frame, time: time), video: true)
+            restored.append(try helper.makeAudio(frame: frame, time: time), video: false)
+            Thread.sleep(forTimeInterval: 1.0 / 30.0)
+        }
+        Thread.sleep(forTimeInterval: 0.5)
+        restored.cancel()
         lock.lock(); let output = packets; let error = failure; lock.unlock()
         XCTAssertNil(error)
         let kinds = output.map { Int($0[0]) }
         print("NEOPLAY_FRAMES kinds=\(Dictionary(grouping: kinds, by: { $0 }).mapValues(\.count)) bytes=\(output.reduce(0) { $0 + $1.count })")
         XCTAssertEqual(kinds.first, 3, "configuration first")
         let configs = output.filter { $0[0] == 3 }
-        XCTAssertEqual(configs.count, 2, "one configuration per encoder of the session")
-        let config = configs[0], second = configs[1]
+        XCTAssertEqual(configs.count, 3, "one configuration per encoder of the session")
+        let config = configs[0], second = configs[1], third = configs[2]
         XCTAssertEqual(Int(config[1]) << 8 | Int(config[2]), 640); XCTAssertEqual(Int(config[3]) << 8 | Int(config[4]), 480)
         XCTAssertEqual(Int(second[1]) << 8 | Int(second[2]), 320); XCTAssertEqual(Int(second[3]) << 8 | Int(second[4]), 240)
+        XCTAssertEqual(Int(third[1]) << 8 | Int(third[2]), 640); XCTAssertEqual(Int(third[3]) << 8 | Int(third[4]), 480, "the third configuration restores the full picture")
         XCTAssertEqual(config[9], 2); XCTAssertEqual(config[10], 1, "avcC version")
         let video = output.filter { $0[0] == 4 }, audio = output.filter { $0[0] == 5 }
         let pts = video.map { $0.subdata(in: 1..<9).reduce(UInt64(0)) { $0 << 8 | UInt64($1) } }
         let indexes = pts.map { Int(($0 * 30 + 500_000) / 1_000_000) }
-        print("NEOPLAY_FRAMES first=\(indexes.first ?? -1) last=\(indexes.last ?? -1) missing=\((0..<210).filter { !indexes.contains($0) })")
+        print("NEOPLAY_FRAMES first=\(indexes.first ?? -1) last=\(indexes.last ?? -1) missing=\((0..<240).filter { !indexes.contains($0) })")
         // Every submitted picture comes out: cancel() flushes the pictures VideoToolbox still holds before invalidating the session.
-        XCTAssertGreaterThanOrEqual(video.count, 206, "pictures in flight are flushed, not discarded, when an encoder is retired")
-        XCTAssertGreaterThanOrEqual(audio.count, 150) // only initial startup can discard unplaceable sound
+        XCTAssertGreaterThanOrEqual(video.count, 236, "pictures in flight are flushed, not discarded, when an encoder is retired")
+        XCTAssertGreaterThanOrEqual(audio.count, 180) // only initial startup can discard unplaceable sound
         XCTAssertEqual(video.first?[9], 1, "first picture is a key picture")
         XCTAssertEqual(pts, pts.sorted(), "one timeline across both encoders"); XCTAssertEqual(Set(pts).count, pts.count)
-        XCTAssertGreaterThan(pts.last ?? 0, 6_500_000)
+        XCTAssertGreaterThan(pts.last ?? 0, 7_500_000)
         let audioPts = audio.map { $0.subdata(in: 1..<9).reduce(UInt64(0)) { $0 << 8 | UInt64($1) } }
         XCTAssertEqual(audioPts, audioPts.sorted(), "sound never restarts at a tier change")
         var nextPCM: UInt64?
-        var transitionFrames = 0
+        var transitionFrames = 0, secondTransitionFrames = 0
         for (packet, timestamp) in zip(audio, audioPts) {
             let frames = UInt64((packet.count - 9) / 4)
-            if let nextPCM { XCTAssertLessThanOrEqual(timestamp > nextPCM ? timestamp - nextPCM : nextPCM - timestamp, 25, "PCM must tile across the video tier change") }
+            if let nextPCM { XCTAssertLessThanOrEqual(timestamp > nextPCM ? timestamp - nextPCM : nextPCM - timestamp, 25, "PCM must tile across every video tier change") }
             nextPCM = timestamp + frames * 1_000_000 / 48000
             if timestamp >= 5_000_000 - 25 { transitionFrames += Int(frames) }
+            if timestamp >= 6_000_000 - 25 { secondTransitionFrames += Int(frames) }
         }
-        XCTAssertEqual(transitionFrames, 60 * 1600, "all 60 audio inputs survive the new video's initial configuration delay")
+        XCTAssertEqual(transitionFrames, 90 * 1600, "all 90 audio inputs after the first change survive the new video's initial configuration delay")
+        XCTAssertEqual(secondTransitionFrames, 60 * 1600, "all 60 audio inputs after the second change survive as well: one audio session for every tier")
         XCTAssertEqual(pcm.beforeOrigin + pcm.beforeConfiguration, initialDrops, "only initial startup may drop unplaceable PCM")
-        XCTAssertEqual(audio.count + initialDrops, 210)
+        XCTAssertEqual(audio.count + initialDrops, 240)
         XCTAssertEqual(pcm.reanchors, 0)
-        print("NEOPLAY_PCM initialBeforeOrigin=\(pcm.beforeOrigin) initialBeforeConfiguration=\(pcm.beforeConfiguration) transitionFrames=\(transitionFrames) transitionDrops=0")
+        print("NEOPLAY_PCM initialBeforeOrigin=\(pcm.beforeOrigin) initialBeforeConfiguration=\(pcm.beforeConfiguration) transitionFrames=\(transitionFrames) secondTransitionFrames=\(secondTransitionFrames) transitionDrops=0")
         // Every picture: 4-byte NAL lengths that tile the access unit exactly.
         for packet in video {
             var at = 10; var nals = 0

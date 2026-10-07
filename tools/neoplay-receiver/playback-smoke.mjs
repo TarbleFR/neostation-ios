@@ -9,6 +9,7 @@ import { dirname, join } from 'node:path';
 import { WebSocket } from 'ws';
 import { chromium } from 'playwright';
 import { createReceiver } from './server.mjs';
+import { parseConfig } from './protocol.mjs';
 const fixtureBytes = await readFile(process.argv[2]);
 const fixture = JSON.parse(fixtureBytes.toString('utf8'));
 const fixtureSha256 = createHash('sha256').update(fixtureBytes).digest('hex');
@@ -59,10 +60,12 @@ try {
     const expected = await page.evaluate(() => ({frames: typeof VideoDecoder !== 'undefined' && typeof AudioWorkletNode !== 'undefined'}));
     assert.equal(expected.frames, true, 'the Windows browser must support WebCodecs and AudioWorklet for the frames protocol');
     await page.evaluate(() => { window.probeTimer2 = setInterval(() => { const node = window.neoplayDebug?.audioNode; if (node && !window.probeNode) { window.probeNode = node; const analyser = window.probeAudio2 = new AnalyserNode(node.context, {fftSize: 512}); node.connect(analyser); window.peakRms2 = 0; setInterval(() => { const bytes = new Float32Array(analyser.fftSize); analyser.getFloatTimeDomainData(bytes); const rms = Math.sqrt(bytes.reduce((sum,v) => sum+v*v,0)/bytes.length); window.peakRms2 = Math.max(window.peakRms2, rms); }, 50); } }, 50); });
-    const started = Date.now(); let origin = null;
+    const started = Date.now(); let origin = null, resizedMidStream = false;
     for (const part of fixture) {
       const packet = Buffer.from(part.data,'base64');
       if (part.kind !== 3) { if (origin === null) origin = Date.now(); const due = origin + Math.max(0, part.end - 0.05) * 1000; const wait = due - Date.now(); if (wait > 0) await new Promise(resolve => setTimeout(resolve, wait)); }
+      // A window resize (or full screen) in the middle of the stream only reports a new display size: the engine, its audio node and its clock continue.
+      if (!resizedMidStream && part.kind === 4 && part.end > 2.5) { resizedMidStream = true; await page.setViewportSize({width:2560,height:1440}); }
       if (senderClosed) throw new Error(`sender closed during ${part.kind} at ${part.end}s: ${JSON.stringify(senderClosed)} status=${await status()} failures=${JSON.stringify(failures)}`);
       await new Promise((resolve,reject) => sender.send(packet, error => error?reject(error):resolve()));
     }
@@ -72,15 +75,24 @@ try {
       console.error('NEOPLAY_SMOKE_STALL', JSON.stringify({ state, senderClosed, failures }));
       throw error;
     }
-    measured = await page.evaluate(() => { const s = window.neoplayDebug.stats(); const c = document.querySelector('canvas'); return {mode: window.neoplayDebug.mode, width: c.width, height: c.height, frames: s.presented, decoded: s.decoded, droppedLate: s.droppedLate, freeRun: s.freeRun, keyRequests: s.keyRequests, reconfigures: s.reconfigures, recoveries: s.recoveries, underruns: s.clock.stats?.underruns ?? null, preroll: s.clock.stats?.preroll ?? null, skips: s.clock.stats?.skips ?? null, jumps: s.clock.stats?.jumps ?? null, gaps: s.clock.stats?.gaps ?? null, played: s.clock.stats?.played ?? null, cushionTargetMs: Math.round((s.clock.targetSeconds ?? 0) * 1000), audioRms: window.peakRms2 ?? 0, fit: getComputedStyle(c).objectFit, error: s.decodeErrors ? 'decode errors' : null, elapsedMs: 0}; });
+    measured = await page.evaluate(() => { const s = window.neoplayDebug.stats(); const c = document.querySelector('canvas'); return {mode: window.neoplayDebug.mode, engines: window.neoplayDebug.engines, audioNodes: s.audioNodes, configurations: s.configurations, width: c.width, height: c.height, frames: s.presented, decoded: s.decoded, flushedPictures: s.flushedPictures, droppedLate: s.droppedLate, freeRun: s.freeRun, keyRequests: s.keyRequests, reconfigures: s.reconfigures, recoveries: s.recoveries, underruns: s.clock.stats?.underruns ?? null, preroll: s.clock.stats?.preroll ?? null, skips: s.clock.stats?.skips ?? null, jumps: s.clock.stats?.jumps ?? null, gaps: s.clock.stats?.gaps ?? null, trimmed: s.clock.stats?.trimmed ?? null, droppedPCM: s.clock.stats?.dropped ?? null, written: s.clock.stats?.written ?? null, played: s.clock.stats?.played ?? null, cushionTargetMs: Math.round((s.clock.targetSeconds ?? 0) * 1000), audioRms: window.peakRms2 ?? 0, fit: getComputedStyle(c).objectFit, error: s.decodeErrors ? 'decode errors' : null, elapsedMs: 0}; });
     measured.elapsedMs = Date.now() - started;
-    const configs = fixture.filter(part => part.kind === 3).length;
-    const last = configs > 1 ? {width: 320, height: 240} : {width: 640, height: 480}; // the iOS harness ends with a tier change to 320x240
+    const configPackets = fixture.filter(part => part.kind === 3), configs = configPackets.length;
+    const last = parseConfig(Buffer.from(configPackets.at(-1).data,'base64')); // the picture size of the last configuration of the fixture
     assert.equal(measured.mode,'frames'); assert.equal(measured.width,last.width); assert.equal(measured.height,last.height); assert.equal(measured.fit,'contain'); assert.equal(measured.error,null);
-    assert.equal(measured.reconfigures, configs - 1, 'every later configuration reconfigures in place'); assert.equal(measured.recoveries, 0);
+    assert.equal(measured.configurations, configs); assert.equal(measured.reconfigures, configs - 1, 'every later configuration reconfigures in place'); assert.equal(measured.recoveries, 0);
+    assert.equal(measured.engines, 1, 'one engine for the whole session, quality changes and the mid-stream resize included');
+    assert.equal(measured.audioNodes, 1, 'one audio node for the whole session: no second audio path, no echo');
     assert.ok(measured.frames>60, 'presented pictures'); assert.ok(measured.droppedLate < measured.frames * 0.1, `late ${measured.droppedLate} of ${measured.frames}`); assert.ok(measured.played>48000, 'played audio frames'); assert.ok(measured.audioRms>0.01, 'audible PCM'); assert.ok(acknowledged);
-    // Continuity: the receiver never seeks; the ring reports underruns only while the fixture is still prerolling.
-    assert.ok(measured.underruns < 48000 * 0.5, `underruns ${measured.underruns}`);
+    // PCM continuity across every quality change: no hole padded with silence,
+    // no clock jump, no skip, no overlap trimmed or stale packet dropped
+    // (monotonic PCM timestamps), and no underrun beyond 50 ms of output over
+    // the whole stream (a quality change used to cost about 230 ms of silence).
+    assert.equal(measured.gaps, 0, 'no PCM hole across quality changes'); assert.equal(measured.jumps, 0, 'no audio clock jump'); assert.equal(measured.skips, 0, 'no audio skip');
+    assert.equal(measured.trimmed, 0, 'PCM never overlaps: monotonic timestamps'); assert.equal(measured.droppedPCM, 0, 'no stale PCM packet');
+    assert.ok(measured.underruns <= 2400, `underruns ${measured.underruns} PCM frames (${(measured.underruns / 48).toFixed(0)} ms)`);
+    assert.ok(measured.freeRun <= 6, `pictures left the audio clock ${measured.freeRun} times`); // only before the first PCM packet (2 and 3 on the last CI runs); a stalled clock mid-stream adds many more
+    assert.ok(resizedMidStream, 'the resize happened while the stream was running');
     await page.setViewportSize({width:3440,height:1440});
     assert.equal(await page.$eval('canvas',c => getComputedStyle(c).objectFit),'contain');
   } else {
