@@ -33,7 +33,7 @@
     "rpcs3/Emu/Cell/PPUFunction.h": "277e970a05dc808c8851aef12fd985d8b35ecf62559cf3ab3751e04cd6264a15",
     "rpcs3/Emu/Cell/PPUModule.cpp": "87e94f54e393689dc1c82f785f8bb2e09a2beb24e50897e091da797c89aca8c5",
     "rpcs3/Emu/Cell/PPUNoSizeSplitPolicy.h": "b1b2ec0e276aec3ac8d65c568e577092a4f64d1fd3304e74acb7043180340526",
-    "rpcs3/Emu/Cell/PPUThread.cpp": "c0eab7d6127af10f64afcdd5095b008b8671e78b3b3a38e071b0d58902053359",
+    "rpcs3/Emu/Cell/PPUThread.cpp": "dc11725f16e9952f48eb0d4eb2801568d78bd97523cde2b03d17f1e436283c0f",
     "rpcs3/Emu/Cell/PPUThread.h": "ebc4928070976a8544fe5862b804a288bb2cf283f20cc4fc2ccdf1d1a91821e3",
     "rpcs3/Emu/Cell/PPUTranslator.cpp": "ca045fcf45d11eba12fb4f0b309bb12dfc7b6e48c29201a26f6188258bd6b730",
     "rpcs3/Emu/Cell/PPUTranslator.h": "78c7b817d792de7c3b08abf40502724245736385bd414666a0b2d958e2fdd3c3",
@@ -45,7 +45,7 @@
     "rpcs3/Emu/Cell/SPUInterpreterDiagnostics.h": "698a0bda23a761ef425e66a7c669ea727b6d24f9bc858c9635b6b046b76c2a28",
     "rpcs3/Emu/Cell/SPULLVMRecompiler.cpp": "423c1fa6deb321be23b7cf6d6012d295604feb82d7aa2b557f622b7243448639",
     "rpcs3/Emu/Cell/SPURecompiler.h": "4674828f242d8fb6824bcdddf42fef21069e784ac95f5b320783592dfa231827",
-    "rpcs3/Emu/Cell/SPUThread.cpp": "9ac14dad1a177d1a47214f1ab3202e861fc4669e4d6ccfb90c77518a51b033e1",
+    "rpcs3/Emu/Cell/SPUThread.cpp": "4fb4164fafd852891ec2177a5dde721baecd64e58b830eebb8bb06b9cb2d86e8",
     "rpcs3/Emu/Cell/SPUThread.h": "8dd92df13b6f62f5bfb17315aba6ae346f6e9b1fd9ec447405af0c8d14e07eb4",
     "rpcs3/Emu/Cell/SPUWarmupPolicy.h": "f25e9e67b591f58a4fc4993bccdd086b2f49e489eabdf0a75655fd8b546a67eb",
     "rpcs3/Emu/Cell/lv2/sys_memory.cpp": "aeee892dc9c3002616f6b4fd3e021ff9301b563b92bb42ed4c2c216b1c07d4c4",
@@ -53,7 +53,9 @@
     "rpcs3/Emu/Cell/lv2/sys_net/lv2_socket.cpp": "1fe1b95e805b3729a58e064d24b72ad0ec9f14fc54070542ce72d9bf25ca6b90",
     "rpcs3/Emu/Cell/lv2/sys_spu.cpp": "e6b6409153661d5942a80f0656d8339deb5eb58efb19f05948bd43583750c509",
     "rpcs3/Emu/Memory/VMReservationRange.h": "fb7059ce339b836dd5a4da5d0eb5b71bcb72b385abb6bfed4cac6ffe095c2f23",
-    "rpcs3/Emu/Memory/vm.cpp": "c70a8cd9105b4dced03a19ed1d363dcfe43f4fd94b440e3f86b4f2aa3093f49a",
+    "rpcs3/Emu/Memory/vm.cpp": "2fc5a1d1569e7bbcec2a0127cb40eec8113b5b4e2ff21b0e206c28bef5ea8468",
+    "rpcs3/Emu/Memory/vm_locking.h": "8729d3ce7f4a705c355bbfe91318eb34b3843b99bb50b19c033974a758527927",
+    "rpcs3/Emu/Memory/vm_reservation.h": "b729ef505c3e197e14de86db688e95737c5158f9a33ef7b7d7eba488c5192288",
     "rpcs3/Emu/RSX/Common/BufferUtils.cpp": "c2f2f5ad09c543af26d5ed633e6ea1aa1f225cc4d3ff5cf98e057ae62a7c1b65",
     "rpcs3/Emu/RSX/Common/aligned_malloc.hpp": "70fcf5afdfb765593a38ddff7ddefce5895480a62003e0f1a4b9cd6cb9d9f26d",
     "rpcs3/Emu/RSX/Common/sampler_invalidation.h": "b487df3b5ac2907349b6988cb758e52a81cd8649269486c404f3921ccb7072c4",
@@ -136,8 +138,8 @@
     "rpcs3/ios/RPCS3IOSContract.h": "db4e45fb3044f10a9f026e89cb8bfff65ea5a2ebd88c2b0a03c83001cdbd26cf",
     "rpcs3/ios/RPCS3IOSExperimentalPolicy.cpp": "a59994cc0afe0994e44141f11537b4971e4840b58e92228766e0ff7aaccbe378",
     "rpcs3/ios/RPCS3IOSExperimentalPolicy.h": "c75400cd39f0c1dc37dc0a9e53fb05829bc84f8f9a01b1469e9f5f0a010f5b25",
-    "rpcs3/ios/RPCS3IOSPerformance.cpp": "f0f48469363ea64ab9e900a79ce2b428c1691374f9e10bd416fda94834d0d3d4",
-    "rpcs3/ios/RPCS3IOSPerformance.h": "b495cd97cb216ee0f150fa14ca26e0dc433f9718a61c5a3cb803bd8c04b031c2",
+    "rpcs3/ios/RPCS3IOSPerformance.cpp": "d5a7a78c5d4235a8fcb8495df855dd4810453f7aacb269e2b8fec01382da6f54",
+    "rpcs3/ios/RPCS3IOSPerformance.h": "236f9077e7553164d35e0500260b9e200d03c62c47ce91a779a1ffc89bc993f2",
     "rpcs3/ios/RPCS3IOSSettings.cpp": "d3b27260f98bd7cb27dd74eca2d4e825e666c1944edd4f2bbef9d5845064aa7b",
     "rpcs3/ios/RPCS3IOSSettings.h": "845b14529f9949aa515a5a914a99dc3415ce51c29c567639cb9012cab4399996",
     "rpcs3/ios/tests/JITArenaAllocatorTests.cpp": "3ab1baee6a555e9ae1b871381ec7a82870c383071ae1ce4653d829e35dcd68b1",
@@ -147,7 +149,7 @@
     "rpcs3/util/vm.hpp": "ac58df153ca5e9b1e9f69511879035493338265ee2de96656072ab777a07ecbc",
     "rpcs3/util/vm_native.cpp": "2c8c9547fc4ae1b6c7d2b39d19475c64b6922d4ac21b193cbded859fc2796a8c"
   },
-  "patch_sha256": "8b0510605773cdb620da2452d42c698a84f876cdb072827b0adf4ed49f272411",
+  "patch_sha256": "c05a081be1a1edc186f61683b5efcaffcc7f528f0884ddd2ddbfa4880f129d21",
   "policy": "Build353 experimental; selective XITRIX Preview 0.10 engine backports (ARM64 SPU/PPU, VM reservations, RSX/Metal, audio recovery, savestate and graphics correctness); Build352 God of War III bounded-memory policy and Build350 lifecycle baseline retained; NeoSwap v1 opt-in host-owned file-backed RSX CPU data allocator, existing JIT/VM/GPU policies unchanged; selective XITRIX v0.10.1 SPU BID continuation, disabled-texture eviction, MoltenVK conditional-rendering fixes; SPU object cache v5 retires old CFG objects; optional NeoSwap client diagnostics ABI 1, main Core ABI 30 unchanged; NeoSwap coherent host-visible Vulkan SYSTEM buffer imports (1-256MiB), strict external-memory/type/alignment checks, deferred GPU resource disposal and allocator fallback; optional NeoSwap guest page relay ABI 1 for guest data shared aliases, host-owned preparation after authenticated creator exit and ordinary file fallback before first published mapping; Build395: measured God of War III opt-in for RSX CPU aligned buffers 64KiB-1MiB via verified donor loans only, fixed metadata budgets, fast pressure gate and original heap fallback; no JIT/VM/GPU/private allocations redirected; Build409: additive NeoSwap client kinds (GPU host-visible imports, owned video-frame mappings) through the unchanged allocator ABI 1, relay host loans selected by the host budget controller; no JIT/VM/GPU/private allocations redirected; Post-410: loading-time SPU guest metadata warmup and telemetry, no ARM64 object persistence; ready-only fast NeoSwap host loans and ordinary guest backing for new gameplay allocations; existing published alias coherence retained; physical device validation pending",
   "schema_version": 2,
   "upstream_commit": "22f1152783cef1f7e04af7b1c895173e28fd5b03",
@@ -256,6 +258,11 @@
     "slow_prepare": "existing maintenance queue",
     "guest_gameplay": "new unpublished backing uses original RPCS3 mapping; published aliases retain coherent backing",
     "deferred_release": "loans remain owned and charged until maintenance completes retirement",
+    "device_tested": false
+  },
+  "writer_lock_attribution": {
+    "scope": "vm::writer_lock acquisition/hold ticks attributed to SPU PUTLLC, SPU STORE128, PPU stwcx, reservation_op or other callers, reported on RANGELOCKPROF; rsx::thread classified into the RSX core-time group",
+    "lock_protocol_changed": false,
     "device_tested": false
   }
 }

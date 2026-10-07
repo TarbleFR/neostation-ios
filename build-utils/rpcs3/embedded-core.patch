@@ -2562,7 +2562,7 @@ index 0000000..76893b1
 +	}
 +}
 diff --git a/rpcs3/Emu/Cell/PPUThread.cpp b/rpcs3/Emu/Cell/PPUThread.cpp
-index b1f1a74..f0bf983 100644
+index b1f1a74..d87b961 100644
 --- a/rpcs3/Emu/Cell/PPUThread.cpp
 +++ b/rpcs3/Emu/Cell/PPUThread.cpp
 @@ -62,6 +62,7 @@
@@ -2690,7 +2690,17 @@ index b1f1a74..f0bf983 100644
  // Get pointer to executable cache
  static inline u8* ppu_ptr(u32 addr)
  {
-@@ -4315,7 +4380,17 @@ extern void ppu_precompile(std::vector<std::string>& dir_queue, std::vector<ppu_
+@@ -3643,6 +3708,9 @@ static bool ppu_store_reservation(ppu_thread& ppu, u32 addr, u64 reg_value)
+ 				{
+ 					// Full lock (heavyweight)
+ 					// TODO: vm::check_addr
++#ifdef RPCS3_IOS
++					vm::writer_lock_tag tag(vm::writer_lock_source::ppu_stcx);
++#endif
+ 					vm::writer_lock lock(addr, range_lock);
+ 
+ 					if (cmp_rdata(ppu.rdata, super_data))
+@@ -4315,7 +4383,17 @@ extern void ppu_precompile(std::vector<std::string>& dir_queue, std::vector<ppu_
  	// The growth in memory requirements of LLVM is not linear with file size of course
  	// But these estimates should hopefully protect RPCS3 in the coming years
  	// Especially when thread count is on the rise with each CPU generation
@@ -2708,7 +2718,7 @@ index b1f1a74..f0bf983 100644
  
  	const u32 software_thread_limit = std::min<u32>(rpcs3::utils::get_max_threads(), ::size32(file_queue));
  	const u32 cpu_thread_limit = utils::get_thread_count() > 8u ? std::max<u32>(utils::get_thread_count(), 2) - 1 : utils::get_thread_count(); // One LLVM thread less
-@@ -5540,6 +5615,11 @@ bool ppu_initialize(const ppu_module<lv2_obj>& info, bool check_only, u64 file_s
+@@ -5540,6 +5618,11 @@ bool ppu_initialize(const ppu_module<lv2_obj>& info, bool check_only, u64 file_s
  				daz_and_ftz,
  				arm64_codegen_v2,
  				arm64_codegen_v3,
@@ -2720,7 +2730,7 @@ index b1f1a74..f0bf983 100644
  
  				__bitset_enum_max
  			};
-@@ -5547,6 +5627,10 @@ bool ppu_initialize(const ppu_module<lv2_obj>& info, bool check_only, u64 file_s
+@@ -5547,6 +5630,10 @@ bool ppu_initialize(const ppu_module<lv2_obj>& info, bool check_only, u64 file_s
  			be_t<bs_t<ppu_settings>> settings{};
  
  			settings += ppu_settings::_reserved_for_backwards_compatibility;
@@ -2731,7 +2741,7 @@ index b1f1a74..f0bf983 100644
  #if !defined(_WIN32) && !defined(__APPLE__)
  			settings += ppu_settings::platform_bit;
  #endif
-@@ -5573,10 +5657,22 @@ bool ppu_initialize(const ppu_module<lv2_obj>& info, bool check_only, u64 file_s
+@@ -5573,10 +5660,22 @@ bool ppu_initialize(const ppu_module<lv2_obj>& info, bool check_only, u64 file_s
  #if defined(ARCH_ARM64)
  			settings += ppu_settings::arm64_codegen_v2;
  			settings += ppu_settings::arm64_codegen_v3;
@@ -2754,7 +2764,7 @@ index b1f1a74..f0bf983 100644
  		}
  
  		if (cpu ? cpu->state.all_of(cpu_flag::exit) : Emu.IsStopped())
-@@ -5591,8 +5687,13 @@ bool ppu_initialize(const ppu_module<lv2_obj>& info, bool check_only, u64 file_s
+@@ -5591,8 +5690,13 @@ bool ppu_initialize(const ppu_module<lv2_obj>& info, bool check_only, u64 file_s
  			link_workload.emplace_back(obj_name, false);
  		}
  
@@ -2770,7 +2780,7 @@ index b1f1a74..f0bf983 100644
  		{
  			if (!is_being_used_in_emulation && !check_only)
  			{
-@@ -5824,6 +5925,9 @@ bool ppu_initialize(const ppu_module<lv2_obj>& info, bool check_only, u64 file_s
+@@ -5824,6 +5928,9 @@ bool ppu_initialize(const ppu_module<lv2_obj>& info, bool check_only, u64 file_s
  				break;
  			}
  
@@ -2780,7 +2790,7 @@ index b1f1a74..f0bf983 100644
  			if (!failed_to_load && !jits[mod_index / c_modules_per_jit]->add(cache_path + obj_name))
  			{
  				ppu_log.error("LLVM: Failed to load module %s", obj_name);
-@@ -5877,7 +5981,13 @@ bool ppu_initialize(const ppu_module<lv2_obj>& info, bool check_only, u64 file_s
+@@ -5877,7 +5984,13 @@ bool ppu_initialize(const ppu_module<lv2_obj>& info, bool check_only, u64 file_s
  	{
  		for (auto& jit : jits)
  		{
@@ -6775,10 +6785,10 @@ index faf4082..ccff0c5 100644
  	// Interpreter table (spu_itype -> ptr)
  	static std::array<u64, 256> g_interpreter_table;
 diff --git a/rpcs3/Emu/Cell/SPUThread.cpp b/rpcs3/Emu/Cell/SPUThread.cpp
-index bc9ec5e..5dcb54e 100644
+index bc9ec5e..d7e14d5 100644
 --- a/rpcs3/Emu/Cell/SPUThread.cpp
 +++ b/rpcs3/Emu/Cell/SPUThread.cpp
-@@ -25,11 +25,16 @@
+@@ -25,11 +25,17 @@
  
  #include <unordered_set>
  
@@ -6788,6 +6798,7 @@ index bc9ec5e..5dcb54e 100644
 +
  #ifdef RPCS3_IOS
  #include "ios/RPCS3IOSExperimentalPolicy.h"
++#include "ios/RPCS3IOSPerformance.h"
  #include "ios/IOSDMACopy.h"
  #ifdef ARCH_ARM64
  #include "Emu/CPU/Backends/AArch64/SPUReservationScan.h"
@@ -6795,7 +6806,7 @@ index bc9ec5e..5dcb54e 100644
  #endif
  #endif
  
-@@ -309,6 +314,14 @@ extern bool cmp_rdata(const spu_rdata_t& _lhs, const spu_rdata_t& _rhs)
+@@ -309,6 +315,14 @@ extern bool cmp_rdata(const spu_rdata_t& _lhs, const spu_rdata_t& _rhs)
  #endif
  }
  
@@ -6810,7 +6821,7 @@ index bc9ec5e..5dcb54e 100644
  #if defined(ARCH_X64)
  static FORCE_INLINE void mov_rdata_avx(__m256i* dst, const __m256i* src)
  {
-@@ -407,6 +420,26 @@ extern void mov_rdata(spu_rdata_t& _dst, const spu_rdata_t& _src)
+@@ -407,6 +421,26 @@ extern void mov_rdata(spu_rdata_t& _dst, const spu_rdata_t& _src)
  	_mm_storeu_si128(reinterpret_cast<__m128i*>(_dst + 80), v1);
  	_mm_storeu_si128(reinterpret_cast<__m128i*>(_dst + 96), v2);
  	_mm_storeu_si128(reinterpret_cast<__m128i*>(_dst + 112), v3);
@@ -6837,7 +6848,7 @@ index bc9ec5e..5dcb54e 100644
  #else
  	std::memcpy(_dst, _src, 128);
  #endif
-@@ -417,6 +450,9 @@ __forceinline
+@@ -417,6 +451,9 @@ __forceinline
  #endif
  extern u32 compute_rdata_hash32(const spu_rdata_t& _src)
  {
@@ -6847,7 +6858,7 @@ index bc9ec5e..5dcb54e 100644
  	const auto rhs = reinterpret_cast<const v128*>(_src);
  	const v128 a = gv_add32(rhs[0], rhs[1]);
  	const v128 c = gv_add32(rhs[4], rhs[5]);
-@@ -425,6 +461,7 @@ extern u32 compute_rdata_hash32(const spu_rdata_t& _src)
+@@ -425,6 +462,7 @@ extern u32 compute_rdata_hash32(const spu_rdata_t& _src)
  	const v128 r = gv_add32(gv_add32(a, b), gv_add32(c, d));
  	const v128 r1 = gv_add32(r, gv_shuffle32<1, 0, 3, 2>(r));
  	return r1._u32[0] + r1._u32[2];
@@ -6855,7 +6866,7 @@ index bc9ec5e..5dcb54e 100644
  }
  
  #if defined(ARCH_X64)
-@@ -491,6 +528,26 @@ extern void mov_rdata_nt(spu_rdata_t& _dst, const spu_rdata_t& _src)
+@@ -491,6 +529,26 @@ extern void mov_rdata_nt(spu_rdata_t& _dst, const spu_rdata_t& _src)
  	_mm_stream_si128(reinterpret_cast<__m128i*>(_dst + 80), v1);
  	_mm_stream_si128(reinterpret_cast<__m128i*>(_dst + 96), v2);
  	_mm_stream_si128(reinterpret_cast<__m128i*>(_dst + 112), v3);
@@ -6882,10 +6893,17 @@ index bc9ec5e..5dcb54e 100644
  #else
  	std::memcpy(_dst, _src, 128);
  #endif
-@@ -549,14 +606,20 @@ namespace vm
+@@ -549,14 +607,27 @@ namespace vm
  	// Defined here for performance reasons
  	writer_lock::~writer_lock() noexcept
  	{
++#ifdef RPCS3_IOS
++		// NEOSTATION_WRITER_LOCK_ATTRIBUTION_V1: hold time ends at release.
++		{
++			const u64 released = utils::get_tsc();
++			rpcs3::ios::record_writer_lock(source, acquire_ticks, released >= acquired_tsc ? released - acquired_tsc : 0);
++		}
++#endif
 +		// NEOSTATION_ARMSX3_RANGE_LOCK_WAIT_V1: wake PPUs only when the shared word becomes clear.
  		if (range_lock)
  		{
@@ -6904,7 +6922,7 @@ index bc9ec5e..5dcb54e 100644
  	}
  }
  
-@@ -1352,6 +1415,7 @@ void spu_thread::cpu_init()
+@@ -1352,6 +1423,7 @@ void spu_thread::cpu_init()
  
  	ch_events.raw() = {};
  	interrupts_enabled = false;
@@ -6912,7 +6930,7 @@ index bc9ec5e..5dcb54e 100644
  	raddr = 0;
  
  	ch_dec_start_timestamp = get_timebased_time();
-@@ -1485,6 +1549,8 @@ extern thread_local std::string(*g_tls_log_prefix)();
+@@ -1485,6 +1557,8 @@ extern thread_local std::string(*g_tls_log_prefix)();
  
  void spu_thread::cpu_task()
  {
@@ -6921,7 +6939,7 @@ index bc9ec5e..5dcb54e 100644
  #ifdef __APPLE__
  	jit_write_protect(true);
  #endif
-@@ -1566,7 +1632,7 @@ void spu_thread::cpu_task()
+@@ -1566,7 +1640,7 @@ void spu_thread::cpu_task()
  		{
  			if (state) [[unlikely]]
  			{
@@ -6930,7 +6948,7 @@ index bc9ec5e..5dcb54e 100644
  					break;
  			}
  
-@@ -1586,6 +1652,7 @@ void spu_thread::cpu_task()
+@@ -1586,6 +1660,7 @@ void spu_thread::cpu_task()
  			}
  
  			spu_runtime::g_gateway(*this, _ptr<u8>(0), nullptr);
@@ -6938,7 +6956,7 @@ index bc9ec5e..5dcb54e 100644
  		}
  
  		if (unsavable && is_stopped(state - cpu_flag::stop))
-@@ -1632,7 +1699,10 @@ void spu_thread::cpu_work()
+@@ -1632,7 +1707,10 @@ void spu_thread::cpu_work()
  		return;
  	}
  
@@ -6950,7 +6968,7 @@ index bc9ec5e..5dcb54e 100644
  
  	bool work_left = false;
  
-@@ -1676,13 +1746,19 @@ void spu_thread::cpu_work()
+@@ -1676,13 +1754,19 @@ void spu_thread::cpu_work()
  
  	bool gen_interrupt = false;
  
@@ -6973,7 +6991,7 @@ index bc9ec5e..5dcb54e 100644
  			{
  				mask &= ~SPU_EVENT_LR;
  			}
-@@ -1691,7 +1767,16 @@ void spu_thread::cpu_work()
+@@ -1691,7 +1775,16 @@ void spu_thread::cpu_work()
  		}
  
  		gen_interrupt = check_mfc_interrupts(pc);
@@ -6991,7 +7009,7 @@ index bc9ec5e..5dcb54e 100644
  	}
  
  	in_cpu_work = false;
-@@ -1713,7 +1798,7 @@ void spu_thread::cpu_work()
+@@ -1713,7 +1806,7 @@ void spu_thread::cpu_work()
  		});
  	}
  
@@ -7000,7 +7018,7 @@ index bc9ec5e..5dcb54e 100644
  	{
  		// Interrupt! escape everything and restart execution
  		spu_runtime::g_escape(this);
-@@ -1738,6 +1823,7 @@ struct raw_spu_cleanup
+@@ -1738,6 +1831,7 @@ struct raw_spu_cleanup
  
  void spu_thread::cleanup()
  {
@@ -7008,7 +7026,7 @@ index bc9ec5e..5dcb54e 100644
  	// Deallocate local storage
  	ensure(vm::dealloc(vm_offset(), vm::spu, &shm));
  
-@@ -2304,6 +2390,8 @@ void spu_thread::do_dma_transfer(spu_thread* _this, const spu_mfc_cmd& args, u8*
+@@ -2304,6 +2398,8 @@ void spu_thread::do_dma_transfer(spu_thread* _this, const spu_mfc_cmd& args, u8*
  				}
  				}
  
@@ -7017,7 +7035,7 @@ index bc9ec5e..5dcb54e 100644
  				if (time0 != vm::reservation_acquire(eal) || (size0 == 128 && !cmp_rdata(*reinterpret_cast<spu_rdata_t*>(dst0), *reinterpret_cast<const spu_rdata_t*>(src))))
  				{
  					continue;
-@@ -3450,6 +3538,18 @@ bool spu_thread::do_putllc(const spu_mfc_cmd& args)
+@@ -3450,6 +3546,18 @@ bool spu_thread::do_putllc(const spu_mfc_cmd& args)
  		}
  
  		const auto& to_write = _ref<spu_rdata_t>(args.lsa & 0x3ff80);
@@ -7036,7 +7054,7 @@ index bc9ec5e..5dcb54e 100644
  		auto& res = vm::reservation_acquire(addr);
  
  		// TODO: Limit scope!!
-@@ -3457,26 +3557,14 @@ bool spu_thread::do_putllc(const spu_mfc_cmd& args)
+@@ -3457,26 +3565,14 @@ bool spu_thread::do_putllc(const spu_mfc_cmd& args)
  
  		if (rtime != res)
  		{
@@ -7065,7 +7083,7 @@ index bc9ec5e..5dcb54e 100644
  			{
  				raddr = 0; // Disable notification
  				return true;
-@@ -3488,7 +3576,8 @@ bool spu_thread::do_putllc(const spu_mfc_cmd& args)
+@@ -3488,7 +3584,8 @@ bool spu_thread::do_putllc(const spu_mfc_cmd& args)
  		static const auto cast_as = [](void* ptr, usz pos){ return reinterpret_cast<u128*>(ptr) + pos; };
  		static const auto cast_as_const = [](const void* ptr, usz pos){ return reinterpret_cast<const u128*>(ptr) + pos; };
  
@@ -7075,7 +7093,7 @@ index bc9ec5e..5dcb54e 100644
  
  		auto [_oldd, _ok] = res.fetch_op([&](u64& r)
  		{
-@@ -3507,9 +3596,9 @@ bool spu_thread::do_putllc(const spu_mfc_cmd& args)
+@@ -3507,9 +3604,9 @@ bool spu_thread::do_putllc(const spu_mfc_cmd& args)
  			return false;
  		}
  
@@ -7087,7 +7105,7 @@ index bc9ec5e..5dcb54e 100644
  			{
  				mov_rdata(*vm::_ptr<spu_rdata_t>(addr), to_write);
  				res += 64;
-@@ -3524,6 +3613,17 @@ bool spu_thread::do_putllc(const spu_mfc_cmd& args)
+@@ -3524,8 +3621,22 @@ bool spu_thread::do_putllc(const spu_mfc_cmd& args)
  		auto& super_data = *vm::get_super_ptr<spu_rdata_t>(addr);
  		const bool success = [&]()
  		{
@@ -7104,8 +7122,13 @@ index bc9ec5e..5dcb54e 100644
 +
  			// Full lock (heavyweight)
  			// TODO: vm::check_addr
++#ifdef RPCS3_IOS
++			vm::writer_lock_tag tag(vm::writer_lock_source::spu_putllc);
++#endif
  			vm::writer_lock lock(addr, range_lock);
-@@ -3631,7 +3731,7 @@ void do_cell_atomic_128_store(u32 addr, const void* to_write)
+ 
+ 			if (cmp_rdata(rdata, super_data))
+@@ -3631,7 +3742,7 @@ void do_cell_atomic_128_store(u32 addr, const void* to_write)
  
  			if (!(at_read_time & 127))
  			{
@@ -7114,7 +7137,17 @@ index bc9ec5e..5dcb54e 100644
  				{
  					// Write of the same data (verified atomically)
  					vm::try_reservation_update(addr);
-@@ -3941,8 +4041,9 @@ bool spu_thread::do_mfc(bool can_escape, bool must_finish)
+@@ -3726,6 +3837,9 @@ void do_cell_atomic_128_store(u32 addr, const void* to_write)
+ 				cpu->state += cpu_flag::wait;
+ 			}
+ 
++#ifdef RPCS3_IOS
++			vm::writer_lock_tag tag(vm::writer_lock_source::spu_store128);
++#endif
+ 			vm::writer_lock lock(addr, spu ? spu->range_lock : nullptr);
+ 			mov_rdata(sdata, *static_cast<const spu_rdata_t*>(to_write));
+ 			vm::reservation_acquire(addr) += 32;
+@@ -3941,8 +4055,9 @@ bool spu_thread::do_mfc(bool can_escape, bool must_finish)
  
  bool spu_thread::check_mfc_interrupts(u32 next_pc)
  {
@@ -7125,7 +7158,7 @@ index bc9ec5e..5dcb54e 100644
  		srr0 = next_pc;
  
  		// Test for BR/BRA instructions (they are equivalent at zero pc)
-@@ -4355,7 +4456,7 @@ bool spu_thread::process_mfc_cmd()
+@@ -4355,7 +4470,7 @@ bool spu_thread::process_mfc_cmd()
  					// Need to check twice for it to be accurate, the code is before and not after this check for:
  					// 1. Reduce time between reservation accesses so TSX panelty would be lowered
  					// 2. Increase the chance of change detection: if GETLLAR has been called again new data is probably wanted
@@ -7134,7 +7167,7 @@ index bc9ec5e..5dcb54e 100644
  					{
  						if (this_time != rtime)
  						{
-@@ -4533,7 +4634,7 @@ bool spu_thread::process_mfc_cmd()
+@@ -4533,7 +4648,7 @@ bool spu_thread::process_mfc_cmd()
  						// Quick check if there were reservation changes
  						const u64 new_time = res;
  
@@ -7143,7 +7176,7 @@ index bc9ec5e..5dcb54e 100644
  						{
  							if (g_cfg.core.mfc_debug)
  							{
-@@ -4659,6 +4760,8 @@ bool spu_thread::process_mfc_cmd()
+@@ -4659,6 +4774,8 @@ bool spu_thread::process_mfc_cmd()
  
  			mov_rdata(rdata, data);
  
@@ -7152,7 +7185,7 @@ index bc9ec5e..5dcb54e 100644
  			if (u64 time0 = vm::reservation_acquire(addr); ntime != time0)
  			{
  				// Reservation data has been modified recently
-@@ -5075,7 +5178,7 @@ bool spu_thread::reservation_check(u32 addr, const decltype(rdata)& data, u32 cu
+@@ -5075,7 +5192,7 @@ bool spu_thread::reservation_check(u32 addr, const decltype(rdata)& data, u32 cu
  	if ((addr >> 28) < 2 || (addr >> 28) == 0xd)
  	{
  		// Always-allocated memory does not need strict checking (vm::main or vm::stack)
@@ -7161,7 +7194,7 @@ index bc9ec5e..5dcb54e 100644
  	}
  
  	if ((addr >> 20) == (current_eal >> 20))
-@@ -5083,13 +5186,13 @@ bool spu_thread::reservation_check(u32 addr, const decltype(rdata)& data, u32 cu
+@@ -5083,13 +5200,13 @@ bool spu_thread::reservation_check(u32 addr, const decltype(rdata)& data, u32 cu
  		if (vm::check_addr(addr, vm::page_1m_size))
  		{
  			// Same random-access-memory page as the current MFC command, assume allocated
@@ -7177,7 +7210,7 @@ index bc9ec5e..5dcb54e 100644
  		}
  	}
  
-@@ -5163,7 +5266,7 @@ bool spu_thread::reservation_check(u32 addr, const decltype(rdata)& data, u32 cu
+@@ -5163,7 +5280,7 @@ bool spu_thread::reservation_check(u32 addr, const decltype(rdata)& data, u32 cu
  	const bool res = cmp_rdata(data, vm::_ref<decltype(rdata)>(addr));
  
  	range_lock->release(0);
@@ -7186,7 +7219,7 @@ index bc9ec5e..5dcb54e 100644
  }
  
  bool spu_thread::reservation_check(u32 addr, u32 hash, atomic_t<u64, 128>* range_lock)
-@@ -5171,7 +5274,7 @@ bool spu_thread::reservation_check(u32 addr, u32 hash, atomic_t<u64, 128>* range
+@@ -5171,7 +5288,7 @@ bool spu_thread::reservation_check(u32 addr, u32 hash, atomic_t<u64, 128>* range
  	if ((addr >> 28) < 2 || (addr >> 28) == 0xd)
  	{
  		// Always-allocated memory does not need strict checking (vm::main or vm::stack)
@@ -7195,7 +7228,7 @@ index bc9ec5e..5dcb54e 100644
  	}
  
  	// Ensure data is allocated (HACK: would raise LR event if not)
-@@ -5244,7 +5347,7 @@ bool spu_thread::reservation_check(u32 addr, u32 hash, atomic_t<u64, 128>* range
+@@ -5244,7 +5361,7 @@ bool spu_thread::reservation_check(u32 addr, u32 hash, atomic_t<u64, 128>* range
  	const bool res = compute_rdata_hash32(*vm::get_super_ptr<decltype(rdata)>(addr)) == hash;
  
  	range_lock->release(0);
@@ -7204,7 +7237,7 @@ index bc9ec5e..5dcb54e 100644
  }
  
  usz spu_thread::register_cache_line_waiter(u32 addr)
-@@ -5352,6 +5455,7 @@ retry:
+@@ -5352,6 +5469,7 @@ retry:
  			// Set next event to the next time the decrementer underflows
  			ch_dec_start_timestamp -= res << 32;
  			collect |= SPU_EVENT_TM;
@@ -7212,7 +7245,7 @@ index bc9ec5e..5dcb54e 100644
  		}
  	}
  
-@@ -5400,29 +5504,134 @@ void spu_thread::set_events(u32 bits)
+@@ -5400,29 +5518,134 @@ void spu_thread::set_events(u32 bits)
  	}
  }
  
@@ -7359,7 +7392,7 @@ index bc9ec5e..5dcb54e 100644
  }
  
  u32 spu_thread::get_ch_count(u32 ch)
-@@ -5792,7 +6001,7 @@ s64 spu_thread::get_ch_value(u32 ch)
+@@ -5792,7 +6015,7 @@ s64 spu_thread::get_ch_value(u32 ch)
  				{
  					set_lr = true;
  				}
@@ -7368,7 +7401,7 @@ index bc9ec5e..5dcb54e 100644
  				{
  					if (vm::reservation_acquire(raddr) == rtime)
  					{
-@@ -5929,7 +6138,7 @@ s64 spu_thread::get_ch_value(u32 ch)
+@@ -5929,7 +6152,7 @@ s64 spu_thread::get_ch_value(u32 ch)
  						// Abort notifications are handled specially for performance reasons
  						if (auto [wait_var, flag_val] = vm::reservation_notifier_begin_wait(raddr, rtime); wait_var)
  						{
@@ -7377,7 +7410,7 @@ index bc9ec5e..5dcb54e 100644
  							{
  								raddr = 0;
  								set_events(SPU_EVENT_LR);
-@@ -5949,7 +6158,7 @@ s64 spu_thread::get_ch_value(u32 ch)
+@@ -5949,7 +6172,7 @@ s64 spu_thread::get_ch_value(u32 ch)
  #ifdef __linux__
  					if (auto [wait_var, flag_val] = vm::reservation_notifier_begin_wait(_raddr, rtime); wait_var)
  					{
@@ -7386,7 +7419,7 @@ index bc9ec5e..5dcb54e 100644
  						{
  							raddr = 0;
  							set_events(SPU_EVENT_LR);
-@@ -6029,7 +6238,7 @@ s64 spu_thread::get_ch_value(u32 ch)
+@@ -6029,7 +6252,7 @@ s64 spu_thread::get_ch_value(u32 ch)
  
  					if (auto [wait_var, flag_val] = vm::reservation_notifier_begin_wait(_raddr, rtime); wait_var)
  					{
@@ -7395,7 +7428,7 @@ index bc9ec5e..5dcb54e 100644
  						{
  							raddr = 0;
  							set_events(SPU_EVENT_LR);
-@@ -6452,6 +6661,9 @@ bool spu_thread::set_ch_value(u32 ch, u32 value)
+@@ -6452,6 +6675,9 @@ bool spu_thread::set_ch_value(u32 ch, u32 value)
  		ch_dec_start_timestamp = get_timebased_time();
  		ch_dec_value = value;
  		is_dec_frozen = false;
@@ -7405,7 +7438,7 @@ index bc9ec5e..5dcb54e 100644
  		return true;
  	}
  
-@@ -6479,6 +6691,8 @@ bool spu_thread::set_ch_value(u32 ch, u32 value)
+@@ -6479,6 +6705,8 @@ bool spu_thread::set_ch_value(u32 ch, u32 value)
  			}
  		}
  
@@ -7414,7 +7447,7 @@ index bc9ec5e..5dcb54e 100644
  		return true;
  	}
  
-@@ -6509,6 +6723,7 @@ bool spu_thread::set_ch_value(u32 ch, u32 value)
+@@ -6509,6 +6737,7 @@ bool spu_thread::set_ch_value(u32 ch, u32 value)
  			// Save current time, this will be the reported value until the decrementer resumes
  			ch_dec_value = read_dec().first;
  			is_dec_frozen = true;
@@ -7764,7 +7797,7 @@ index 669f759..d0e01fd 100644
  
  		return false;
 diff --git a/rpcs3/Emu/Memory/vm.cpp b/rpcs3/Emu/Memory/vm.cpp
-index e7f55d7..7aa2b1c 100644
+index e7f55d7..c4dc699 100644
 --- a/rpcs3/Emu/Memory/vm.cpp
 +++ b/rpcs3/Emu/Memory/vm.cpp
 @@ -13,6 +13,8 @@
@@ -7776,7 +7809,7 @@ index e7f55d7..7aa2b1c 100644
  #endif
  #include <deque>
  #include <span>
-@@ -105,6 +107,16 @@ namespace vm
+@@ -105,12 +107,27 @@ namespace vm
  		}
  #endif
  
@@ -7793,7 +7826,18 @@ index e7f55d7..7aa2b1c 100644
  		utils::pause();
  	}
  
-@@ -416,6 +428,19 @@ namespace vm
+ 	// Memory range lock slots (sparse atomics)
+ 	atomic_t<u64, 128> g_range_lock_set[64]{};
+ 
++#ifdef RPCS3_IOS
++	// NEOSTATION_WRITER_LOCK_ATTRIBUTION_V1 (see vm_locking.h)
++	thread_local writer_lock_source g_tls_writer_lock_source = writer_lock_source::other;
++#endif
++
+ 	// Memory pages
+ 	std::array<memory_page, 0x100000000 / 4096> g_pages;
+ 
+@@ -416,6 +433,19 @@ namespace vm
  
  		if (!ok || cpu.state & cpu_flag::memory)
  		{
@@ -7813,7 +7857,7 @@ index e7f55d7..7aa2b1c 100644
  			for (u64 i = 0;; i++)
  			{
  				if (cpu.is_paused())
-@@ -429,10 +454,23 @@ namespace vm
+@@ -429,10 +459,23 @@ namespace vm
  					return;
  				}
  
@@ -7839,7 +7883,20 @@ index e7f55d7..7aa2b1c 100644
  
  				if (cpu_flag::wait - cpu.state)
  				{
-@@ -539,7 +577,7 @@ namespace vm
+@@ -478,6 +521,12 @@ namespace vm
+ 	writer_lock::writer_lock(u32 const addr, atomic_t<u64, 128>* range_lock, u32 const size, u64 const flags) noexcept
+ 		: range_lock(range_lock)
+ 	{
++#ifdef RPCS3_IOS
++		// NEOSTATION_WRITER_LOCK_ATTRIBUTION_V1: acquisition (including the wait
++		// for every PPU thread to park) and hold time, attributed by the caller's tag.
++		const u64 acquire_begin = utils::get_tsc();
++		source = static_cast<u8>(g_tls_writer_lock_source);
++#endif
+ 		if (cpu_thread* cpu = cpu_thread::get_current(); cpu && cpu->get_class() == thread_class::ppu)
+ 		{
+ 			// cpu_flag::wait must be added by the caller
+@@ -539,7 +588,7 @@ namespace vm
  
  		if (range_lock)
  		{
@@ -7848,7 +7905,18 @@ index e7f55d7..7aa2b1c 100644
  
  			for (auto lock = g_locks.cbegin(), end = lock + g_cfg.core.ppu_threads; lock != end; lock++)
  			{
-@@ -1044,7 +1082,7 @@ namespace vm
+@@ -601,6 +650,10 @@ namespace vm
+ 				}
+ 			}
+ 		}
++#ifdef RPCS3_IOS
++		acquired_tsc = utils::get_tsc();
++		acquire_ticks = acquired_tsc >= acquire_begin ? acquired_tsc - acquire_begin : 0;
++#endif
+ 	}
+ 
+ 	atomic_t<u32>* reservation_notifier_notify(u32 raddr, u64 rtime, bool postpone)
+@@ -1044,7 +1097,7 @@ namespace vm
  		else
  		{
  			shm->unmap_critical(g_base_addr + addr);
@@ -7857,7 +7925,7 @@ index e7f55d7..7aa2b1c 100644
  			shm->unmap_critical(g_sudo_addr + addr);
  #endif
  		}
-@@ -1321,7 +1359,7 @@ namespace vm
+@@ -1321,7 +1374,7 @@ namespace vm
  			};
  
  			// Special path for whole-allocated areas allowing 4k granularity
@@ -7866,7 +7934,7 @@ index e7f55d7..7aa2b1c 100644
  
  			if (!map_critical(vm::_ptr<u8>(addr), this->flags & page_size_4k && utils::get_page_size() > 4096 ? utils::protection::rw : utils::protection::no) || !map_critical(vm::get_super_ptr(addr), utils::protection::rw))
  			{
-@@ -1361,7 +1399,7 @@ namespace vm
+@@ -1361,7 +1414,7 @@ namespace vm
  			if (m_common)
  			{
  				m_common->unmap_critical(vm::base(addr));
@@ -7875,7 +7943,7 @@ index e7f55d7..7aa2b1c 100644
  				m_common->unmap_critical(vm::get_super_ptr(addr));
  #endif
  				ensure(m_common.use_count() == 1);
-@@ -1415,7 +1453,7 @@ namespace vm
+@@ -1415,7 +1468,7 @@ namespace vm
  			shm = *src;
  		else
  		{
@@ -7884,7 +7952,7 @@ index e7f55d7..7aa2b1c 100644
  		}
  
  		const u32 max = (this->addr + this->size - size) & (0 - align);
-@@ -1494,7 +1532,7 @@ namespace vm
+@@ -1494,7 +1547,7 @@ namespace vm
  			shm = *src;
  		else
  		{
@@ -7893,7 +7961,7 @@ index e7f55d7..7aa2b1c 100644
  		}
  
  		vm::writer_lock lock;
-@@ -1808,7 +1846,7 @@ namespace vm
+@@ -1808,7 +1861,7 @@ namespace vm
  	{
  		if (flags & preallocated)
  		{
@@ -7902,7 +7970,7 @@ index e7f55d7..7aa2b1c 100644
  			m_common->map_critical(vm::base(addr), this->flags & page_size_4k && utils::get_page_size() > 4096 ? utils::protection::rw : utils::protection::no);
  			m_common->map_critical(vm::get_super_ptr(addr));
  		}
-@@ -1849,6 +1887,13 @@ namespace vm
+@@ -1849,6 +1902,13 @@ namespace vm
  			{
  				pflags |= page_size_64k;
  			}
@@ -7916,7 +7984,7 @@ index e7f55d7..7aa2b1c 100644
  			else if (!(flags & (page_size_mask & ~page_size_1m)))
  			{
  				pflags |= page_size_1m;
-@@ -2403,7 +2448,7 @@ namespace vm
+@@ -2403,7 +2463,7 @@ namespace vm
  
  			const u32 flags = ar.pop<u32>();
  			const u64 size = ar.pop<u64>();
@@ -7925,6 +7993,81 @@ index e7f55d7..7aa2b1c 100644
  
  			// Load binary image
  			// elad335: I'm not proud about it as well.. (ideal situation is to not call map_self())
+diff --git a/rpcs3/Emu/Memory/vm_locking.h b/rpcs3/Emu/Memory/vm_locking.h
+index b924300..001143a 100644
+--- a/rpcs3/Emu/Memory/vm_locking.h
++++ b/rpcs3/Emu/Memory/vm_locking.h
+@@ -86,9 +86,46 @@ namespace vm
+ 	bool temporary_unlock(cpu_thread& cpu) noexcept;
+ 	void temporary_unlock() noexcept;
+ 
++#ifdef RPCS3_IOS
++	// NEOSTATION_WRITER_LOCK_ATTRIBUTION_V1: the exclusive lock stops every PPU
++	// thread (cpu_flag::memory) and makes SPU threads spin until they park.
++	// Callers tag the lock they are about to take so the iOS profiler can
++	// attribute the resulting PPU stalls to PUTLLC, STORE128, PPU stwcx,
++	// reservation_op or other sources. Reads and writes a thread-local only on
++	// the already heavyweight path; no lock protocol changes.
++	enum class writer_lock_source : u8
++	{
++		other = 0,
++		spu_putllc,
++		spu_store128,
++		ppu_stcx,
++		reservation_op,
++		count,
++	};
++	extern thread_local writer_lock_source g_tls_writer_lock_source;
++	struct writer_lock_tag final
++	{
++		writer_lock_source previous;
++		explicit writer_lock_tag(writer_lock_source source) noexcept
++			: previous(g_tls_writer_lock_source)
++		{
++			g_tls_writer_lock_source = source;
++		}
++		~writer_lock_tag() noexcept
++		{
++			g_tls_writer_lock_source = previous;
++		}
++	};
++#endif
++
+ 	struct writer_lock final
+ 	{
+ 		atomic_t<u64, 128>* range_lock;
++#ifdef RPCS3_IOS
++		u64 acquired_tsc = 0;
++		u64 acquire_ticks = 0;
++		u8 source = 0;
++#endif
+ 
+ 		writer_lock(const writer_lock&) = delete;
+ 		writer_lock& operator=(const writer_lock&) = delete;
+diff --git a/rpcs3/Emu/Memory/vm_reservation.h b/rpcs3/Emu/Memory/vm_reservation.h
+index 1a1e818..8738311 100644
+--- a/rpcs3/Emu/Memory/vm_reservation.h
++++ b/rpcs3/Emu/Memory/vm_reservation.h
+@@ -168,6 +168,9 @@ namespace vm
+ 		if constexpr (std::is_void_v<std::invoke_result_t<F, T&>>)
+ 		{
+ 			{
++#ifdef RPCS3_IOS
++				vm::writer_lock_tag tag(vm::writer_lock_source::reservation_op);
++#endif
+ 				vm::writer_lock lock(addr);
+ 				std::invoke(op, *sptr);
+ 				old_time = res.fetch_add(127);
+@@ -181,6 +184,9 @@ namespace vm
+ 		{
+ 			auto result = std::invoke_result_t<F, T&>();
+ 			{
++#ifdef RPCS3_IOS
++				vm::writer_lock_tag tag(vm::writer_lock_source::reservation_op);
++#endif
+ 				vm::writer_lock lock(addr);
+ 
+ 				if ((result = std::invoke(op, *sptr)))
 diff --git a/rpcs3/Emu/RSX/Common/BufferUtils.cpp b/rpcs3/Emu/RSX/Common/BufferUtils.cpp
 index 8b2689b..cc49e82 100644
 --- a/rpcs3/Emu/RSX/Common/BufferUtils.cpp
@@ -14237,7 +14380,7 @@ index 8fba197..8aa46a0 100644
  
  // Replaced only while boot is serialized and before emulation workers exist.
 diff --git a/rpcs3/ios/RPCS3IOSPerformance.cpp b/rpcs3/ios/RPCS3IOSPerformance.cpp
-index d800542..e050507 100644
+index d800542..f2be2ac 100644
 --- a/rpcs3/ios/RPCS3IOSPerformance.cpp
 +++ b/rpcs3/ios/RPCS3IOSPerformance.cpp
 @@ -1,13 +1,27 @@
@@ -14268,7 +14411,7 @@ index d800542..e050507 100644
  
  #ifdef __APPLE__
  #include <mach/mach.h>
-@@ -18,9 +32,93 @@
+@@ -18,9 +32,95 @@
  #include <os/proc.h>
  #endif
  
@@ -14316,7 +14459,9 @@ index d800542..e050507 100644
 +	{
 +		return core_group::spu;
 +	}
-+	if (name.starts_with("RSX"))
++	// The main RSX thread is named "rsx::thread" (lower case): without this
++	// test its CPU time fell into "other" and rsx_ms stayed at zero.
++	if (name.starts_with("RSX") || name.starts_with("rsx::"))
 +	{
 +		return core_group::rsx;
 +	}
@@ -14362,7 +14507,7 @@ index d800542..e050507 100644
  
  u64 process_memory_footprint()
  {
-@@ -41,23 +139,233 @@ u64 process_memory_footprint()
+@@ -41,23 +141,247 @@ u64 process_memory_footprint()
  class performance_registry final
  {
  public:
@@ -14426,6 +14571,12 @@ index d800542..e050507 100644
 +		m_range_blocker_max = 0;
 +		m_range_iterations_max = 0;
 +		static_cast<void>(m_range_episodes.take());
++		for (usz source = 0; source < writer_lock_source_count; ++source)
++		{
++			m_writer_lock_count[source] = 0;
++			m_writer_lock_acquire_ticks[source] = 0;
++			m_writer_lock_hold_ticks[source] = 0;
++		}
 +		static_cast<void>(m_spu_loading.take());
 +		static_cast<void>(m_spu_gameplay.take());
 +		m_spu_warm_reuses = 0;
@@ -14517,6 +14668,14 @@ index d800542..e050507 100644
 +		update_max(m_range_iterations_max, iterations);
 +	}
 +
++	void record_writer_lock(u32 source, u64 acquire_ticks, u64 hold_ticks) noexcept
++	{
++		const usz index = source < writer_lock_source_count ? source : 0;
++		m_writer_lock_count[index].fetch_add(1, std::memory_order_relaxed);
++		m_writer_lock_acquire_ticks[index].fetch_add(acquire_ticks, std::memory_order_relaxed);
++		m_writer_lock_hold_ticks[index].fetch_add(hold_ticks, std::memory_order_relaxed);
++	}
++
 +	void record_spu_compile_attempt(u64 ticks, bool loading, bool succeeded, bool previously_warmed) noexcept
 +	{
 +		(loading ? m_spu_loading : m_spu_gameplay).record(ticks, succeeded);
@@ -14605,7 +14764,7 @@ index d800542..e050507 100644
  	}
  
  	rpcs3_ios_status snapshot(rpcs3_ios_performance_metrics* metrics)
-@@ -72,7 +380,7 @@ public:
+@@ -72,7 +396,7 @@ public:
  
  		std::lock_guard lock(m_sample_mutex);
  		const auto now = sample_clock::now();
@@ -14614,7 +14773,7 @@ index d800542..e050507 100644
  		const bool presented_since_last_sample = !m_has_fps_baseline || frame_count > m_last_frame_count;
  		rpcs3_ios_performance_metrics result{};
  		result.struct_size = sizeof(result);
-@@ -113,7 +421,241 @@ public:
+@@ -113,7 +437,256 @@ public:
  	}
  
  private:
@@ -14674,6 +14833,7 @@ index d800542..e050507 100644
 +		rpcs3::spu::compile_sample loading, gameplay, range;
 +		u64 profile_session = 0, warm_reuses = 0, warm_recompile_attempts = 0;
 +		u64 range_iterations_max = 0, range_blocker_sum = 0, range_blocker_max = 0;
++		std::array<u64, writer_lock_source_count> writer_count{}, writer_acquire{}, writer_hold{};
 +
 +		{
 +			std::lock_guard lock(m_profile_mutex);
@@ -14688,6 +14848,12 @@ index d800542..e050507 100644
 +			range_iterations_max = m_range_iterations_max.exchange(0, std::memory_order_relaxed);
 +			range_blocker_sum = m_range_blocker_sum.exchange(0, std::memory_order_relaxed);
 +			range_blocker_max = m_range_blocker_max.exchange(0, std::memory_order_relaxed);
++			for (usz source = 0; source < writer_lock_source_count; ++source)
++			{
++				writer_count[source] = m_writer_lock_count[source].exchange(0, std::memory_order_relaxed);
++				writer_acquire[source] = m_writer_lock_acquire_ticks[source].exchange(0, std::memory_order_relaxed);
++				writer_hold[source] = m_writer_lock_hold_ticks[source].exchange(0, std::memory_order_relaxed);
++			}
 +			frame_baseline = m_profile_frame_baseline;
 +			elapsed_ms = std::chrono::duration<double, std::milli>(now - m_profile_window_start).count();
 +			if (m_usage_samples)
@@ -14714,10 +14880,18 @@ index d800542..e050507 100644
 +			profile_session, loading.count, loading.failures, milliseconds(loading.ticks), milliseconds(loading.maximum_ticks),
 +			gameplay.count, gameplay.failures, milliseconds(gameplay.ticks), milliseconds(gameplay.maximum_ticks),
 +			warm_reuses, warm_recompile_attempts);
++		// wl_<source>=count:acquire_ms:hold_ms attributes the exclusive writer
++		// locks that stop the PPU threads (NEOSTATION_WRITER_LOCK_ATTRIBUTION_V1).
 +		ios_core_profiler.notice(
-+			"RANGELOCKPROF session=%llu episodes=%llu total_ms=%.3f max_ms=%.3f iterations_max=%llu blocker_samples=%llu blocker_max=%llu",
++			"RANGELOCKPROF session=%llu episodes=%llu total_ms=%.3f max_ms=%.3f iterations_max=%llu blocker_samples=%llu blocker_max=%llu "
++			"wl_other=%llu:%.3f:%.3f wl_putllc=%llu:%.3f:%.3f wl_store128=%llu:%.3f:%.3f wl_ppu_stcx=%llu:%.3f:%.3f wl_resop=%llu:%.3f:%.3f",
 +			profile_session, range.count, milliseconds(range.ticks), milliseconds(range.maximum_ticks),
-+			range_iterations_max, range_blocker_sum, range_blocker_max);
++			range_iterations_max, range_blocker_sum, range_blocker_max,
++			writer_count[0], milliseconds(writer_acquire[0]), milliseconds(writer_hold[0]),
++			writer_count[1], milliseconds(writer_acquire[1]), milliseconds(writer_hold[1]),
++			writer_count[2], milliseconds(writer_acquire[2]), milliseconds(writer_hold[2]),
++			writer_count[3], milliseconds(writer_acquire[3]), milliseconds(writer_hold[3]),
++			writer_count[4], milliseconds(writer_acquire[4]), milliseconds(writer_hold[4]));
 +
 +		const u64 memory_reclaims = m_memory_reclaim_attempts.exchange(0, std::memory_order_relaxed);
 +		const u64 memory_reclaim_effective = m_memory_reclaim_effective.exchange(0, std::memory_order_relaxed);
@@ -14856,7 +15030,7 @@ index d800542..e050507 100644
  	std::atomic<u32> m_rsx_load{0};
  	std::atomic_bool m_has_rsx_load{false};
  	std::mutex m_sample_mutex;
-@@ -121,6 +663,58 @@ private:
+@@ -121,6 +694,63 @@ private:
  	bool m_has_fps_baseline = false;
  	u64 m_last_frame_count = 0;
  	sample_clock::time_point m_last_sample_time{};
@@ -14886,6 +15060,11 @@ index d800542..e050507 100644
 +	std::atomic<u64> m_range_blocker_max{0};
 +	std::atomic<u64> m_range_iterations_max{0};
 +	rpcs3::spu::compile_counters m_range_episodes;
++	// NEOSTATION_WRITER_LOCK_ATTRIBUTION_V1: indexed by vm::writer_lock_source.
++	static constexpr usz writer_lock_source_count = 5;
++	std::array<std::atomic<u64>, writer_lock_source_count> m_writer_lock_count{};
++	std::array<std::atomic<u64>, writer_lock_source_count> m_writer_lock_acquire_ticks{};
++	std::array<std::atomic<u64>, writer_lock_source_count> m_writer_lock_hold_ticks{};
 +	rpcs3::spu::compile_counters m_spu_loading, m_spu_gameplay;
 +	std::atomic<u64> m_spu_warm_reuses{0};
 +	std::atomic<u64> m_spu_warm_recompile_attempts{0};
@@ -14915,7 +15094,7 @@ index d800542..e050507 100644
  };
  
  performance_registry g_performance_registry;
-@@ -138,6 +732,86 @@ void record_presented_frame(u32 rsx_load) noexcept
+@@ -138,6 +768,91 @@ void record_presented_frame(u32 rsx_load) noexcept
  	g_performance_registry.record_presented_frame(rsx_load);
  }
  
@@ -14942,6 +15121,11 @@ index d800542..e050507 100644
 +void record_range_lock_episode(u64 wait_ticks, u64 iterations) noexcept
 +{
 +	g_performance_registry.record_range_lock_episode(wait_ticks, iterations);
++}
++
++void record_writer_lock(u32 source, u64 acquire_ticks, u64 hold_ticks) noexcept
++{
++	g_performance_registry.record_writer_lock(source, acquire_ticks, hold_ticks);
 +}
 +
 +void record_spu_compile_attempt(u64 ticks, bool loading, bool succeeded, bool previously_warmed) noexcept
@@ -15003,10 +15187,10 @@ index d800542..e050507 100644
  {
  #ifdef RPCS3_IOS
 diff --git a/rpcs3/ios/RPCS3IOSPerformance.h b/rpcs3/ios/RPCS3IOSPerformance.h
-index 88392e0..7ef1c99 100644
+index 88392e0..4485727 100644
 --- a/rpcs3/ios/RPCS3IOSPerformance.h
 +++ b/rpcs3/ios/RPCS3IOSPerformance.h
-@@ -15,6 +15,29 @@ void reset_performance_metrics();
+@@ -15,6 +15,32 @@ void reset_performance_metrics();
  // device-wide hardware counter.
  void record_presented_frame(u32 rsx_load) noexcept;
  
@@ -15018,6 +15202,9 @@ index 88392e0..7ef1c99 100644
 +// A wait is one polling iteration, not one independent stalled access.
 +void record_range_lock_wait(u64 wait_ticks, u64 blocker_bits = 0) noexcept;
 +void record_range_lock_episode(u64 wait_ticks, u64 iterations) noexcept;
++// NEOSTATION_WRITER_LOCK_ATTRIBUTION_V1: one exclusive vm::writer_lock, by
++// caller source (vm::writer_lock_source), with acquisition and hold ticks.
++void record_writer_lock(u32 source, u64 acquire_ticks, u64 hold_ticks) noexcept;
 +
 +// NEOSTATION_BUILD258_RUNTIME_RESILIENCE_V1: counters are atomic and allocation-free so cache/JIT/RSX hot paths
 +// can attribute stutter without writing one diagnostic line per event.

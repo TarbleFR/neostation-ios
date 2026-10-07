@@ -569,28 +569,138 @@ stage_base=json.loads(original('build-utils/rpcs3/canonical-source.json',RUNTIME
 stage_base_patch=original('build-utils/rpcs3/embedded-core.patch',RUNTIME_PREPARATION_BASE)
 assert stage_base == loan_manifest, 'Build410 Core source differs from its reviewed Build409 artifact'
 assert stage_base_patch == loan_patch, 'Packaged Build410 changed the native delta without a new Core'
-current=json.loads((ROOT/'build-utils/rpcs3/canonical-source.json').read_text())
-runtime_patch=(ROOT/'build-utils/rpcs3/embedded-core.patch').read_bytes()
+# Keep the accepted Build411 runtime-preparation stage immutable at the
+# commit the packaged Core was built from; the writer-lock attribution
+# delta is reviewed separately below.
+RUNTIME_PREPARATION_REVIEWED='d9589fa209de26cce8c53ec2bc40f93b4d154836'
+runtime_manifest=json.loads(original('build-utils/rpcs3/canonical-source.json',RUNTIME_PREPARATION_REVIEWED))
+runtime_patch=original('build-utils/rpcs3/embedded-core.patch',RUNTIME_PREPARATION_REVIEWED)
 runtime_sections=sections(runtime_patch)
-assert set(current)==set(stage_base)|{'spu_warmup_nonblocking','neoswap_fast_acquisition'}
+assert set(runtime_manifest)==set(stage_base)|{'spu_warmup_nonblocking','neoswap_fast_acquisition'}
 for key in set(stage_base)-{'files_sha256','patch_sha256','policy','neoswap'}:
-    assert current[key]==stage_base[key], 'Runtime preparation changed unrelated Core policy: '+key
-assert set(current['neoswap'])==set(stage_base['neoswap'])
+    assert runtime_manifest[key]==stage_base[key], 'Runtime preparation changed unrelated Core policy: '+key
+assert set(runtime_manifest['neoswap'])==set(stage_base['neoswap'])
 for key in set(stage_base['neoswap'])-{'coverage'}:
-    assert current['neoswap'][key]==stage_base['neoswap'][key], 'Runtime preparation changed allocator contract: '+key
-assert current['spu_warmup_nonblocking']['device_tested'] is False
-assert current['neoswap_fast_acquisition']['device_tested'] is False
-assert current['device_runtime_tested'] is False
-assert set(current['files_sha256'])==set(stage_base['files_sha256'])|RUNTIME_PREPARATION_ADDED
-assert {p for p,h in current['files_sha256'].items() if stage_base['files_sha256'].get(p)!=h}==RUNTIME_PREPARATION_FILES, \
+    assert runtime_manifest['neoswap'][key]==stage_base['neoswap'][key], 'Runtime preparation changed allocator contract: '+key
+assert runtime_manifest['spu_warmup_nonblocking']['device_tested'] is False
+assert runtime_manifest['neoswap_fast_acquisition']['device_tested'] is False
+assert runtime_manifest['device_runtime_tested'] is False
+assert set(runtime_manifest['files_sha256'])==set(stage_base['files_sha256'])|RUNTIME_PREPARATION_ADDED
+assert {p for p,h in runtime_manifest['files_sha256'].items() if stage_base['files_sha256'].get(p)!=h}==RUNTIME_PREPARATION_FILES, \
     'Unexpected runtime preparation postimages'
-assert hashlib.sha256(runtime_patch).hexdigest()==current['patch_sha256']
+assert hashlib.sha256(runtime_patch).hexdigest()==runtime_manifest['patch_sha256']
 assert set(runtime_sections)==set(loan_sections)|RUNTIME_PREPARATION_ADDED
 for path in set(loan_sections)-RUNTIME_PREPARATION_FILES:
     assert runtime_sections[path]==loan_sections[path], 'Runtime preparation changed unrelated Core section: '+path
 assert {p for p in runtime_sections if loan_sections.get(p)!=runtime_sections[p]}==RUNTIME_PREPARATION_FILES, \
     'Unexpected runtime preparation patch sections'
 AUDITED_CORE_FILES |= RUNTIME_PREPARATION_FILES
+
+# 7 October 2026 (post-411, God of War III analysis): writer-lock attribution.
+# vm::writer_lock stops every PPU thread and makes SPU threads spin until they
+# park; the device logs could not say which caller took it. The delta tags the
+# four hot callers (SPU PUTLLC, SPU STORE128, PPU stwcx, reservation_op),
+# measures acquisition and hold ticks in the lock itself, reports them per
+# source on RANGELOCKPROF, and classifies the lower-case "rsx::thread" into the
+# RSX core-time group. No lock protocol, scheduler, allocator, JIT or GPU line
+# changes: every other patch section stays byte-identical to the Build411 Core.
+WRITER_LOCK_ATTRIBUTION_FILES={
+    'rpcs3/Emu/Cell/PPUThread.cpp',
+    'rpcs3/Emu/Cell/SPUThread.cpp',
+    'rpcs3/Emu/Memory/vm.cpp',
+    'rpcs3/ios/RPCS3IOSPerformance.cpp',
+    'rpcs3/ios/RPCS3IOSPerformance.h',
+}
+WRITER_LOCK_ATTRIBUTION_ADDED={'rpcs3/Emu/Memory/vm_locking.h','rpcs3/Emu/Memory/vm_reservation.h'}
+current=json.loads((ROOT/'build-utils/rpcs3/canonical-source.json').read_text())
+attribution_patch=(ROOT/'build-utils/rpcs3/embedded-core.patch').read_bytes()
+attribution_sections=sections(attribution_patch)
+assert set(current)==set(runtime_manifest)|{'writer_lock_attribution'}
+for key in set(runtime_manifest)-{'files_sha256','patch_sha256'}:
+    assert current[key]==runtime_manifest[key], 'Writer-lock attribution changed unrelated Core policy: '+key
+assert current['writer_lock_attribution']['device_tested'] is False
+assert current['writer_lock_attribution']['lock_protocol_changed'] is False
+assert set(current['files_sha256'])==set(runtime_manifest['files_sha256'])|WRITER_LOCK_ATTRIBUTION_ADDED
+assert {p for p,h in current['files_sha256'].items() if runtime_manifest['files_sha256'].get(p)!=h}==WRITER_LOCK_ATTRIBUTION_FILES|WRITER_LOCK_ATTRIBUTION_ADDED, \
+    'Unexpected writer-lock attribution postimages'
+assert hashlib.sha256(attribution_patch).hexdigest()==current['patch_sha256']
+assert set(attribution_sections)==set(runtime_sections)|WRITER_LOCK_ATTRIBUTION_ADDED
+for path in set(runtime_sections)-WRITER_LOCK_ATTRIBUTION_FILES:
+    assert attribution_sections[path]==runtime_sections[path], 'Writer-lock attribution changed unrelated Core section: '+path
+assert {p for p in attribution_sections if runtime_sections.get(p)!=attribution_sections[p]}==WRITER_LOCK_ATTRIBUTION_FILES|WRITER_LOCK_ATTRIBUTION_ADDED
+def added_lines(section):
+    from collections import Counter
+    return Counter(line[1:] for line in section.splitlines(keepends=True)
+                   if line.startswith(b'+') and not line.startswith(b'+++'))
+# Exactly these source lines are added (multiset over the whole section) and
+# exactly these are removed; hunk placement may shift, the source may not.
+WRITER_LOCK_ATTRIBUTION_LINES={
+    'rpcs3/Emu/Cell/PPUThread.cpp': ({
+        b'#ifdef RPCS3_IOS\n': 1, b'#endif\n': 1,
+        b'\t\t\t\t\tvm::writer_lock_tag tag(vm::writer_lock_source::ppu_stcx);\n': 1,
+    }, {}),
+    'rpcs3/Emu/Cell/SPUThread.cpp': ({
+        b'#ifdef RPCS3_IOS\n': 3, b'#endif\n': 3,
+        b'#include "ios/RPCS3IOSPerformance.h"\n': 1,
+        b'\t\t// NEOSTATION_WRITER_LOCK_ATTRIBUTION_V1: hold time ends at release.\n': 1,
+        b'\t\t{\n': 1, b'\t\t}\n': 1,
+        b'\t\t\tconst u64 released = utils::get_tsc();\n': 1,
+        b'\t\t\trpcs3::ios::record_writer_lock(source, acquire_ticks, released >= acquired_tsc ? released - acquired_tsc : 0);\n': 1,
+        b'\t\t\tvm::writer_lock_tag tag(vm::writer_lock_source::spu_putllc);\n': 1,
+        b'\t\t\tvm::writer_lock_tag tag(vm::writer_lock_source::spu_store128);\n': 1,
+    }, {}),
+    'rpcs3/Emu/Memory/vm.cpp': ({
+        b'#ifdef RPCS3_IOS\n': 3, b'#endif\n': 3, b'\n': 1,
+        b'\t// NEOSTATION_WRITER_LOCK_ATTRIBUTION_V1 (see vm_locking.h)\n': 1,
+        b'\tthread_local writer_lock_source g_tls_writer_lock_source = writer_lock_source::other;\n': 1,
+        b'\t\t// NEOSTATION_WRITER_LOCK_ATTRIBUTION_V1: acquisition (including the wait\n': 1,
+        b"\t\t// for every PPU thread to park) and hold time, attributed by the caller's tag.\n": 1,
+        b'\t\tconst u64 acquire_begin = utils::get_tsc();\n': 1,
+        b'\t\tsource = static_cast<u8>(g_tls_writer_lock_source);\n': 1,
+        b'\t\tacquired_tsc = utils::get_tsc();\n': 1,
+        b'\t\tacquire_ticks = acquired_tsc >= acquire_begin ? acquired_tsc - acquire_begin : 0;\n': 1,
+    }, {}),
+    'rpcs3/ios/RPCS3IOSPerformance.h': ({
+        b'// NEOSTATION_WRITER_LOCK_ATTRIBUTION_V1: one exclusive vm::writer_lock, by\n': 1,
+        b'// caller source (vm::writer_lock_source), with acquisition and hold ticks.\n': 1,
+        b'void record_writer_lock(u32 source, u64 acquire_ticks, u64 hold_ticks) noexcept;\n': 1,
+    }, {}),
+    'rpcs3/Emu/Memory/vm_reservation.h': ({
+        b'#ifdef RPCS3_IOS\n': 2, b'#endif\n': 2,
+        b'\t\t\t\tvm::writer_lock_tag tag(vm::writer_lock_source::reservation_op);\n': 2,
+    }, {}),
+}
+for path,(plus,minus) in WRITER_LOCK_ATTRIBUTION_LINES.items():
+    before=added_lines(runtime_sections.get(path,b''))
+    after=added_lines(attribution_sections[path])
+    assert dict(after-before)==plus, 'Writer-lock attribution added other lines in '+path+': '+str(dict(after-before))
+    assert dict(before-after)==minus, 'Writer-lock attribution removed lines in '+path+': '+str(dict(before-after))
+performance_before=added_lines(runtime_sections['rpcs3/ios/RPCS3IOSPerformance.cpp'])
+performance_after=added_lines(attribution_sections['rpcs3/ios/RPCS3IOSPerformance.cpp'])
+assert dict(performance_before-performance_after)=={
+    b'\tif (name.starts_with("RSX"))\n': 1,
+    b'\t\t\t"RANGELOCKPROF session=%llu episodes=%llu total_ms=%.3f max_ms=%.3f iterations_max=%llu blocker_samples=%llu blocker_max=%llu",\n': 1,
+    b'\t\t\trange_iterations_max, range_blocker_sum, range_blocker_max);\n': 1,
+}, 'Writer-lock attribution removed other profiler lines'
+performance_added=performance_after-performance_before
+for line in (
+    b'\tif (name.starts_with("RSX") || name.starts_with("rsx::"))\n',
+    b'\tvoid record_writer_lock(u32 source, u64 acquire_ticks, u64 hold_ticks) noexcept\n',
+    b'\t\tconst usz index = source < writer_lock_source_count ? source : 0;\n',
+    b'\tstatic constexpr usz writer_lock_source_count = 5;\n',
+    b'\t\t\t"wl_other=%llu:%.3f:%.3f wl_putllc=%llu:%.3f:%.3f wl_store128=%llu:%.3f:%.3f wl_ppu_stcx=%llu:%.3f:%.3f wl_resop=%llu:%.3f:%.3f",\n',
+    b'void record_writer_lock(u32 source, u64 acquire_ticks, u64 hold_ticks) noexcept\n',
+):
+    assert performance_added[line]==1, line
+assert sum(performance_added.values())==44, sum(performance_added.values())
+assert not any(b'g_cfg' in line or b'preferred_spu_threads' in line or b'max_spurs' in line for line in performance_added)
+attribution_locking=postimage_lines(attribution_sections['rpcs3/Emu/Memory/vm_locking.h'])
+assert b'enum class writer_lock_source : u8' in attribution_locking and b'struct writer_lock_tag final' in attribution_locking
+assert b'\t\tother = 0,\n\t\tspu_putllc,\n\t\tspu_store128,\n\t\tppu_stcx,\n\t\treservation_op,\n\t\tcount,\n' in attribution_locking
+spu_after=postimage_lines(attribution_sections['rpcs3/Emu/Cell/SPUThread.cpp'])
+assert spu_after.count(b'g_range_lock_bits[1].notify_all();')==postimage_lines(runtime_sections['rpcs3/Emu/Cell/SPUThread.cpp']).count(b'g_range_lock_bits[1].notify_all();')
+assert b'NEOSTATION_ARMSX3_RANGE_LOCK_WAIT_V1: wake PPUs only when the shared word becomes clear.' in spu_after
+AUDITED_CORE_FILES |= WRITER_LOCK_ATTRIBUTION_FILES | WRITER_LOCK_ATTRIBUTION_ADDED
 assert candidate['manifest']['rpcs3_postimages_sha256'] == {
     path: current['files_sha256'][path] for path in sorted(AUDITED_CORE_FILES)
 }, 'Candidate/Core postimage identity drift'
