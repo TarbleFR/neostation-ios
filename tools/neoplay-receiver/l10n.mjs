@@ -143,6 +143,118 @@ const LINK_LABELS = {
   'zh-Hant':['幀率','連線品質','自動','正在調整','原生 4K 60 fps 需要 4K 60 fps 畫面擷取及快速穩定的區域網路連線。']
 };
 for (const code of LOCALES) DATA[code].push(...LINK_LABELS[code]);
+KEYS.push('renderResolution','renderAuto','renderNative','renderQhd','renderUhd','renderDescription','renderReduced');
+const RENDER_LABELS = {
+  "en": [
+    "Render resolution",
+    "Automatic · smooth",
+    "Native · no upscale",
+    "2K / QHD · 2560 × 1440",
+    "4K / UHD · 3840 × 2160",
+    "2K/4K are GPU output targets, not the captured source. NeoPlay scales down if frames drop.",
+    "Reduced for smoothness"
+  ],
+  "fr": [
+    "Résolution de rendu",
+    "Automatique · fluide",
+    "Native · sans agrandissement",
+    "2K / QHD · 2560 × 1440",
+    "4K / UHD · 3840 × 2160",
+    "La 2K/4K concerne le rendu GPU, pas la capture iPhone. NeoPlay réduit la définition si des images sont perdues.",
+    "Réduite pour fluidité"
+  ],
+  "de": [
+    "Renderauflösung",
+    "Automatisch · flüssig",
+    "Nativ · ohne Skalierung",
+    "2K / QHD · 2560 × 1440",
+    "4K / UHD · 3840 × 2160",
+    "2K/4K sind GPU-Ausgabeziele, keine Aufnahmeauflösung. Bei Bildverlust reduziert NeoPlay die Ausgabe.",
+    "Für flüssige Wiedergabe reduziert"
+  ],
+  "es": [
+    "Resolución de renderizado",
+    "Automática · fluida",
+    "Nativa · sin ampliar",
+    "2K / QHD · 2560 × 1440",
+    "4K / UHD · 3840 × 2160",
+    "2K/4K son resoluciones de renderizado GPU, no de captura. NeoPlay las reduce si se pierden fotogramas.",
+    "Reducida para mayor fluidez"
+  ],
+  "it": [
+    "Risoluzione di rendering",
+    "Automatica · fluida",
+    "Nativa · senza ingrandimento",
+    "2K / QHD · 2560 × 1440",
+    "4K / UHD · 3840 × 2160",
+    "2K/4K sono obiettivi di rendering GPU, non della cattura. NeoPlay riduce la risoluzione se perde fotogrammi.",
+    "Ridotta per fluidità"
+  ],
+  "pt": [
+    "Resolução de renderização",
+    "Automática · fluida",
+    "Nativa · sem ampliação",
+    "2K / QHD · 2560 × 1440",
+    "4K / UHD · 3840 × 2160",
+    "2K/4K são alvos de renderização GPU, não da captura. NeoPlay reduz a resolução se perder fotogramas.",
+    "Reduzida para fluidez"
+  ],
+  "ru": [
+    "Разрешение вывода",
+    "Авто · плавно",
+    "Исходное · без увеличения",
+    "2K / QHD · 2560 × 1440",
+    "4K / UHD · 3840 × 2160",
+    "2K/4K — цели обработки GPU, а не разрешение записи iPhone. При пропуске кадров NeoPlay снижает качество вывода.",
+    "Снижено для плавности"
+  ],
+  "id": [
+    "Resolusi tampilan",
+    "Otomatis · lancar",
+    "Asli · tanpa pembesaran",
+    "2K / QHD · 2560 × 1440",
+    "4K / UHD · 3840 × 2160",
+    "2K/4K adalah target tampilan GPU, bukan ukuran tangkapan. NeoPlay menurunkannya saat bingkai terlewat.",
+    "Diturunkan agar lancar"
+  ],
+  "ja": [
+    "描画解像度",
+    "自動・滑らか",
+    "ネイティブ・拡大なし",
+    "2K / QHD · 2560 × 1440",
+    "4K / UHD · 3840 × 2160",
+    "2K/4KはGPUの描画先で、iPhoneの元画像解像度ではありません。コマ落ち時は自動的に描画を縮小します。",
+    "滑らかさ優先で縮小"
+  ],
+  "ko": [
+    "렌더링 해상도",
+    "자동 · 부드럽게",
+    "원본 · 확대 없음",
+    "2K / QHD · 2560 × 1440",
+    "4K / UHD · 3840 × 2160",
+    "2K/4K는 GPU 출력 목표이며 iPhone 캡처 해상도가 아닙니다. 프레임 손실 시 자동으로 낮춥니다.",
+    "유연한 재생을 위해 낮춤"
+  ],
+  "zh": [
+    "渲染分辨率",
+    "自动 · 流畅",
+    "原生 · 不放大",
+    "2K / QHD · 2560 × 1440",
+    "4K / UHD · 3840 × 2160",
+    "2K/4K 是 GPU 渲染目标，不是 iPhone 原始采集分辨率。掉帧时 NeoPlay 会降低渲染尺寸。",
+    "已降低以保持流畅"
+  ],
+  "zh-Hant": [
+    "渲染解析度",
+    "自動 · 流暢",
+    "原生 · 不放大",
+    "2K / QHD · 2560 × 1440",
+    "4K / UHD · 3840 × 2160",
+    "2K/4K 是 GPU 繪製目標，不是 iPhone 原始擷取解析度。掉幀時 NeoPlay 會降低繪製尺寸。",
+    "已降低以保持流暢"
+  ]
+};
+for (const code of LOCALES) DATA[code].push(...RENDER_LABELS[code]);
 
 export function resolveLocale(value) {
   const normalized = String(value || '').replaceAll('_','-').toLowerCase();
