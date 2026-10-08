@@ -1,0 +1,19 @@
+--- a/ui/drivers/ui_cocoatouch.m
++++ b/ui/drivers/ui_cocoatouch.m
+@@ -644,6 +644,16 @@
+    app.window = [[UIWindow alloc] initWithWindowScene:(UIWindowScene *)scene];
+ 
+    [app.window makeKeyAndVisible];
++
++   /* UIKit delivers a cold launch URL in connection options, not in the
++    * existing-scene openURLContexts callback. Preserve it once and dispatch
++    * after scene construction; the normal URL handler keeps all protocol
++    * parsing and playlist/core resolution unchanged. */
++   NSSet<UIOpenURLContext *> *initialURLs = connectionOptions.URLContexts;
++   if (initialURLs.count)
++      dispatch_async(dispatch_get_main_queue(), ^{
++         [self scene:scene openURLContexts:initialURLs];
++      });
+ }
+ 
+ - (void)sceneDidBecomeActive:(UIScene *)scene {

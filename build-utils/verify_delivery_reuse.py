@@ -40,6 +40,8 @@ DELTA = {
     'test/fixtures/retroarch_handoff/LegacyRetroArchURLHandoff.swift',
     'test/fixtures/retroarch_handoff/Receiver.swift',
     'test/fixtures/retroarch_handoff/Sender.swift',
+    'test/fixtures/retroarch_handoff/PatchedSceneSyntax.m',
+    'test/retroarch_relaunch_cache_test.dart',
     'test/library_scan_restart_test.dart', 'test/delivery_pipeline_test.py',
     'build-utils/verify_delivery_reuse.py', 'build-utils/delivery_metrics.py',
     'build-utils/sign_delivery.py', 'build-utils/delivery_benchmark.py',

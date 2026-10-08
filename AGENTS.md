@@ -31,6 +31,7 @@ Ces règles expriment les exigences du mainteneur du 18 septembre 2026 et s'appl
 - Distinguer les défauts confirmés dans les sources, les hypothèses, les tests exécutés, les tests ignorés et la validation sur iPhone.
 - Une compilation réussie ou un test simulé ne démontre pas la stabilité sur iOS. Ne jamais annoncer un correctif « définitif », « stable » ou empêchant toute récidive sans preuve correspondante.
 - Garder le même cycle de correction jusqu'à validation, avec un historique clair des résultats et des éventuels blocages. Ne pas envoyer une nouvelle IPA seulement pour tenter une autre hypothèse non vérifiée.
+- Observation du 9 octobre 2026 : le mainteneur confirme la Build 422 installée sans doublons, mais des relancements RetroArch intermittents. Les vidéos montrent des jeux effectivement démarrés, et aussi une première demande à froid perdue. Des échecs à chaud sont également signalés : ne pas les attribuer automatiquement au défaut de scène froide. Voir `docs/retroarch-relaunch-2026-10-09.md` ; le patch proposé concerne le récepteur RetroArch et n'est pas appliqué au TestFlight installé.
 
 ## Traductions obligatoires — consigne du mainteneur du 23 septembre 2026
 

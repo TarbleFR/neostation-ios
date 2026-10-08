@@ -23,7 +23,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   checks:
-    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[retroarch-delivery]') }}
+    if: ${{ github.event_name == 'workflow_dispatch' || (contains(github.event.head_commit.message, '[retroarch-delivery]') && !contains(github.event.head_commit.message, '[retroarch-relaunch-only]')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     env:
@@ -89,7 +89,7 @@ jobs:
         if-no-files-found: error
         retention-days: 14
   native:
-    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[retroarch-delivery]') }}
+    if: ${{ github.event_name == 'workflow_dispatch' || (contains(github.event.head_commit.message, '[retroarch-delivery]') && !contains(github.event.head_commit.message, '[retroarch-relaunch-only]')) }}
     runs-on: macos-15
     timeout-minutes: 15
     steps:

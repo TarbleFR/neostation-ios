@@ -10,7 +10,9 @@ import time
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / 'test/fixtures/retroarch_handoff'
-OUT = pathlib.Path(os.environ.get('RUNNER_TEMP', tempfile.gettempdir())) / 'retroarch-uikit-evidence.json'
+OUT = pathlib.Path(os.environ.get('RUNNER_TEMP', tempfile.gettempdir())) / (os.environ.get('HANDOFF_EVIDENCE_NAME', 'retroarch-uikit-evidence') + '.json')
+RELAUNCH_ONLY = os.environ.get('HANDOFF_RELAUNCH_ONLY') == '1'
+FIX_INITIAL_URLS = os.environ.get('HANDOFF_FIX_INITIAL_URLS') == '1'
 
 
 def run(*args, env=None, check=True, timeout=240):
@@ -61,6 +63,7 @@ def main():
                     'LSApplicationQueriesSchemes': ['retroarch', 'neostation-handoff-test'],
                 }
                 if name == 'Receiver':
+                    info['FixtureHandlesInitialURLs'] = FIX_INITIAL_URLS
                     info['UIApplicationSceneManifest'] = {
                         'UIApplicationSupportsMultipleScenes': False,
                         'UISceneConfigurations': {'UIWindowSceneSessionRoleApplication': [{
@@ -104,17 +107,37 @@ def main():
             spec = pathlib.Path(tmp) / 'project.json'
             spec.write_text(json.dumps(project))
             run('xcodegen', 'generate', '--spec', str(spec), '--project', tmp)
-            print('Exercising five UIKit transports through XCTest; no open result is mocked', flush=True)
+            print('Exercising same-URL returns and receiver restart' if RELAUNCH_ONLY else 'Exercising five UIKit transports through XCTest; no open result is mocked', flush=True)
+            selection = ['-only-testing:ConsentTests/ConsentTests/testSameURLAfterReturnAndReceiverTermination'] if RELAUNCH_ONLY else ['-only-testing:ConsentTests/ConsentTests/testTransportFromFixtureApps']
             consent_log = run('xcodebuild', 'test', '-project', str(pathlib.Path(tmp) / 'HandoffConsent.xcodeproj'),
                 '-scheme', 'HandoffConsent', '-destination', 'platform=iOS Simulator,id=' + udid,
                 '-parallel-testing-enabled', 'NO', 'CODE_SIGNING_ALLOWED=YES', 'CODE_SIGN_IDENTITY=-',
-                'DEVELOPMENT_TEAM=', '-resultBundlePath', str(OUT.with_name('retroarch-handoff.xcresult')), timeout=600)
+                'DEVELOPMENT_TEAM=', '-resultBundlePath', str(OUT.with_suffix('.xcresult')), *selection, timeout=600)
             print(consent_log[-2500:], flush=True)
             evidence['fixture_apps_driven_by_xctest'] = True
             sender = 'org.neostation.handofftest.sender'
             receiver = 'org.neostation.handofftest.receiver'
             sender_data = pathlib.Path(run('xcrun', 'simctl', 'get_app_container', udid, sender, 'data')) / 'Documents'
             receiver_data = pathlib.Path(run('xcrun', 'simctl', 'get_app_container', udid, receiver, 'data')) / 'Documents'
+            if RELAUNCH_ONLY:
+                events = json.loads((sender_data / 'result-relaunch.json').read_text())
+                warm = json.loads((receiver_data / 'received-relaunch.json').read_text())
+                initial = json.loads((receiver_data / 'initial-urls.json').read_text())
+                cold_file = receiver_data / 'received-cold.json'
+                cold = json.loads(cold_file.read_text()) if cold_file.exists() else []
+                sends = [e for e in events if e['event'] == 'send']
+                url = sends[0]['url']
+                assert len(sends) == 3 and all(e['url'] == url and e['state'] == 0 for e in sends)
+                assert [e['accepted'] for e in events if e['event'] == 'finished'] == [True, True, True]
+                assert warm == [url, url], 'return without termination must deliver the identical URL twice'
+                assert initial == [url], 'UIKit must deliver the cold URL through connection options'
+                assert cold == ([url] if FIX_INITIAL_URLS else []), 'initial-scene replay control did not match'
+                evidence.update({'fixedInitialURLs': FIX_INITIAL_URLS, 'sender': events,
+                    'warmDeliveries': warm, 'initialURLContexts': initial, 'coldDeliveries': cold,
+                    'gameExecutionValidated': False})
+                OUT.write_text(json.dumps(evidence, indent=2))
+                print('Same URL: two warm deliveries; cold deliveries:', len(cold), '; receiver fix control:', FIX_INITIAL_URLS, flush=True)
+                return
             cases = [('legacy', 'library', False), ('legacy', 'game', False), ('current', 'library', False), ('current', 'game', False), ('current', 'library', True)]
             for index, (mode, host, cold) in enumerate(cases):
                 sender_file = sender_data / f'result-{index}.json'

@@ -18,9 +18,17 @@ import UIKit
         window = UIWindow(frame: UIScreen.main.bounds)
         window?.rootViewController = UIViewController()
         window?.rootViewController?.view.backgroundColor = .white
+        let repeatButton = UIButton(type: .system)
+        repeatButton.setTitle("Send same URL", for: .normal)
+        repeatButton.accessibilityIdentifier = "repeat-functional-url"
+        repeatButton.frame = CGRect(x: 30, y: 120, width: 260, height: 60)
+        repeatButton.addTarget(self, action: #selector(sendSameURL), for: .touchUpInside)
+        window?.rootViewController?.view.addSubview(repeatButton)
         window?.makeKeyAndVisible()
         return true
     }
+
+    @objc private func sendSameURL() { run(UIApplication.shared) }
 
     func applicationDidBecomeActive(_ application: UIApplication) {
         record(["event": "active"])

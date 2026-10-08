@@ -12,6 +12,13 @@ final class ReceiverScene: UIResponder, UIWindowSceneDelegate {
         window?.rootViewController = UIViewController()
         window?.rootViewController?.view.backgroundColor = .green
         window?.makeKeyAndVisible()
+        let initial = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("initial-urls.json")
+        try! JSONSerialization.data(withJSONObject: options.urlContexts.map { $0.url.absoluteString }).write(to: initial, options: .atomic)
+        // Test-only control for the proposed receiver fix. The default still
+        // reproduces the upstream omission and is used by existing controls.
+        if Bundle.main.object(forInfoDictionaryKey: "FixtureHandlesInitialURLs") as? Bool == true {
+            DispatchQueue.main.async { self.scene(scene, openURLContexts: options.urlContexts) }
+        }
     }
     func scene(_ scene: UIScene, openURLContexts contexts: Set<UIOpenURLContext>) {
         let file = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("received-\(ProcessInfo.processInfo.environment["HANDOFF_CASE"] ?? "cold").json")
