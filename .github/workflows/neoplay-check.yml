@@ -141,10 +141,10 @@ jobs:
           npm run build:installer
       - uses: actions/upload-artifact@v4
         with:
-          name: NeoPlay-0.7.0-${{ github.sha }}
+          name: NeoPlay-0.8.0-${{ github.sha }}
           overwrite: true
           path: |
-            tools/neoplay-receiver/dist/NeoPlay-Setup-0.7.0.exe
+            tools/neoplay-receiver/dist/NeoPlay-Setup-0.8.0.exe
             tools/neoplay-receiver/dist/build.json
             tools/neoplay-receiver/dist/installer.json
             tools/neoplay-receiver/embedded-smoke.json
