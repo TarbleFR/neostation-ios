@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:neostation/data/datasources/sqlite_service.dart';
 import 'package:neostation/services/config_service.dart';
 import 'package:neostation/services/ios_rom_library_root_resolver.dart';
+import 'package:neostation/services/logger_service.dart';
 
 /// Rebases only the library belonging to RetroArch's actual bookmark. The
 /// resolved grant is authoritative; guessing another app's container UUID is
@@ -66,65 +67,84 @@ abstract final class RetroArchFolderRecovery {
   ) async {
     if (!Platform.isIOS) return roots;
     final prefs = await SharedPreferences.getInstance();
-    final bookmark =
-        await ExternalFolderAccess.resolveBookmarkedFolderDetails();
-    final previous =
+    String? active;
+    String? previous =
         prefs.getString(rootKey) ??
-        ConfigService.linkedExternalFolderPreviousPath ??
-        bookmark?.previousPath;
-    final active = bookmark?.path;
-    ConfigService.linkedExternalFolderPath = active;
-    if (active == null) {
-      if (previous != null) {
-        throw const FileSystemException(
-          'RetroArch bookmark access unavailable; library retained',
-        );
-      }
-      return roots;
+        ConfigService.linkedExternalFolderPreviousPath;
+    try {
+      final bookmark =
+          await ExternalFolderAccess.resolveBookmarkedFolderDetails();
+      previous ??= bookmark?.previousPath;
+      active = bookmark?.path;
+    } catch (error) {
+      LoggerService.instance.w('RetroArch bookmark resolution failed: $error');
     }
-    // A resolvable bookmark is not proof that its directory can be read.
-    await Directory(active).list(followLinks: false).take(1).toList();
-    final scanRoot = await IosRomLibraryRootResolver.resolveRetroArchScanRoot(
-      linkedRoot: active,
-      systemFolderNames: systemFolders,
+    ConfigService.linkedExternalFolderPath = active;
+    return reconcileResolved(
+      roots: roots,
+      systemFolders: systemFolders,
+      active: active,
+      previous: previous,
+      db: await SqliteService.instance.database,
+      prefs: prefs,
     );
-    final db = await SqliteService.instance.database;
-    final replacements = <String, String>{};
-    if (previous != null &&
-        _documentsSuffix(previous) == _documentsSuffix(active)) {
-      for (final root in roots) {
-        final target = rebase(root, previous, active);
-        if (target != null && path.normalize(target) != path.normalize(root)) {
-          await Directory(target).list(followLinks: false).take(1).toList();
-          replacements[root] = target;
+  }
+
+  /// Production recovery, independent of the native bookmark transport so the
+  /// five-stale-folder case can run against real directories and SQLite.
+  static Future<List<String>> reconcileResolved({
+    required List<String> roots,
+    required Iterable<String> systemFolders,
+    required String? active,
+    required String? previous,
+    required DatabaseAdapter db,
+    required SharedPreferences prefs,
+  }) async {
+    final updated = roots.toSet().toList();
+    if (active == null) return updated;
+    try {
+      await Directory(active).list(followLinks: false).take(1).toList();
+      final scanRoot = await IosRomLibraryRootResolver.resolveRetroArchScanRoot(
+        linkedRoot: active,
+        systemFolderNames: systemFolders,
+      );
+      final replacements = <String, String>{};
+      if (previous != null &&
+          _documentsSuffix(previous) == _documentsSuffix(active)) {
+        for (final root in updated) {
+          final target = rebase(root, previous, active);
+          if (target == null ||
+              path.normalize(target) == path.normalize(root)) {
+            continue;
+          }
+          try {
+            await Directory(target).list(followLinks: false).take(1).toList();
+            replacements[root] = target;
+          } on FileSystemException {
+            // Retain inaccessible sources and their game metadata for recovery.
+          }
         }
       }
+      await db.transaction((txn) async {
+        for (final entry in replacements.entries) {
+          await relocate(txn, entry.key, entry.value);
+        }
+      });
+      final recovered = updated
+          .map((root) => replacements[root] ?? root)
+          .toSet()
+          .toList();
+      // The bookmark is a managed source, independent of the five manual slots.
+      // Never evict another source or silently refuse a newly selected folder.
+      if (!recovered.contains(scanRoot)) recovered.add(scanRoot);
+      await SqliteService.saveUserRomFolders(recovered);
+      await prefs.setString(rootKey, active);
+      return recovered;
+    } catch (error) {
+      LoggerService.instance.w(
+        'RetroArch folder unavailable; keeping registered library: $error',
+      );
+      return updated;
     }
-    final updated = roots
-        .map((root) => replacements[root] ?? root)
-        .toSet()
-        .toList();
-    if (!updated.contains(scanRoot)) {
-      if (updated.length >= 5) {
-        throw const FileSystemException(
-          'No ROM source slot available for RetroArch',
-        );
-      }
-      updated.add(scanRoot);
-    }
-    // Verify all planned roots before committing paths or recording the new
-    // bookmark identity. An unreadable old source must not become deletions.
-    for (final root in updated) {
-      await Directory(root).list(followLinks: false).take(1).toList();
-    }
-    // The outer transaction keeps multiple nested roots consistent too.
-    await db.transaction((txn) async {
-      for (final entry in replacements.entries) {
-        await relocate(txn, entry.key, entry.value);
-      }
-    });
-    await SqliteService.saveUserRomFolders(updated);
-    await prefs.setString(rootKey, active);
-    return updated;
   }
 }

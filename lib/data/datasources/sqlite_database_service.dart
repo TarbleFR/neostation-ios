@@ -111,6 +111,7 @@ class SqliteDatabaseService {
     SystemModel system,
     List<String> romFolders, {
     bool ignoreHiddenFiles = true,
+    bool? preserveUnscannedSources,
     Map<String, Map<String, String>>? rootFoldersMap,
   }) async {
     if (system.id == null) {
@@ -140,6 +141,7 @@ class SqliteDatabaseService {
         validExtensionsSet,
         ignoreHiddenFiles: ignoreHiddenFiles,
         rootFoldersMap: rootFoldersMap,
+        preserveUnscannedSources: preserveUnscannedSources ?? Platform.isIOS,
       ),
       Future.delayed(const Duration(minutes: 10), () {
         throw Exception('Timeout scanning ${system.realName}');
@@ -161,6 +163,7 @@ class SqliteDatabaseService {
     List<String> romFolders,
     Set<String> validExtensionsSet, {
     bool ignoreHiddenFiles = true,
+    required bool preserveUnscannedSources,
     Map<String, Map<String, String>>? rootFoldersMap,
   }) async {
     final initialCount = await SqliteService.getRomCountForSystem(system.id!);
@@ -188,12 +191,7 @@ class SqliteDatabaseService {
     // GameCube system, so walking each alias in turn finds every file twice and
     // stores it under two different rom_path spellings.
     final scanTargets =
-        <({
-          String dirPath,
-          String canonicalPath,
-          bool useSaf,
-          bool isAlias,
-        })>[];
+        <({String dirPath, String canonicalPath, bool useSaf, bool isAlias})>[];
 
     for (final romFolder in romFolders) {
       final bool useSaf =
@@ -259,6 +257,7 @@ class SqliteDatabaseService {
     ];
 
     final walkedDirs = <String>{};
+    final completedScanPaths = <String>[];
     for (final target in orderedTargets) {
       // An alias pointing at a directory already walked for this system.
       if (!walkedDirs.add(target.canonicalPath)) continue;
@@ -278,6 +277,7 @@ class SqliteDatabaseService {
                 ignoreHiddenFiles: ignoreHiddenFiles,
               );
 
+        completedScanPaths.addAll([target.dirPath, target.canonicalPath]);
         if (entries.isNotEmpty) {
           romEntries.addAll(entries);
         }
@@ -306,6 +306,7 @@ class SqliteDatabaseService {
     final cleanup = await _cleanupOrphanedRomsOptimized(
       system.id!,
       romEntries.map((e) => e.path).toSet(),
+      scannedDirectories: preserveUnscannedSources ? completedScanPaths : null,
     );
     final removedCount = cleanup.removed;
 
@@ -789,14 +790,16 @@ class SqliteDatabaseService {
     final lowerPath = romPath.toLowerCase();
     return lowerPath.startsWith('armsx2://') ||
         lowerPath.startsWith('melonx://') ||
-        lowerPath.startsWith('rpcs3-library://');
+        lowerPath.startsWith('rpcs3-library://') ||
+        lowerPath.startsWith('retroarch-library://');
   }
 
   static Future<({int removed, Set<String> knownPaths})>
   _cleanupOrphanedRomsOptimized(
     String systemId,
-    Set<String> existingRomPaths,
-  ) async {
+    Set<String> existingRomPaths, {
+    List<String>? scannedDirectories,
+  }) async {
     try {
       final db = await SqliteService.getDatabase();
       final existingRoms = await db.rawQuery(
@@ -810,22 +813,23 @@ class SqliteDatabaseService {
       final knownPaths = <String>{};
       final romsToDelete = <String>[];
       for (final rom in existingRoms) {
-        final path = rom['rom_path'].toString();
+        final romPath = rom['rom_path'].toString();
 
         // iOS external-library imports are intentional virtual rows. Their
         // `rom_path` is a direct-launch URL rather than a file the filesystem
         // scanner can rediscover, so a normal rescan must not prune them as
         // "missing". Each emulator library service removes its own stale
         // virtual rows whenever a fresh export is received.
-        if (isPersistentExternalLibraryPath(path)) {
-          knownPaths.add(path);
+        if (isPersistentExternalLibraryPath(romPath)) {
+          knownPaths.add(romPath);
           continue;
         }
 
-        if (existingRomPaths.contains(path)) {
-          knownPaths.add(path);
-        } else {
-          romsToDelete.add(path);
+        if (existingRomPaths.contains(romPath)) {
+          knownPaths.add(romPath);
+        } else if (scannedDirectories == null ||
+            scannedDirectories.any((root) => path.isWithin(root, romPath))) {
+          romsToDelete.add(romPath);
         }
       }
       if (romsToDelete.isEmpty) {
@@ -1169,10 +1173,7 @@ class SqliteDatabaseService {
   /// target as an alias.
   static Future<bool> _isDirectSymbolicLink(String dirPath) async {
     try {
-      return await FileSystemEntity.type(
-            dirPath,
-            followLinks: false,
-          ) ==
+      return await FileSystemEntity.type(dirPath, followLinks: false) ==
           FileSystemEntityType.link;
     } catch (_) {
       return false;
@@ -1318,9 +1319,9 @@ class SqliteDatabaseService {
   }) async {
     final entries = <RomEntry>[];
     try {
-      final entities = await Directory(pathStr)
-          .list(recursive: recursive, followLinks: false)
-          .toList();
+      final entities = await Directory(
+        pathStr,
+      ).list(recursive: recursive, followLinks: false).toList();
       for (final entity in entities) {
         if (await _shouldSkipStandardEntity(
           entity,
@@ -1345,6 +1346,7 @@ class SqliteDatabaseService {
       }
     } catch (e) {
       _log.e('Error scanning standard path $pathStr: $e');
+      rethrow;
     }
     return entries;
   }

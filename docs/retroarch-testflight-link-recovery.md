@@ -34,7 +34,8 @@ in the inspected NeoStation sources at
   handoff. Functional game launches are never blindly duplicated.
 - Buffer incoming URLs until the Dart listener is installed, including cold
   callbacks while NeoStation is restoring its storage.
-- A sync succeeds only after a valid nonempty export is persisted. Duplicate
+- A sync succeeds only after a valid nonempty export is imported into SQLite
+  and persisted. The last valid cache restores missing catalog rows at startup. Duplicate
   requests share one pending export, and a missing response expires after
   15 seconds. Empty or malformed exports preserve the previous cache. The
   UI explains each outcome in all twelve existing language catalogs.
@@ -43,7 +44,19 @@ in the inspected NeoStation sources at
   The previous root comes from the same native bookmark (captured before its
   refresh) or the persisted RetroArch root. Matching a ROM filename or another
   app's container UUID does not establish ownership. Access denial or path
-  collisions retain the existing library and stop destructive pruning.
+  collisions retain the existing library. Unavailable bookmarks and five stale
+  manual roots cannot block native indexing or prevent a newly linked managed
+  RetroArch source from registering. Exact trailing spaces and Unicode are kept.
+- Prune only directories whose complete walk succeeded on iOS; preserve rows
+  from inaccessible/unscanned sources and all emulator-owned virtual catalogs.
+  Keep system detections and their hidden states while retained games exist.
+- Always expose GameCube, Wii, PS2, PS3 and Ports from the iOS catalog, including
+  before scanning and after failures. A failed scan ends its loading phase;
+  stored systems can render even while the startup scan has not completed.
+- Imported virtual RetroArch rows carry the exact exported system and filename;
+  native GC/Wii, PS3, Switch and Ports retain independent ownership. Matching a
+  physical filename only reuses rows under an authoritative RetroArch bookmark.
+
 
 No emulator core, JIT helper, save file, firmware or pairing file is changed.
 The protocol does not echo request IDs, so a callback cannot prove which of
@@ -52,17 +65,16 @@ does not automatically retry exports, and does not revive an expired waiter.
 
 ## Verification and practical limits
 
-Local validation completed with Flutter 3.47.2 and Swift 6.2 on Linux:
-22 Flutter tests passed, including persistent cache and real SQLite behavior;
-6 Swift handoff behavior cases passed with warnings treated as errors.
-Analysis of the changed integration returned no errors or warnings (four
-informational findings remain in existing context-handling/documentation).
-The iOS UIKit plugin has not been type-checked locally; that check and IPA
-packaging require the macOS CI runner. Remote push was initially blocked by
-automatic approval review; the maintainer authorized publication and Build420
-on 8 October. The first CI gate caught the obsolete Build419 scope contract.
-Its update admits only the reviewed RetroArch additions, preserving every
-existing native identity and gate. CI and IPA results remain pending here.
+Build421 reproduces the user-supplied five stale source paths, the missing
+source-slot exception and the blank home phase reported on Build420. Local
+Flutter validation covers 36 behavior/contract cases, including 4,842 synthetic
+export entries restored twice without duplication, SQLite metadata retention,
+actual callback-to-database import, cold-cache restoration, complete/failed walks,
+exact space/Unicode filenames and embedded tiles. Analysis has no errors or
+warnings; existing informational findings are distinguished from failures.
+The unchanged Swift handoff has six behavior cases. macOS exact-SHA gates and
+IPA validation are mandatory before delivery; physical iPhone validation is
+still pending and cannot be inferred from these synthetic fixtures.
 
 `retroarch-link-check.yml` runs behavioral Flutter tests for real callback
 parsing and persistent cache preservation, serialized requests, missing and

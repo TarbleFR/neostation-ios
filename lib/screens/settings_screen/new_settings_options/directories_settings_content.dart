@@ -531,6 +531,10 @@ class DirectoriesSettingsContentState
 
     setState(() => _linkingFolderKey = bookmarkKey);
     try {
+      final previous = await ExternalFolderAccess.resolveBookmarkedFolder(
+        key: bookmarkKey,
+      );
+      ConfigService.linkedExternalFolderPreviousPath = previous;
       final selected = await ExternalFolderAccess.pickAndBookmarkFolder(
         key: bookmarkKey,
       );
@@ -558,10 +562,14 @@ class DirectoriesSettingsContentState
               ),
             )
           : activePath;
-      if (configProvider.config.romFolders.contains(scanRoot)) {
+      if (bookmarkKey == ExternalFolderAccess.defaultBookmarkKey ||
+          configProvider.config.romFolders.contains(scanRoot)) {
         await configProvider.scanSystems();
       } else {
         await configProvider.addRomFolder(scanRoot, scan: true);
+      }
+      if (configProvider.error != null) {
+        throw StateError(configProvider.error!);
       }
       _log.i('iOS emulator link: root=$activePath romScanRoot=$scanRoot');
       if (!mounted) return;
@@ -603,8 +611,11 @@ class DirectoriesSettingsContentState
         RetroArchSyncOutcome.invalid => AppLocale.iosRetroarchSyncInvalid,
         _ => AppLocale.iosRetroarchUnavailable,
       };
-      AppNotification.showNotification(context, key.getString(context),
-        type: synced ? NotificationType.success : NotificationType.error);
+      AppNotification.showNotification(
+        context,
+        key.getString(context),
+        type: synced ? NotificationType.success : NotificationType.error,
+      );
     } finally {
       if (mounted) setState(() => _syncingRetroArch = false);
     }

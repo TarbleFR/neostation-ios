@@ -81,6 +81,15 @@ abstract final class RetroArchLibraryProtocol {
       final filename = (map['filename'] ?? map['titleId']) as String;
       indexed[filename] = map;
       indexed[path.basename(filename)] = map;
+      final system = map['system'];
+      if (system is String && system.isNotEmpty) {
+        indexed[Uri(
+              scheme: 'retroarch-library',
+              host: 'game',
+              pathSegments: [system, filename],
+            ).toString()] =
+            map;
+      }
       final hashIndex = filename.indexOf('#');
       if (hashIndex > 0) {
         indexed[path.basename(filename.substring(0, hashIndex))] = map;

@@ -30,21 +30,28 @@ void main() {
     expect(path.normalize(resolved), path.normalize(library.path));
   });
 
-  test('keeps the RetroArch root when systems live directly inside it', () async {
-    await Directory(path.join(temp.path, 'psx')).create();
-    await Directory(path.join(temp.path, 'gba')).create();
+  test(
+    'keeps the RetroArch root when systems live directly inside it',
+    () async {
+      await Directory(path.join(temp.path, 'psx')).create();
+      await Directory(path.join(temp.path, 'gba')).create();
 
-    final resolved = await IosRomLibraryRootResolver.resolveRetroArchScanRoot(
-      linkedRoot: temp.path,
-      systemFolderNames: const ['psx', 'snes', 'gba'],
-    );
+      final resolved = await IosRomLibraryRootResolver.resolveRetroArchScanRoot(
+        linkedRoot: temp.path,
+        systemFolderNames: const ['psx', 'snes', 'gba'],
+      );
 
-    expect(path.normalize(resolved), path.normalize(temp.path));
-  });
+      expect(path.normalize(resolved), path.normalize(temp.path));
+    },
+  );
 
   test('ignores saves and states as library candidates', () async {
-    await Directory(path.join(temp.path, 'saves', 'psx')).create(recursive: true);
-    await Directory(path.join(temp.path, 'states', 'snes')).create(recursive: true);
+    await Directory(
+      path.join(temp.path, 'saves', 'psx'),
+    ).create(recursive: true);
+    await Directory(
+      path.join(temp.path, 'states', 'snes'),
+    ).create(recursive: true);
     final library = Directory(path.join(temp.path, 'My Games'));
     await Directory(path.join(library.path, 'gba')).create(recursive: true);
 
@@ -55,4 +62,20 @@ void main() {
 
     expect(path.normalize(resolved), path.normalize(library.path));
   });
+  test(
+    'preserves trailing spaces and decomposed Unicode from Files picker',
+    () async {
+      for (final name in ['Bibliothèques ', 'Bibliothe\u0300ques']) {
+        final library = Directory(path.join(temp.path, name));
+        await Directory(path.join(library.path, 'gba')).create(recursive: true);
+        final resolved =
+            await IosRomLibraryRootResolver.resolveRetroArchScanRoot(
+              linkedRoot: library.path,
+              systemFolderNames: const ['gba'],
+            );
+        expect(resolved, library.path);
+        expect(await Directory(resolved).exists(), isTrue);
+      }
+    },
+  );
 }

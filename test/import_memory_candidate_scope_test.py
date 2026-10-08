@@ -12,7 +12,7 @@ BASE = '3ccde925351b3e59985ba466e013e87a857d6ad0'
 MANIFEST_PATH = 'native/import-memory-candidate.json'
 manifest = json.loads((ROOT / MANIFEST_PATH).read_text())
 assert manifest['baseline'] == BASE
-assert manifest['target_build'] == 420
+assert manifest['target_build'] == 421
 assert manifest['swap_research']['branch'] == 'swap'
 assert manifest['swap_research']['scope'] == 'RPCS3 only'
 # Build409: relay owner 1 serves identifiable host allocations of the same
@@ -603,6 +603,19 @@ SUPPORT_FILES |= {
     'test/retroarch_url_handoff_test.swift',
 }
 
+# Build421: maintainer-requested restoration after the attached failure log.
+PRODUCTION_FILES |= {
+    'lib/data/datasources/sqlite_service.dart',
+    'lib/repositories/system_repository.dart',
+    'lib/screens/systems_screen/system_content.dart',
+    'lib/services/ios_rom_library_root_resolver.dart',
+    'lib/services/retroarch_library_importer.dart',
+}
+SUPPORT_FILES |= {
+    'test/retroarch_library_restoration_test.dart',
+    'test/ios_rom_library_root_resolver_test.dart',
+}
+
 # NeoPlay 0.8.0 predates the RetroArch candidate. Its 12 inherited deltas
 # had not refreshed the Build419 manifest. Admit their immutable endpoint,
 # never the current working bytes as an automatically approved identity.
@@ -945,6 +958,8 @@ IPA_WORKFLOW_BUILD420_LINES = (
      '          cp docs/neoswap-build419-memory.md build/private-test/Notes-NeoSwap-Build419.md\n'
      '          cp docs/retroarch-testflight-link-recovery.md build/private-test/Notes-RetroArch-Build420.md\n'),
 )
+# Build421: only catalog restoration, scan safety and delivery metadata.
+IPA_WORKFLOW_BUILD421_LINES = (('name: NeoStation NeoSwap + NeoPlay private • Build 420\n', 'name: NeoStation NeoSwap + NeoPlay private • Build 421\n'), ('run-name: NeoStation NeoSwap + NeoPlay private • Build 420 • ${{ github.sha }}\n', 'run-name: NeoStation NeoSwap + NeoPlay private • Build 421 • ${{ github.sha }}\n'), ("        default: '420'\n", "        default: '421'\n"), ('  group: neostation-neoswap-neoplay-build420-${{ github.sha }}\n', '  group: neostation-neoswap-neoplay-build421-${{ github.sha }}\n'), ('    name: Neostation iOS 0.0.2 private IPA (420)\n', '    name: Neostation iOS 0.0.2 private IPA (421)\n'), ("      BUILD_NUMBER: ${{ inputs.build_number || '420' }}\n", "      BUILD_NUMBER: ${{ inputs.build_number || '421' }}\n"), ('      ARTIFACT_NAME: NeoStation-NeoSwap-NeoPlay-Build-420-${{ github.sha }}\n', '      ARTIFACT_NAME: NeoStation-NeoSwap-NeoPlay-Build-421-${{ github.sha }}\n'), ('          flutter test test/retroarch_library_protocol_test.dart test/retroarch_library_cache_test.dart test/retroarch_folder_recovery_test.dart test/retroarch_sync_locale_test.dart test/ios_rom_library_root_resolver_test.dart test/ios_selective_rollback_test.dart test/armsx2_retroarch_routing_isolation_test.dart\n', '          flutter test test/retroarch_library_protocol_test.dart test/retroarch_library_cache_test.dart test/retroarch_folder_recovery_test.dart test/retroarch_sync_locale_test.dart test/ios_rom_library_root_resolver_test.dart test/ios_selective_rollback_test.dart test/armsx2_retroarch_routing_isolation_test.dart test/retroarch_library_restoration_test.dart test/rom_scan_symlink_alias_test.dart test/rom_scan_emulator_default_test.dart\n'), ('          cp docs/retroarch-testflight-link-recovery.md build/private-test/Notes-RetroArch-Build420.md\n', '          cp docs/retroarch-testflight-link-recovery.md build/private-test/Notes-RetroArch-Build421.md\n'))
 for path in ARMSX2_INTEGRATION_FILES:
     reviewed = subprocess.check_output(['git', 'show', ARMSX2_INTEGRATION_SHA + ':' + path], cwd=ROOT)
     if path == '.github/workflows/neoswap-ipa.yml':
@@ -972,6 +987,9 @@ for path in ARMSX2_INTEGRATION_FILES:
             text = text.replace(old, new, 1)
         for old, new in IPA_WORKFLOW_BUILD420_LINES:
             assert text.count(old) == 1, 'Build420 RetroArch workflow delta expected once: ' + old
+            text = text.replace(old, new, 1)
+        for old, new in IPA_WORKFLOW_BUILD421_LINES:
+            assert text.count(old) == 1, 'Build421 library workflow delta expected once: ' + old
             text = text.replace(old, new, 1)
         reviewed = text.encode('utf-8')
     elif path == 'test/armsx2_packaging_test.py':

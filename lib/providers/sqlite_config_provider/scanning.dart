@@ -89,11 +89,6 @@ extension SqliteConfigScanning on SqliteConfigProvider {
     _setScanning(true);
     _error = null;
 
-    if (Platform.isIOS) {
-      await Armsx2InternalService.ensureLayout();
-      await DusklightInternalService.ensureLayout();
-    }
-
     // Re-probe the fast SAF walk once per scan: the permission behind it can be
     // granted or revoked between scans, but not during one.
     SafDirectoryService.resetFastWalkAvailability();
@@ -163,6 +158,11 @@ extension SqliteConfigScanning on SqliteConfigProvider {
     _scanStatus = 'Please Wait...';
 
     try {
+      if (Platform.isIOS) {
+        await Armsx2InternalService.ensureLayout();
+        await DusklightInternalService.ensureLayout();
+      }
+
       // Reload from synchronized database during initialization
       await _loadAvailableSystems();
 
@@ -171,11 +171,6 @@ extension SqliteConfigScanning on SqliteConfigProvider {
           _config.romFolders,
           _availableSystems.expand((s) => <String>[s.folderName, ...s.folders]),
         );
-        // A denied/moved iOS folder is not an empty library. Read every source
-        // before any scanner is allowed to prune stored games as missing.
-        for (final root in roots) {
-          await Directory(root).list(followLinks: false).take(1).toList();
-        }
         _config = _config.copyWith(romFolders: roots);
       }
 
@@ -404,9 +399,19 @@ extension SqliteConfigScanning on SqliteConfigProvider {
       _error = 'Error scanning ROMs: $e';
       SqliteConfigProvider._log.e('$_error');
     } finally {
+      // A failed scan still ends the loading phase and reveals stored systems.
+      _scanCompleted = true;
       _setScanning(false);
       _notify();
     }
+  }
+
+  /// Reloads imported rows without depending on external filesystem access.
+  Future<void> refreshLibraryCatalog() async {
+    await _loadDetectedSystems();
+    _sortDetectedSystems();
+    _scanCompleted = true;
+    _notify();
   }
 
   /// Returns whether the local library contains ROMs that a premature scan

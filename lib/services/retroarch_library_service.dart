@@ -6,6 +6,9 @@ import 'package:path/path.dart' as path;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:external_folder_access/external_folder_access.dart';
 import 'package:neostation/services/retroarch_library_protocol.dart';
+import 'package:neostation/services/retroarch_library_importer.dart';
+import 'package:neostation/services/retroarch_folder_recovery.dart';
+import 'package:neostation/data/datasources/sqlite_service.dart';
 export 'package:neostation/services/retroarch_library_protocol.dart'
     show RetroArchSyncOutcome;
 import 'package:neostation/main.dart' show rootNavigatorKey;
@@ -97,6 +100,11 @@ class RetroArchLibraryService {
       }
       final byFilename = RetroArchLibraryProtocol.index(decoded);
 
+      // SQLite restoration must succeed before the sync reports success.
+      final imported = await _restoreEntries(decoded);
+      if (imported == 0) {
+        throw StateError('No supported system found in RetroArch export');
+      }
       await _persist(byFilename);
       _cache = byFilename;
       _sync.complete(RetroArchSyncOutcome.synced);
@@ -109,22 +117,18 @@ class RetroArchLibraryService {
             'Raw entries:\n${const JsonEncoder.withIndent('  ').convert(decoded)}',
       );
 
-      // A RetroArch sync is exactly the moment new ROMs are most likely to
-      // have shown up (the user just dropped some in and asked RetroArch
-      // about its library) — rescan NeoStation's own game database too, so
-      // they appear without needing to restart the app. Goes through the
-      // root navigator's context since this is a plain service class with
-      // no BuildContext of its own.
+      // Refresh the catalog directly. An unavailable external folder must not
+      // prevent a successful URL export from making its games visible.
       try {
         final context = rootNavigatorKey.currentContext;
         if (context != null && context.mounted) {
           await Provider.of<SqliteConfigProvider>(
             context,
             listen: false,
-          ).scanSystems();
+          ).refreshLibraryCatalog();
         }
       } catch (e) {
-        _log.e('RetroArchLibraryService: post-sync rescan failed: $e');
+        _log.e('RetroArchLibraryService: post-sync catalog refresh failed: $e');
       }
 
       return true;
@@ -209,6 +213,19 @@ class RetroArchLibraryService {
     Map<String, Map<String, dynamic>> cache,
     String romPath,
   ) {
+    final uri = Uri.tryParse(romPath);
+    if (uri?.scheme == 'retroarch-library' && uri!.pathSegments.length == 2) {
+      final exact = cache[romPath];
+      if (exact != null) return exact;
+      // Older cache versions have no namespaced identity keys.
+      for (final entry in cache.values) {
+        if (entry['system'] == uri.pathSegments[0] &&
+            (entry['filename'] ?? entry['titleId']) == uri.pathSegments[1]) {
+          return entry;
+        }
+      }
+      return null;
+    }
     final basename = path.basename(romPath);
     final stem = path.basenameWithoutExtension(romPath);
     return cache[basename] ?? cache[romPath] ?? cache[stem];
@@ -249,6 +266,31 @@ class RetroArchLibraryService {
     } catch (e) {
       _log.e('RetroArchLibraryService: failed loading cached library: $e');
       _cache = {};
+    }
+  }
+
+  static Future<int> _restoreEntries(
+    Iterable<Map<String, dynamic>> entries,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+    final root = prefs.getString(RetroArchFolderRecovery.rootKey);
+    return RetroArchLibraryImporter.restore(
+      await SqliteService.getDatabase(),
+      entries,
+      ownedRoots: root == null ? const [] : [root],
+    );
+  }
+
+  /// Rebuild the visible index from the last valid export after a failed scan
+  /// or a container change. This does not replace or clear the launch cache.
+  static Future<void> restoreCachedLibrary() async {
+    await loadCachedLibrary();
+    if (_cache == null || _cache!.isEmpty) return;
+    try {
+      final count = await _restoreEntries(_cache!.values);
+      _log.i('RetroArch cached library restored: $count games');
+    } catch (error) {
+      _log.e('RetroArch cached library restoration failed: $error');
     }
   }
 

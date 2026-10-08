@@ -2422,7 +2422,7 @@ class SqliteService {
     final db = await instance.database;
     await db.transaction((txn) async {
       await txn.delete('user_rom_folders');
-      for (final folder in folders) {
+      for (final folder in folders.toSet()) {
         if (folder.isNotEmpty) {
           await txn.insert('user_rom_folders', {'path': folder});
         }
@@ -3023,7 +3023,7 @@ class SqliteService {
           .map((r) => r['actual_folder_name'] as String)
           .toSet();
 
-      // Preserve systems represented by external-library/deeplink rows. A
+      // Preserve systems represented by retained game rows. A
       // normal filesystem scan cannot rediscover these rows, so deleting the
       // detected-system table used to hide RPCS3/MeloNX/ARMSX2 until the user
       // manually synchronized again.
@@ -3037,7 +3037,7 @@ class SqliteService {
         INNER JOIN app_systems s ON s.id = ur.app_system_id
         LEFT JOIN user_detected_systems uds
           ON uds.app_system_id = ur.app_system_id
-        WHERE instr(ur.rom_path, '://') > 0
+        WHERE ur.rom_path IS NOT NULL
       ''');
 
       // Clear previous detections to avoid stale or duplicate entries.
