@@ -2,7 +2,7 @@ import { mp4Mime, MAX_BUFFERED, displayLimits, KIND, parseConfig, parseVideo, pa
 import { audioTime, isLive, choose, overflow, engineFor } from './presenter.mjs';
 import { ReceiverDiagnostics } from './diagnostics.mjs';
 import { noReorderDescription } from './h264-sps.mjs';
-import { createQualityRenderer, qualityPreset } from './quality-renderer.mjs';
+import { createQualityRenderer, qualityPreset, resolutionMode, RenderBudget } from './quality-renderer.mjs';
 import { setupTranslations, t } from './l10n.mjs';
 import { LinkQuality, decodePreferences } from './link-quality.mjs';
 setupTranslations();
@@ -14,6 +14,17 @@ if (qualitySelect) {
   qualitySelect.addEventListener('change', () => {
     selectedQuality = qualityPreset(qualitySelect.value);
     try { globalThis.localStorage?.setItem('neoplay.quality', selectedQuality); } catch {}
+  });
+}
+const resolutionSelect = document.querySelector('#resolution-select');
+let selectedResolution = 'auto';
+try { selectedResolution = resolutionMode(globalThis.localStorage?.getItem('neoplay.renderResolution')); } catch {}
+if (resolutionSelect) {
+  resolutionSelect.value = selectedResolution;
+  resolutionSelect.addEventListener('change', () => {
+    selectedResolution = resolutionMode(resolutionSelect.value);
+    try { globalThis.localStorage?.setItem('neoplay.renderResolution', selectedResolution); } catch {}
+    engine?.resetRenderBudget?.(); // No restart of video decoding, PCM or network.
   });
 }
 const video = document.querySelector('#video'), canvas = document.querySelector('#canvas'), sharpCanvas = document.querySelector('#sharp-canvas'), status = document.querySelector('#status'), emptyState = document.querySelector('#empty-state');
@@ -56,6 +67,8 @@ function createFramesEngine(senderNeverReorders) {
   const clock = { pts: null, updatedAt: 0, lastPts: null, running: false, latencyUs: 0, fillSeconds: 0, targetSeconds: 0.08, ratio: 1, stats: null };
   const counters = { pictures: 0, decoded: 0, presented: 0, freeRun: 0, droppedLate: 0, droppedQueue: 0, flushedPictures: 0, pcmPackets: 0, keyRequests: 0, decodeErrors: 0, recoveries: 0, configurations: 0, reconfigures: 0, audioNodes: 0, discontinuities: 0, spsRestrictions: 0 };
   const link = new LinkQuality();
+  const renderBudget = new RenderBudget();
+  let renderMs = 0;
   let decodedAt = performance.now(), hardwareFallback = null, hardwareFallbacks = 0;
   let settings = null, lastKeyRequest = 0, qualityRenderer = null, qualityFallbacks = 0, qualityBlocked = false;
   const context = canvas.getContext('2d', { alpha: false, desynchronized: true });
@@ -82,11 +95,18 @@ function createFramesEngine(senderNeverReorders) {
     const frame = queue[index]; queue.splice(0, index + 1);
     if (canvas.width !== frame.displayWidth || canvas.height !== frame.displayHeight) { canvas.width = frame.displayWidth; canvas.height = frame.displayHeight; }
     const preset = qualityPreset(selectedQuality);
+    const outputMode = renderBudget.effective(selectedResolution);
     let sharpened = false;
-    if (preset !== 'original' && sharpCanvas && !qualityBlocked) {
+    // Explicit 2K/4K also works with Original (zero shader sharpening).
+    const gpuOutput = preset !== 'original' || outputMode === 'qhd' || outputMode === 'uhd';
+    if (gpuOutput && sharpCanvas && !qualityBlocked) {
       qualityRenderer ??= createQualityRenderer(sharpCanvas, document.querySelector('#stage'));
-      sharpened = qualityRenderer?.draw(frame, preset) === true;
-      if (!sharpened) { qualityFallbacks++; qualityBlocked = true; }
+      const started = performance.now();
+      sharpened = qualityRenderer?.draw(frame, preset, outputMode) === true;
+      if (sharpened) {
+        const elapsed = performance.now() - started;
+        renderMs = renderMs ? renderMs * 0.85 + elapsed * 0.15 : elapsed;
+      } else { qualityFallbacks++; qualityBlocked = true; }
     }
     if (sharpened) {
       canvas.hidden = true;
@@ -171,20 +191,30 @@ function createFramesEngine(senderNeverReorders) {
       settings = hardwareFallback; hardwareFallback = null; hardwareFallbacks++; createDecoder(); requestKey();
     }
     const row = sampleDiagnostics();
+    renderBudget.sample({at:performance.now(), decoded:counters.decoded, droppedLate:counters.droppedLate,
+      renderMs, visible:document.visibilityState !== 'hidden'});
     if (config && row) {
       if (link.sample({ at:performance.now(), queueWaitMs:row.receive.queueWaitMaxMs, decodeQueue:decoder?.decodeQueueSize ?? 0, presented:counters.presented, active:acknowledged, visible:document.visibilityState !== 'hidden' })) requestKey();
       const info = link.snapshot();
       const automatic = document.querySelector('#link-state'), cadence = document.querySelector('#source-fps'), rendered = document.querySelector('#display-resolution');
       if (automatic) automatic.textContent = t(info.state);
       if (cadence) cadence.textContent = `${Math.round(info.fps)} fps`;
-      if (rendered) rendered.textContent = sharpCanvas && !sharpCanvas.hidden ? `${sharpCanvas.width} × ${sharpCanvas.height}` : `${canvas.width} × ${canvas.height}`;
+      if (rendered) {
+        const size = sharpCanvas && !sharpCanvas.hidden ? `${sharpCanvas.width} × ${sharpCanvas.height}` : `${canvas.width} × ${canvas.height}`;
+        const reduced = renderBudget.effective(selectedResolution) !== selectedResolution;
+        rendered.textContent = reduced ? `${size} · ${t('renderReduced')}` : size;
+      }
     }
     if (config && row) { const known = row.receive.configurations + row.receive.video + row.receive.pcm + row.receive.initializations + row.receive.segments, unknown = row.receive.packets - known; say(`${t('receiving')} · frames · ${config.width}×${config.height} · video ${counters.presented}/${counters.pictures} · PCM ${counters.pcmPackets} · rx ${row.receive.megabitsPerSecond.toFixed(2)} Mbps / ${row.receive.packetsPerSecond.toFixed(0)} pkt/s · wire C${row.receive.configurations} V${row.receive.video} A${row.receive.pcm} U${unknown} · audio cushion ${(clock.fillSeconds * 1000).toFixed(0)}/${(clock.targetSeconds * 1000).toFixed(0)} ms · resample ${clock.ratio.toFixed(3)} · late-video ${counters.droppedLate} · underruns ${clock.stats?.underruns ?? 0} PCM frames · skips ${clock.stats?.skips ?? 0} · recoveries ${counters.recoveries}`); }
   }, 500);
   return {
     mode: 'frames',
     get audioNode() { return node; },
-    stats: () => ({ ...counters, quality: selectedQuality, qualityFallbacks, link:link.snapshot(), decoderPreference:settings?.hardwareAcceleration ?? null, hardwareFallbacks, queue: queue.length, audioOutputSampleRate: audioContext?.sampleRate ?? null, clock: { ...clock }, config: config ? { width: config.width, height: config.height, sampleRate: config.sampleRate, channels: config.channels, codec: config.codec } : null }),
+    resetRenderBudget: () => { renderBudget.reset(); renderMs = 0; },
+    stats: () => ({ ...counters, quality: selectedQuality, qualityFallbacks,
+      resolutionTarget:selectedResolution, resolutionEffective:renderBudget.effective(selectedResolution),
+      renderMs, renderSize:sharpCanvas && !sharpCanvas.hidden ? {width:sharpCanvas.width,height:sharpCanvas.height} : {width:canvas.width,height:canvas.height},
+      link:link.snapshot(), decoderPreference:settings?.hardwareAcceleration ?? null, hardwareFallbacks, queue: queue.length, audioOutputSampleRate: audioContext?.sampleRate ?? null, clock: { ...clock }, config: config ? { width: config.width, height: config.height, sampleRate: config.sampleRate, channels: config.channels, codec: config.codec } : null }),
     received(packet, at) {
       if (packet[0] === KIND.VIDEO && packet.length >= 9) {
         const view = new DataView(packet.buffer, packet.byteOffset, packet.byteLength);
