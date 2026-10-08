@@ -40,6 +40,7 @@ def main():
     try:
         run('xcrun', 'simctl', 'boot', udid)
         run('xcrun', 'simctl', 'bootstatus', udid, '-b')
+        run('open', '-a', 'Simulator', '--args', '-CurrentDeviceUDID', udid)
         with tempfile.TemporaryDirectory(prefix='retroarch-handoff-') as tmp:
             sdk = run('xcrun', '--sdk', 'iphonesimulator', '--show-sdk-path')
             target = f'{platform.machine()}-apple-ios17.0-simulator'
@@ -52,7 +53,9 @@ def main():
                     'CFBundleShortVersionString': '1', 'MinimumOSVersion': '17.0',
                     'UIDeviceFamily': [1, 2], 'LSRequiresIPhoneOS': True,
                     'CFBundleURLTypes': [{'CFBundleURLSchemes': [scheme]}],
-                    'UILaunchScreen': {},
+                    'UILaunchScreen': {}, 'CFBundleInfoDictionaryVersion': '6.0',
+                    'CFBundleSupportedPlatforms': ['iPhoneSimulator'],
+                    'LSApplicationQueriesSchemes': ['retroarch', 'neostation-handoff-test'],
                 }
                 if name == 'Receiver':
                     info['UIApplicationSceneManifest'] = {
@@ -93,6 +96,7 @@ def main():
                         time.sleep(2)
                         break
                     time.sleep(0.2)
+                run('xcrun', 'simctl', 'io', udid, 'screenshot', str(OUT.with_name(f'handoff-{mode}-{host}-{cold}.png')))
                 events = json.loads(sender_file.read_text()) if sender_file.exists() else []
                 received = json.loads(receiver_file.read_text()) if receiver_file.exists() else []
                 case = {'mode': mode, 'host': host, 'cold': cold, 'sender': events, 'receiver': received, 'delivered': url in received}
@@ -113,6 +117,8 @@ def main():
             OUT.write_text(json.dumps(evidence, indent=2))
             print(f'Evidence: {OUT}; legacy rejected: {evidence["legacy_background_rejection_reproduced"]}')
     finally:
+        logs = run('xcrun', 'simctl', 'spawn', udid, 'log', 'show', '--last', '5m', '--style', 'compact', '--predicate', 'process == "Sender" OR process == "Receiver" OR eventMessage CONTAINS "org.neostation.handofftest"', check=False)
+        OUT.with_suffix('.log').write_text(logs)
         run('xcrun', 'simctl', 'shutdown', udid, check=False)
         run('xcrun', 'simctl', 'delete', udid, check=False)
 

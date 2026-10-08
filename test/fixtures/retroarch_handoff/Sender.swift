@@ -6,6 +6,7 @@ import UIKit
     let legacy = LegacyRetroArchURLHandoff()
     var backgroundTask = UIBackgroundTaskIdentifier.invalid
     var events: [[String: Any]] = []
+    var started = false
 
     func record(_ event: [String: Any]) {
         events.append(event)
@@ -18,8 +19,14 @@ import UIKit
         window?.rootViewController = UIViewController()
         window?.rootViewController?.view.backgroundColor = .white
         window?.makeKeyAndVisible()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { self.run(app) }
         return true
+    }
+
+    func applicationDidBecomeActive(_ application: UIApplication) {
+        record(["event": "active"])
+        guard !started else { return }
+        started = true
+        run(application)
     }
 
     func run(_ app: UIApplication) {

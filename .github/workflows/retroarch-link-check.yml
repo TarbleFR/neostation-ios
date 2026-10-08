@@ -30,7 +30,7 @@ jobs:
       - name: Exercise backed-up repair, identity bindings and launch diagnostics
         run: |
           flutter test test/embedded_library_recovery_test.dart test/retroarch_repair_bindings_test.dart test/retroarch_launch_diagnostics_test.dart test/library_identity_evidence_test.dart
-          python3 -m unittest test/retroarch_playlist_repair_test.py -v
+          python3 -m unittest discover -s test -p retroarch_playlist_repair_test.py -v
   native:
     runs-on: macos-15
     timeout-minutes: 20
@@ -49,5 +49,7 @@ jobs:
         if: always()
         with:
           name: retroarch-uikit-transport-${{ github.sha }}
-          path: ${{ runner.temp }}/retroarch-uikit-evidence.json
+          path: |
+            ${{ runner.temp }}/retroarch-uikit-evidence.*
+            ${{ runner.temp }}/handoff-*.png
           if-no-files-found: warn
