@@ -226,6 +226,12 @@ Cette candidate ne modifie pas les barrières ARM64 ni les verrous invités de
 RPCS3. Elle réutilise le Core instrumenté déjà épinglé, avec ses identités exactes.
 Il faut mesurer la scène fautive avant de modifier un verrou ou le JIT.
 
+Le profil automatique God of War III actuel définit aussi `gpu.frame_limit`
+à `30` dans `lib/services/rpcs3_game_profile_service.dart`. Cette candidate
+conserve ce profil : une cible de 60 FPS exigerait d'abord de relever cette
+limite, puis de vérifier le comportement du jeu et le temps de frame physique.
+Les correctifs mémoire ne lèvent donc pas ce plafond de configuration.
+
 | Cause mesurée | Intervention à évaluer | Invariant |
 |---|---|---|
 | Première recompilation SPU | Warmup au chargement des modules connus ; cache de métadonnées signé par version/configuration | Ne pas persister des pointeurs ARM64 ou du code machine avec adresses de processus |

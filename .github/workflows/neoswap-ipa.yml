@@ -1472,6 +1472,7 @@ jobs:
           cp dist/dusklight/identity.json build/private-test/dusklight-native-identity.json
           cp dist/neoswap-validation.json build/private-test/
           cp dist/neoplay-validation.json build/private-test/
+          cp docs/neoplay/BUILD418.md build/private-test/Notes-NeoPlay-Build418.md
           cp docs/neoswap-build419-memory.md build/private-test/Notes-NeoSwap-Build419.md
           cp "$RUNNER_TEMP/neoswap-evidence/capacity-8GiB-macOS.json" build/private-test/
           cp -R "$RUNNER_TEMP/neoswap-evidence/donation" build/private-test/donation-evidence

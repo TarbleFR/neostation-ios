@@ -859,7 +859,7 @@ IPA_WORKFLOW_BUILD419_LINES = (
     ('    name: Neostation iOS 0.0.2 private IPA (412)\n', '    name: Neostation iOS 0.0.2 private IPA (419)\n'),
     ("      BUILD_NUMBER: ${{ inputs.build_number || '412' }}\n", "      BUILD_NUMBER: ${{ inputs.build_number || '419' }}\n"),
     ('      ARTIFACT_NAME: NeoStation-NeoSwap-NeoPlay-Build-412-${{ github.sha }}\n', '      ARTIFACT_NAME: NeoStation-NeoSwap-NeoPlay-Build-419-${{ github.sha }}\n'),
-    ('          cp docs/neoplay/BUILD412.md build/private-test/Notes-NeoPlay-Build412.md\n', '          cp docs/neoswap-build419-memory.md build/private-test/Notes-NeoSwap-Build419.md\n'),
+    ('          cp docs/neoplay/BUILD412.md build/private-test/Notes-NeoPlay-Build412.md\n', '          cp docs/neoplay/BUILD418.md build/private-test/Notes-NeoPlay-Build418.md\n          cp docs/neoswap-build419-memory.md build/private-test/Notes-NeoSwap-Build419.md\n'),
 )
 for path in ARMSX2_INTEGRATION_FILES:
     reviewed = subprocess.check_output(['git', 'show', ARMSX2_INTEGRATION_SHA + ':' + path], cwd=ROOT)

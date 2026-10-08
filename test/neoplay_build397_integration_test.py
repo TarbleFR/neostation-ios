@@ -167,11 +167,12 @@ REVIEWED_POST410_POSTIMAGES = {
     # Reservations false and Frame limit 30 as measured hypotheses; nothing else.
     'lib/services/rpcs3_game_profile_service.dart': '628b961602c6456cb0051cb88ddd0a4247cd48a775adbe2766a242718308bcfb',
     'lib/services/rpcs3_internal_service.dart': '683dd34422949a3bd8345c9dcfff9f32adbb3c86e2cf0bd36916ca2bf7a7cc27',
-    # Explicit busy result and nonblocking donor acquisition; no other pool edits.
+    # Explicit busy result and nonblocking donor acquisition. Build419 also
+    # retires an entirely idle donor under the same pool mutex as acquisition.
     'native/neoswap-donation/Broker.h': 'f551f55fb5e77e5594fb0ef8e3de28331b1e8c4c308ee761cda2aaded98fb6b3',
     'native/neoswap-donation/Broker.cpp': '9bb63972f01b1c10ce4de4063697e84cfead1233338c21f6943e9ddc255edd4d',
-    'native/neoswap-donation/Pool.h': 'b3cdc091404fbd08872d6bb6b6f630e0d0f2227738c767f8b01aa2ad75be5693',
-    'native/neoswap-donation/Pool.cpp': '782523881be27c64bcf2afd22014d9a0d2c8bb31c7933653a73bf73fc23e6d5c',
+    'native/neoswap-donation/Pool.h': '517b7da626bfa13db3050a51251f26621abdb03d94b9fa4e708be985197321ab',
+    'native/neoswap-donation/Pool.cpp': '7349e8005c53ca614243a76c19da4f9b2e70a853d5322346ffd168dd690d868d',
     # Incremental preparation lifecycle and additive ABI-v1 FAST request flag.
     'packages/neo_swap/ios/Classes/NeoSwapPreparation.h': '5836825d2c195fe08d3f8c56c5a10fe13af295110911404a0eb81f9249a40116',
     'packages/neo_swap/ios/Classes/NeoSwap.h': '88b334240200a68775aef35f1f5d632e04b8fcc43e504d42f65096760c7c292c',
@@ -277,7 +278,7 @@ class Build398Integration(unittest.TestCase):
         self.assertIn('version: 0.0.2+399', pubspec)
     def test_full_ipa_requires_previous_build_and_both_exact_evidence_suites(self):
         text = (ROOT/'.github/workflows/neoswap-ipa.yml').read_text()
-        self.assertIn('neostation-neoswap-neoplay-build418', text)
+        self.assertIn('neostation-neoswap-neoplay-build419', text)
         self.assertNotIn('group: neostation-neoswap-private\n', text)
         self.assertIn('run_id = 37605768644', text)
         self.assertIn("run['conclusion'] == 'success'", text)
@@ -297,6 +298,7 @@ class Build398Integration(unittest.TestCase):
         self.assertIn('probe.check_returncode()', text)
         subprocess.run([sys.executable, str(ROOT / 'test/neoswap_ipa_previous_build_gate_test.py')], cwd=ROOT, check=True, timeout=60)
         self.assertIn('cp docs/neoplay/BUILD418.md build/private-test/Notes-NeoPlay-Build418.md', text)
+        self.assertIn('cp docs/neoswap-build419-memory.md build/private-test/Notes-NeoSwap-Build419.md', text)
         # The Build412 Core (writer-lock attribution): its inputs no longer match the Build411 Core pin.
         self.assertIn("RPCS3_CORE_HOST_SHA: afb33454db50236485bd5ec963a722dcb5f65610", text)
         self.assertIn("RPCS3_CORE_RUN_ID: '37620034517'", text)
@@ -391,7 +393,7 @@ class Build398Integration(unittest.TestCase):
         self.assertIn('failure = nil', request)
     def test_candidate_identity_remains_honest(self):
         data = json.loads((ROOT/'native/import-memory-candidate.json').read_text())
-        self.assertEqual(data['target_build'], 418)
+        self.assertEqual(data['target_build'], 419)
         self.assertEqual(data['neoplay_integration']['previous_build_run_id'], 37605768644)
         self.assertTrue(any(entry.startswith('Build410:') for entry in data['scope']))
         self.assertTrue(any(entry.startswith('Build411:') for entry in data['scope']))
