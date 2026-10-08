@@ -92,6 +92,10 @@ constexpr std::uint64_t reserve_floor_bytes = 256 * MiB;
 constexpr std::uint64_t reserve_ceiling_bytes = 768 * MiB;
 constexpr std::uint64_t guest_reserve_floor_bytes = 1536 * MiB;
 constexpr std::uint64_t growth_quantum_bytes = 64 * MiB;
+// A sample may report several GiB free. Exposing all of it as a new quota at
+// once permits a burst before the next pressure sample. Admit at most one
+// maximum native donor block per decision, shared by relay and donor growth.
+constexpr std::uint64_t maximum_growth_grant_bytes = 256 * MiB;
 // Hysteresis of the growing state: admission starts with one growth quantum
 // of measured room and ends only below half of it, so sample jitter or the
 // bytes a maintenance pass hands back cannot flip the state every tick.
@@ -149,7 +153,9 @@ constexpr Decision decide(const Inputs& in, const Decision& previous) noexcept {
     if (in.relay_ready) {
         // Grow only by measured room; a ceiling never exceeds what the relay
         // can still back after the guest reserve.
-        const auto desired = saturating_add(in.relay_host_live_bytes, out.growth_room_bytes);
+        const auto grant = out.growth_room_bytes < maximum_growth_grant_bytes
+            ? out.growth_room_bytes : maximum_growth_grant_bytes;
+        const auto desired = saturating_add(in.relay_host_live_bytes, grant);
         out.host_loan_quota_bytes = desired < relay_free_for_host ? desired : relay_free_for_host;
         if (out.host_loan_quota_bytes < in.relay_host_live_bytes)
             out.host_loan_quota_bytes = in.relay_host_live_bytes;
@@ -159,8 +165,8 @@ constexpr Decision decide(const Inputs& in, const Decision& previous) noexcept {
     // Donors are the fallback backing. While relay host loans are admitted the
     // pool keeps only a small reserve above its live loans, so no further
     // prepared pages are duplicated on top of relay capacity. Pages already
-    // prepared stay with the session: the pool trims only when the session
-    // ends (retireDonorsIfIdle); a lower floor stops growth, it reclaims nothing.
+    // prepared stay with the session in normal operation; pressure/shrinking
+    // withdraws completely idle donors, while every live loan stays valid.
     if (in.relay_ready && out.host_loans_admitted) {
         out.donor_floor_bytes = 0;
         out.donor_reserve_bytes = relay_donor_reserve_bytes;
@@ -170,7 +176,9 @@ constexpr Decision decide(const Inputs& in, const Decision& previous) noexcept {
     }
     const std::uint64_t relay_growth = out.host_loans_admitted && out.host_loan_quota_bytes > in.relay_host_live_bytes
         ? out.host_loan_quota_bytes - in.relay_host_live_bytes : 0;
-    out.donor_room_bytes = out.growth_room_bytes > relay_growth ? out.growth_room_bytes - relay_growth : 0;
+    const auto grant = out.growth_room_bytes < maximum_growth_grant_bytes
+        ? out.growth_room_bytes : maximum_growth_grant_bytes;
+    out.donor_room_bytes = grant > relay_growth ? grant - relay_growth : 0;
     out.donor_growth_admitted = in.system_valid && out.donor_room_bytes >= admission_room;
     out.small_cpu_admitted = in.system_valid && in.system_usable_bytes >= small_cpu_minimum_room_bytes &&
         ((in.relay_ready && out.host_loans_admitted) || in.donors_available);

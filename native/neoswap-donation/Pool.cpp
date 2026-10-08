@@ -303,6 +303,20 @@ void pool_donor_lost(std::uint64_t epoch, std::uint32_t index,
   publish(p);
 }
 
+Result pool_retire_idle_donor(std::uint64_t epoch, std::uint32_t index,
+    std::uint64_t generation) noexcept {
+  auto& p = pool();
+  std::lock_guard guard(p.mutex);
+  if (!matches(p, epoch, index, generation)) return fail(p, Stage::invalid_argument);
+  for (const auto& e : p.entries)
+    if (e.block && e.donor == index && e.loans) return {Stage::pool_unready, 0};
+  // Checking loans and withdrawing admission share the allocator mutex. A
+  // caller cannot slip a new loan between a cached snapshot and helper close.
+  lost(p.donors[index], 0);
+  publish(p);
+  return {};
+}
+
 Result pool_collect_lost() noexcept {
   auto& p = pool();
   std::lock_guard guard(p.mutex);

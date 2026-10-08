@@ -33,12 +33,12 @@
 static NSString* const kDiagnostic = @"NeoSwap-v1.jsonl";
 static const uint64_t kMiB = 1024 * 1024;
 static const uint64_t kGiB = 1024 * kMiB;
-// Build385 adaptive policy: 5 GiB is a hard ceiling, not a startup target.
+// 7 GiB is a donor capacity ceiling, not a resident-RAM or startup target.
 // Warm one verified 16 MiB chunk at a time for real boot buffers, then retain only
 // 128 MiB reserve above active donor loans (not file-backed buffers). Growth remains
-// fail-closed under kernel/system pressure and prepared pages are retained
-// only for the lifetime of the active RPCS3 session.
-static const uint64_t kDonationHardLimitBytes = 5 * kGiB;
+// fail-closed under kernel/system pressure; idle donors retire under pressure.
+// Every growth request still checks process/system headroom while touching pages.
+static const uint64_t kDonationHardLimitBytes = 7 * kGiB;
 static const uint64_t kDonationWarmFloorBytes = 512 * kMiB;
 static const uint64_t kDonationReserveBytes = 128 * kMiB;
 static const uint64_t kDonationGrowthQuantumBytes = 128 * kMiB;
@@ -72,6 +72,7 @@ static_assert(kDonationInitialChunkBytes == neostation::preparation::chunk_bytes
 @property(nonatomic, copy) NSString* operationPath;
 @property(nonatomic, assign) uint64_t lastOperationDrops;
 @property(nonatomic, assign) uint64_t iosWarningCount;
+@property(nonatomic, assign) NSTimeInterval iosWarningUntil;
 @property(nonatomic, assign) NSInteger capacityMiB;
 @property(nonatomic, assign) int configResult;
 @property(nonatomic, assign) uint64_t lastAllocationCount;
@@ -91,6 +92,8 @@ static_assert(kDonationInitialChunkBytes == neostation::preparation::chunk_bytes
 @property(nonatomic, strong) NSDictionary* donorGrowthRefusal;
 @property(nonatomic, assign) uint64_t donorEpoch;
 @property(nonatomic, strong) NSMutableIndexSet* donorPendingIndexes;
+@property(nonatomic, strong) NSMutableIndexSet* donorReclaimingIndexes;
+@property(nonatomic, assign) uint64_t donorPressureRetirements;
 @property(nonatomic, strong) NSMutableArray<NSNumber*>* donorPendingMaximums;
 @property(nonatomic, assign) NSUInteger donorLaunchIndex;
 @property(nonatomic, assign) NSUInteger donorCursor;
@@ -146,7 +149,8 @@ static NSDictionary* NeoSwapEffectivePermissions() {
 - (instancetype)init {
     self = [super init];
     if (!self) return nil;
-    self.queue = dispatch_queue_create("neostation.neoswap.diagnostics", DISPATCH_QUEUE_SERIAL);
+    self.queue = dispatch_queue_create("neostation.neoswap.diagnostics",
+        dispatch_queue_attr_make_with_qos_class(DISPATCH_QUEUE_SERIAL, QOS_CLASS_UTILITY, 0));
     NSArray<NSString*>* caches = NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES);
     self.directory = [caches.firstObject stringByAppendingPathComponent:@"NeoSwap-v1"];
     NSArray<NSString*>* docs = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
@@ -205,6 +209,8 @@ static NSDictionary* NeoSwapEffectivePermissions() {
         if (!owner || !NeoSwap_OwnerSessionActive(NEOSWAP_RPCS3)) return;
         dispatch_async(owner.queue, ^{
             ++owner.iosWarningCount;
+            owner.iosWarningUntil = NSProcessInfo.processInfo.systemUptime + 2.0;
+            [owner applyBudget];
             [owner appendRecord:[owner snapshot:@"ios_memory_warning"]];
         });
     }];
@@ -219,9 +225,7 @@ static NSDictionary* NeoSwapEffectivePermissions() {
             strongSelf->_memorySamples.pressure_event(level);
         strongSelf.cpuBufferPressureRaised = (level &
             (DISPATCH_MEMORYPRESSURE_WARN | DISPATCH_MEMORYPRESSURE_CRITICAL)) != 0;
-#if defined(NEOSWAP_DONATION)
-        if (strongSelf.cpuBufferPressureRaised) NeoSwap_SetCPUBufferPressure(1);
-#endif
+        [strongSelf applyBudget];
     });
     dispatch_resume(self.cpuBufferPressureSource);
     dispatch_source_set_event_handler(self.timer, ^{
@@ -316,6 +320,7 @@ static NSDictionary* NeoSwapEffectivePermissions() {
     if (!_donorPreparation.begin(self.donorEpoch, nowMs)) return;
     self.donorGenerationCounter = self.donorEpoch * 16;
     self.donorPendingIndexes = [NSMutableIndexSet indexSet];
+    self.donorReclaimingIndexes = [NSMutableIndexSet indexSet];
     self.donorPendingMaximums = [NSMutableArray new];
     self.donorSessions = [NSMutableArray new];
     self.donorAdoptedChunks = [NSMutableArray new];
@@ -400,6 +405,7 @@ static NSDictionary* NeoSwapEffectivePermissions() {
         return;
     }
     self.donorSessions[index] = session;
+    [self.donorReclaimingIndexes removeIndex:index];
     self.donorAdoptedChunks[index] = @0;
     self.donorPendingMaximums[index] = @(first);
     [self.donorPendingIndexes addIndex:index];
@@ -454,6 +460,7 @@ static NSDictionary* NeoSwapEffectivePermissions() {
     self.donorErrors = nil;
     self.donorLoggedStates = nil;
     self.donorPendingIndexes = nil;
+    self.donorReclaimingIndexes = nil;
     self.donorPendingMaximums = nil;
     self.donorDemand = (NeoSwapDonationDemand){};
     self.donorLaunchIndex = 0;
@@ -607,8 +614,35 @@ static NSDictionary* NeoSwapEffectivePermissions() {
         if (budget < kMiB) break;
     }
 }
+- (void)reclaimIdleDonors {
+    using neostation::budget::State;
+    if (!self.donorSessions || (_budgetDecision.state != State::pressure &&
+                               _budgetDecision.state != State::shrinking)) return;
+    for (NSUInteger index = 0; index < self.donorSessions.count; ++index) {
+        id object = self.donorSessions[index];
+        if (![object isKindOfClass:NeoSwapDonorSession.class] ||
+            [self.donorReclaimingIndexes containsIndex:index]) continue;
+        const auto status = [(NeoSwapDonorSession*)object snapshot];
+        neostation::donation::PoolDonorSnapshot pooled{};
+        neostation::donation::pool_donor_snapshot(index, pooled);
+        if (pooled.last_stage == neostation::donation::Stage::snapshot_busy ||
+            !pooled.generation || pooled.generation != status.generation) continue;
+        const auto retired = neostation::donation::pool_retire_idle_donor(
+            self.donorEpoch, (uint32_t)index, status.generation);
+        if (!retired) continue; // a borrowed interval is never revoked
+        [self.donorReclaimingIndexes addIndex:index];
+        [self clearPendingDonor:index];
+        self.donorRetryAfter[index] = [NSDate dateWithTimeIntervalSinceNow:2];
+        ++self.donorPressureRetirements;
+        [(NeoSwapDonorSession*)object close];
+    }
+    // Retiring admission above does not unmap anything on an emulator thread.
+    // Failed cleanup retains ownership and is retried by the existing timer.
+    (void)neostation::donation::pool_collect_lost();
+}
 - (void)donorChanged:(NeoSwapDonorSession*)session index:(NSUInteger)index error:(NSError*)failure {
     if (index >= self.donorSessions.count || self.donorSessions[index] != session) return;
+    if ([self.donorReclaimingIndexes containsIndex:index]) return;
     // Notifications can have queued while the Session moved forward. Inspect
     // its current authenticated state before granting/revoking any new loans.
     const NeoSwapDonorSnapshot status = [session snapshot];
@@ -763,8 +797,11 @@ static NSDictionary* NeoSwapEffectivePermissions() {
         in.host_footprint_valid = true;
     }
     in.host_available_bytes = os_proc_available_memory();
-    in.host_available_valid = in.host_available_bytes != 0 || TARGET_OS_SIMULATOR;
-    in.dispatch_warning = self.cpuBufferPressureRaised;
+    // A successful os_proc_available_memory() returning zero is exhausted
+    // headroom, not a missing measurement. It must request cold-data shrink.
+    in.host_available_valid = !TARGET_OS_SIMULATOR || in.host_available_bytes != 0;
+    in.dispatch_warning = self.cpuBufferPressureRaised ||
+        NSProcessInfo.processInfo.systemUptime < self.iosWarningUntil;
     in.thermal_serious = NSProcessInfo.processInfo.thermalState >= NSProcessInfoThermalStateSerious;
 #if defined(NEOSWAP_DONATION)
     neostation::donation::SystemHeadroom system{};
@@ -828,6 +865,9 @@ static NSDictionary* NeoSwapEffectivePermissions() {
     const bool drainCache = !NeoSwapExperimentProfile().relay() || decision.state == State::idle ||
                             decision.state == State::shrinking || decision.state == State::pressure;
     (void)NeoSwap_RelayLoanMaintain(0, drainCache);
+#if defined(NEOSWAP_DONATION)
+    [self reclaimIdleDonors];
+#endif
     if (decision.state != previous.state || std::strcmp(decision.reason, previous.reason) != 0) {
         ++_budgetStateChanges;
         // Structural change only, at most four times per second by construction.
@@ -1010,6 +1050,11 @@ static NSDictionary* NeoSwapEffectivePermissions() {
         @"reason":[NSString stringWithUTF8String:decision.reason],
         @"operationalReserveBytes":@(decision.operational_reserve_bytes),
         @"growthRoomBytes":@(decision.growth_room_bytes),
+        @"maximumGrowthGrantBytes":@(neostation::budget::maximum_growth_grant_bytes),
+#if defined(NEOSWAP_DONATION)
+        @"donorPressureRetirements":@(self.donorPressureRetirements),
+        @"donorCapacityCeilingBytes":@(kDonationHardLimitBytes),
+#endif
         @"guestReserveBytes":@(decision.guest_reserve_bytes),
         @"hostLoanQuotaBytes":@(decision.host_loan_quota_bytes),
         @"hostLoansAdmitted":@(decision.host_loans_admitted),

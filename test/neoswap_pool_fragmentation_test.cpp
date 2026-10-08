@@ -127,6 +127,24 @@ int main() {
   adopt(2, 0, 0, 19, 128 * MiB);
   for (unsigned i = 0; i < 128; ++i) assert(acquire(64 * KiB, 64 * KiB));
   while (!live.empty()) release(live.size() / 2);
+  // Pressure retirement refuses an active loan, then withdraws new admission
+  // atomically before helper closure/slow cleanup. Stale generations fail.
+  assert(acquire(64 * KiB, 64 * KiB));
+  assert(pool_retire_idle_donor(2, 0, 1).stage == Stage::invalid_argument);
+  assert(pool_retire_idle_donor(2, 0, 2).stage == Stage::pool_unready);
+  verify();
+  PoolDonorSnapshot donor{}; pool_donor_snapshot(0, donor);
+  assert(donor.state == PoolState::verified && donor.live_bytes == 64 * KiB);
+  while (!live.empty()) release(0);
+  assert(pool_retire_idle_donor(2, 0, 2));
+  assert(!acquire(64 * KiB, 64 * KiB));
+  Footprint stale{}; stale.physical = stale.nonvolatile = 128 * MiB;
+  assert(pool_verify_donor(2, 0, 2, 128 * MiB, stale, 128 * MiB, 0).stage == Stage::pool_unready);
+  fail_cleanup = true;
+  assert(pool_collect_lost().stage == Stage::unmap);
+  assert(!pool_donor_restartable(2, 0));
+  assert(pool_collect_lost());
+  assert(pool_donor_restartable(2, 0));
   assert(pool_campaign_end(2) && mappings.empty());
   puts("PASS: production pool nonblocking acquisition during cleanup, 1024-slot exhaustion, fragmented gap reuse, alignment, data isolation, stale tokens, donor loss, failed cleanup and campaign reuse; injected OS, no physical-RAM claim");
 }

@@ -236,7 +236,7 @@ class DonorContractTests(unittest.TestCase):
         self.assertNotIn('kNeoSwapWarmWaitMs = 8000', bridge)
         self.assertIn('pool_campaign_end(self.donorEpoch)', plugin)
         self.assertIn('Result pool_campaign_end', pool)
-        self.assertIn('kDonationHardLimitBytes = 5 * kGiB', plugin)
+        self.assertIn('kDonationHardLimitBytes = 7 * kGiB', plugin)
         self.assertIn('kDonationWarmFloorBytes = 512 * kMiB', plugin)
         self.assertIn('kDonationReserveBytes = 128 * kMiB', plugin)
         self.assertIn('kDonationGrowthQuantumBytes = 128 * kMiB', plugin)

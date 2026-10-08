@@ -77,7 +77,7 @@ int main(){assert(!rejects(0,0));assert(rejects(1,0));assert(rejects(0,1));asser
 #include "NeoSwapUsagePolicy.h"
 #include "Pool.h"
 constexpr uint64_t kMiB=1024*1024,kDonationWarmFloorBytes=512*kMiB,
-    kDonationReserveBytes=128*kMiB,kDonationGrowthQuantumBytes=128*kMiB,kDonationHardLimitBytes=5*1024*kMiB;
+    kDonationReserveBytes=128*kMiB,kDonationGrowthQuantumBytes=128*kMiB,kDonationHardLimitBytes=7*1024*kMiB;
 static neostation::experiment::Profile selected;
 static neostation::donation::PoolSnapshot observed{};
 static bool active=true;

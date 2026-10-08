@@ -59,23 +59,23 @@ int main() {
     assert(reserve == clamp(grow.physical_bytes / 16, reserve_floor_bytes, reserve_ceiling_bytes));
     assert(d.state == State::growing && d.host_loans_admitted && d.small_cpu_admitted);
     assert(d.growth_room_bytes == grow.system_usable_bytes - reserve);
-    assert(d.host_loan_quota_bytes == grow.relay_host_live_bytes + d.growth_room_bytes);
+    assert(d.host_loan_quota_bytes == grow.relay_host_live_bytes + maximum_growth_grant_bytes);
     assert(d.donor_floor_bytes == 0 && d.donor_reserve_bytes == relay_donor_reserve_bytes);
-    // The relay ceiling took the whole measured room: nothing is left for donors
+    // The relay ceiling took the bounded grant: nothing is left for donors
     // in the same sample, so the room is never granted twice.
-    assert(d.host_loan_quota_bytes - grow.relay_host_live_bytes == d.growth_room_bytes);
+    assert(d.host_loan_quota_bytes - grow.relay_host_live_bytes == maximum_growth_grant_bytes);
     assert(d.donor_room_bytes == 0 && !d.donor_growth_admitted && !d.storage_shrink_requested);
     assert(std::strcmp(d.reason, "measured_room_available") == 0);
 
     // When the relay capacity caps the ceiling, donors receive the remainder of
-    // the room: relay growth plus donor room equals the measured room exactly.
+    // the grant: relay growth plus donor room equals the bounded grant exactly.
     Inputs capped = device_inputs();
     capped.relay_capacity_bytes = guest_reserve_floor_bytes + capped.relay_host_live_bytes + 10 * MiB;
     d = decide(capped, {});
     assert(d.state == State::growing && d.host_loans_admitted);
     assert(d.host_loan_quota_bytes == capped.relay_host_live_bytes + 10 * MiB);
-    assert(d.donor_room_bytes == d.growth_room_bytes - 10 * MiB && d.donor_growth_admitted);
-    assert((d.host_loan_quota_bytes - capped.relay_host_live_bytes) + d.donor_room_bytes == d.growth_room_bytes);
+    assert(d.donor_room_bytes == maximum_growth_grant_bytes - 10 * MiB && d.donor_growth_admitted);
+    assert((d.host_loan_quota_bytes - capped.relay_host_live_bytes) + d.donor_room_bytes == maximum_growth_grant_bytes);
 
     // The process jetsam headroom cannot throttle relay or donor pages, but
     // below the reserve it asks the storage tier to archive cold data early.
@@ -84,6 +84,8 @@ int main() {
     jetsam.host_available_bytes = reserve - MiB;
     d = decide(jetsam, {});
     assert(d.state == State::growing && d.host_loans_admitted && d.storage_shrink_requested);
+    jetsam.host_available_bytes = 0;
+    assert(decide(jetsam, {}).storage_shrink_requested); // exhausted is a valid sample
     jetsam.host_available_valid = false;
     d = decide(jetsam, {});
     assert(d.state == State::growing && !d.storage_shrink_requested);
@@ -92,10 +94,10 @@ int main() {
     Inputs huge = device_inputs();
     huge.system_usable_bytes = 64 * GiB;
     d = decide(huge, {});
-    assert(d.host_loan_quota_bytes == huge.relay_capacity_bytes - guest_reserve_floor_bytes);
+    assert(d.host_loan_quota_bytes == huge.relay_host_live_bytes + maximum_growth_grant_bytes);
     huge.relay_guest_live_bytes = 2 * GiB; // guest already above the floor: reserve follows it
     d = decide(huge, {});
-    assert(d.guest_reserve_bytes == 2 * GiB && d.host_loan_quota_bytes == 6 * GiB);
+    assert(d.guest_reserve_bytes == 2 * GiB && d.host_loan_quota_bytes == huge.relay_host_live_bytes + maximum_growth_grant_bytes);
     huge.relay_host_live_bytes = 6 * GiB; // capacity exhausted: hold, never below live
     d = decide(huge, {});
     assert(d.state == State::holding && !d.host_loans_admitted && d.host_loan_quota_bytes == 6 * GiB);
@@ -205,6 +207,19 @@ int main() {
     edge.system_usable_bytes = reserve + growth_quantum_bytes; // one full quantum re-admits
     assert(decide(edge, held).state == State::growing);
     static_assert(growth_hold_quantum_bytes * 2 == growth_quantum_bytes);
+
+    // Even a wildly optimistic system sample cannot admit GiB bursts. Relay
+    // and donor allowances share one 256 MiB grant; live loans stay valid.
+    for (unsigned i = 0; i < 100; ++i) {
+        Inputs burst = device_inputs();
+        burst.system_usable_bytes = (1ULL + i) * GiB;
+        burst.relay_capacity_bytes = 64 * GiB;
+        const auto bounded = decide(burst, {});
+        const auto hostGrowth = bounded.host_loan_quota_bytes - burst.relay_host_live_bytes;
+        assert(hostGrowth + bounded.donor_room_bytes <= maximum_growth_grant_bytes);
+        burst.relay_ready = false;
+        assert(decide(burst, {}).donor_room_bytes <= maximum_growth_grant_bytes);
+    }
 
     // Saturating sums never wrap for impossible inputs.
     Inputs wrap = device_inputs();

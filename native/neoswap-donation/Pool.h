@@ -66,6 +66,11 @@ void pool_donor_lost(std::uint64_t epoch, std::uint32_t index,
 void pool_donor_snapshot(std::uint32_t index, PoolDonorSnapshot& out) noexcept;
 // Background collection only; live borrowed intervals are never touched.
 Result pool_collect_lost() noexcept;
+// Atomically stop offering a donor only if none of its entries is borrowed.
+// No OS cleanup here: the manager closes the helper and collects lost entries
+// on its maintenance queue. A live loan makes this a refusal with no revocation.
+Result pool_retire_idle_donor(std::uint64_t epoch, std::uint32_t index,
+    std::uint64_t generation) noexcept;
 bool pool_donor_restartable(std::uint64_t epoch, std::uint32_t index) noexcept;
 
 // Called by the async, authenticated process manager. API success, an extension
