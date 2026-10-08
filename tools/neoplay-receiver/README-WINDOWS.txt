@@ -1,11 +1,11 @@
-NeoPlay Desktop 0.7.0 - Windows installer
+NeoPlay Desktop 0.8.0 - Windows installer
 
 This Windows-only update is based on the proven NeoPlay 0.5.3 receiver
 (commit 26a5f1fe). It does not change NeoStation iOS, ReplayKit, NeoSwap,
 RPCS3, or the NeoPlay network and audio protocol.
 
 INSTALLATION
-Run NeoPlay-Setup-0.7.0.exe. Install location (per user):
+Run NeoPlay-Setup-0.8.0.exe. Install location (per user):
 %LOCALAPPDATA%\Programs\NeoPlay
 
 The installer creates Start Menu and desktop shortcuts and registers an
@@ -30,6 +30,12 @@ This feedback works with Build412's existing keyframe/tier control.
 Native 4K60 is accepted when the source actually supplies a 3840x2160,
 60 fps capture. An iPhone screen capture below 4K remains that source size;
 upscaling on a 4K monitor is identified separately in the interface.
+A separate Render resolution selector now offers Automatic, Native,
+QHD 2560x1440 and UHD 3840x2160. These are GPU output targets, NOT a
+new iPhone capture size or increased H.264 bandwidth. On a 2K display,
+UHD rendering is supersampling followed by panel downsampling.
+If the local rendering becomes too costly, output steps UHD -> QHD ->
+Native and recovers after 20 seconds of stable video.
 Original, Enhanced and Extra sharp remain live, per-user rendering options.
 The GPU shader uses full precision for 4K; a 1080p source can fill a 4K
 presentation surface while keeping its aspect ratio. Resolution and measured
