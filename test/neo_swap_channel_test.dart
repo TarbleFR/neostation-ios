@@ -25,4 +25,17 @@ void main() {
     expect(() => NeoSwap.capacityProbe(8193), throwsArgumentError);
     expect(calls.length, 1);
   });
+  test('compatibility methods use implemented diagnostic channels', () async {
+    await NeoSwap.getMemoryStats();
+    await NeoSwap.allocateMaxMemory(8192);
+    expect(calls.map((c) => c.method), ['snapshot', 'capacityProbe']);
+    expect(calls.last.arguments, {'sizeMiB': 8192});
+    expect(() => NeoSwap.allocateMaxMemory(8193), throwsArgumentError);
+    expect(calls.length, 2);
+  });
+  test('a missing native response fails explicitly', () async {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(NeoSwap.channel, (call) async => null);
+    await expectLater(NeoSwap.getMemoryStats(), throwsStateError);
+  });
 }

@@ -1,31 +1,24 @@
 // SPDX-License-Identifier: MIT
 #ifndef NeoSwapMemoryManager_h
 #define NeoSwapMemoryManager_h
-
 #import <Foundation/Foundation.h>
 
+// Explicit experimental virtual reservations, separate from the emulator broker.
+// The 7 GiB ceiling is not a physical-RAM entitlement or a startup allocation.
 @interface NeoSwapMemoryManager : NSObject
-
 + (instancetype)sharedManager;
-
-// Allocate maximum memory with proper jetsam handling
 - (BOOL)allocateMaximumMemory:(uint64_t)sizeBytes;
-
-// Release memory with proper cleanup
 - (void)releaseMemory:(uint64_t)sizeBytes;
-
-// Check if we can allocate more memory without triggering jetsam
 - (BOOL)canAllocateMoreMemory:(uint64_t)sizeBytes;
-
-// Get current memory usage statistics
-- (NSDictionary *)memoryStatistics;
-
-// Setup memory pressure monitoring
+- (NSDictionary*)memoryStatistics;
 - (void)setupMemoryPressureMonitoring;
-
-// Set up proper entitlements for memory management
 - (void)setupMemoryEntitlements;
-
+- (BOOL)allocateTargetMemory;
+- (BOOL)initializeMemorySystem;
+- (NSString*)allocationStatus;
+#ifdef NEOSWAP_TESTING
++ (void)setTestingAvailableMemory:(uint64_t)bytes;
+- (NSArray<NSNumber*>*)testingReservationAddresses;
+#endif
 @end
-
-#endif /* NeoSwapMemoryManager_h */
+#endif

@@ -39,6 +39,12 @@ jobs:
           set -euo pipefail
           mkdir -p build/neoswap
           git diff --check
+          # The compatibility memory helper is compiled by the Pod too.
+          # Verify real VM cleanup with injected headroom and arm64 SDK syntax.
+          xcrun clang++ -x objective-c++ -std=c++20 -fobjc-arc -fblocks -pthread -Wall -Wextra -Werror -DNEOSWAP_TESTING \
+            -Ipackages/neo_swap/ios/Classes packages/neo_swap/ios/Classes/NeoSwapMemoryManager.mm \
+            test/neoswap_memory_manager_test.mm -framework Foundation -o "$RUNNER_TEMP/neoswap-memory-manager"
+          "$RUNNER_TEMP/neoswap-memory-manager" | tee build/neoswap/memory-manager-tests.txt
           python3 test/rpcs3_input_bridge_test.py 2>&1 | tee build/neoswap/embedded-menu-input-tests.txt
           python3 test/rpcs3_performance_snapshot_test.py 2>&1 | tee build/neoswap/performance-snapshot-tests.txt
           xcrun clang++ -std=c++20 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined \
@@ -110,7 +116,8 @@ jobs:
           xcrun clang++ -x objective-c++ -std=c++20 -fobjc-arc -fblocks -fsyntax-only \
             -arch arm64 -isysroot "$SDK" -miphoneos-version-min=17.4 \
             -Itest/neoswap -Ipackages/neo_swap/ios/Classes \
-            packages/neo_swap/ios/Classes/NeoSwap.cpp packages/neo_swap/ios/Classes/NeoSwapPlugin.mm
+            packages/neo_swap/ios/Classes/NeoSwap.cpp packages/neo_swap/ios/Classes/NeoSwapPlugin.mm \
+            packages/neo_swap/ios/Classes/NeoSwapMemoryManager.mm
       - name: Exercise production plugin on iOS 18 Simulator
         run: python3 test/check_neo_swap_simulator.py
       - uses: subosito/flutter-action@v2

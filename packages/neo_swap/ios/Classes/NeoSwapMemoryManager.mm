@@ -1,187 +1,154 @@
 // SPDX-License-Identifier: MIT
 #import "NeoSwapMemoryManager.h"
+#import <TargetConditionals.h>
+#if TARGET_OS_IOS
+#import <UIKit/UIKit.h>
+#endif
 #include <mach/mach.h>
-#include <sys/mman.h>
-#include <unistd.h>
+#include <os/proc.h>
+#include <algorithm>
+#include <atomic>
+#include <dispatch/dispatch.h>
+#include <limits>
 
-@interface NeoSwapMemoryManager()
-@property (nonatomic, assign) uint64_t totalMemory;
-@property (nonatomic, assign) uint64_t reservedMemory;
-@property (nonatomic, assign) uint64_t allocatedMemory;
-@property (nonatomic, assign) uint64_t maxAllocatableMemory;
-@property (nonatomic, assign) uint64_t targetAllocationSize;
+#ifdef NEOSWAP_TESTING
+static std::atomic<uint64_t> testingAvailableMemory{UINT64_MAX};
+#endif
+static uint64_t availableMemory() {
+#ifdef NEOSWAP_TESTING
+    const uint64_t value = testingAvailableMemory.load();
+    if (value != UINT64_MAX) return value;
+#endif
+    return os_proc_available_memory();
+}
+
+// Compatibility helper for explicit virtual reservations. RPCS3 continues to
+// use the canonical NeoSwap broker, donor and relay; this is never run at boot.
+// A successful reservation is not proof of resident RAM or protection from jetsam.
+@interface NeoSwapMemoryManager ()
+@property(nonatomic, strong) NSMutableArray<NSMutableDictionary*>* reservations;
+@property(nonatomic, strong) dispatch_source_t pressureSource;
+@property(nonatomic, assign) uint64_t reservedBytes;
+@property(nonatomic, assign) BOOL pressureRaised;
 @end
 
 @implementation NeoSwapMemoryManager
-
 + (instancetype)sharedManager {
-    static NeoSwapMemoryManager *sharedInstance = nil;
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        sharedInstance = [[NeoSwapMemoryManager alloc] init];
-    });
-    return sharedInstance;
+    static NeoSwapMemoryManager* instance;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{ instance = [[self alloc] init]; });
+    return instance;
 }
-
 - (instancetype)init {
     self = [super init];
     if (self) {
-        // Initialize memory limits for iPhone 16 Pro Max (8GB RAM)
-        self.totalMemory = NSProcessInfo.processInfo.physicalMemory;
-        // Reserve 7GB for allocation (7 * 1024 * 1024 * 1024 bytes)
-        self.targetAllocationSize = 7ULL * 1024 * 1024 * 1024;
-        
-        // Set maximum allocatable memory to 7GB (avoiding system instability)
-        self.maxAllocatableMemory = self.targetAllocationSize;
-        
-        // Reserve 7GB for allocation
-        self.reservedMemory = 0;
-        self.allocatedMemory = 0;
-        
-        // Setup memory pressure monitoring
+        self.reservations = [NSMutableArray new];
         [self setupMemoryPressureMonitoring];
     }
     return self;
 }
-
-// Attempt to allocate maximum memory with proper jetsam handling
-- (BOOL)allocateMaximumMemory:(uint64_t)sizeBytes {
-    if (sizeBytes > self.maxAllocatableMemory) {
-        NSLog(@"Requested allocation size (%llu bytes) exceeds max allocatable memory (%llu bytes)", sizeBytes, self.maxAllocatableMemory);
-        return NO;
-    }
-    
-    // Use mach_vm_allocate for better control on iOS
-    vm_address_t address = 0;
-    kern_return_t kr = mach_vm_allocate(mach_task_self(), &address, sizeBytes, VM_FLAGS_ANYWHERE);
-    
-    if (kr != KERN_SUCCESS) {
-        NSLog(@"Failed to allocate memory: %d", kr);
-        return NO;
-    }
-    
-    // Mark as non-cacheable to avoid jetsam
-    kr = mach_vm_attributes_set(mach_task_self(), address, sizeBytes, VM_ATTRIBUTE_NO_CACHE);
-    if (kr != KERN_SUCCESS) {
-        NSLog(@"Failed to set no-cache attribute: %d", kr);
-        mach_vm_deallocate(mach_task_self(), address, sizeBytes);
-        return NO;
-    }
-    
-    // Set memory priority to avoid jetsam
-    kr = mach_vm_set_memory_priority(mach_task_self(), address, sizeBytes, VM_MEMORY_PRIORITY_HIGH);
-    if (kr != KERN_SUCCESS) {
-        NSLog(@"Failed to set memory priority: %d", kr);
-        // Continue anyway - this is not critical for allocation
-    }
-    
-    self.allocatedMemory += sizeBytes;
-    return YES;
-}
-
-// Allocate the full 7GB target
-- (BOOL)allocateTargetMemory {
-    return [self allocateMaximumMemory:self.targetAllocationSize];
-}
-
-// Release memory with proper cleanup
-- (void)releaseMemory:(uint64_t)sizeBytes {
-    if (sizeBytes > self.allocatedMemory) {
-        sizeBytes = self.allocatedMemory;
-    }
-    
-    // For now, we'll just track the release - actual deallocation would require 
-    // more complex memory management with proper tracking
-    self.allocatedMemory -= sizeBytes;
-}
-
-// Setup memory pressure monitoring to avoid jetsam
-- (void)setupMemoryPressureMonitoring {
-    [[NSNotificationCenter defaultCenter] addObserver:self
-                                             selector:@selector(handleMemoryPressure:)
-                                                 name:UIApplicationDidReceiveMemoryWarningNotification
-                                               object:nil];
-    
-    // Monitor system memory pressure using mach APIs
-    [self monitorSystemMemoryPressure];
-}
-
-// Handle memory pressure notifications
-- (void)handleMemoryPressure:(NSNotification *)notification {
-    NSLog(@"Memory pressure detected, releasing allocated memory");
-    
-    // Reduce allocation to avoid jetsam - release 20% of allocated memory
-    uint64_t releaseAmount = self.allocatedMemory * 0.2; // Release 20% of allocated memory
-    [self releaseMemory:releaseAmount];
-}
-
-// Monitor system memory pressure via mach APIs
-- (void)monitorSystemMemoryPressure {
-    // This would be implemented with more advanced memory pressure detection
-    // using mach APIs and system monitoring
-    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_LOW, 0), ^{
-        while (true) {
-            // Periodic check of memory pressure
-            [NSThread sleepForTimeInterval:5.0];
-            
-            // Check current memory usage and adjust if needed
-            uint64_t currentMemory = self.allocatedMemory;
-            uint64_t availableMemory = self.maxAllocatableMemory - currentMemory;
-            
-            if (availableMemory < (self.targetAllocationSize * 0.1)) { // Less than 10% remaining
-                NSLog(@"Warning: Low memory detected, current allocation: %llu bytes", currentMemory);
-                // Implement adaptive strategy here if needed
-            }
-        }
-    });
-}
-
-// Check if we can allocate more memory without triggering jetsam
+- (uint64_t)targetAllocationSize { return 7ULL * 1024 * 1024 * 1024; }
 - (BOOL)canAllocateMoreMemory:(uint64_t)sizeBytes {
-    uint64_t availableMemory = self.maxAllocatableMemory - self.allocatedMemory;
-    return sizeBytes <= availableMemory;
-}
-
-// Get current memory usage statistics
-- (NSDictionary *)memoryStatistics {
-    return @{
-        @"totalMemory": @(self.totalMemory),
-        @"maxAllocatableMemory": @(self.maxAllocatableMemory),
-        @"reservedMemory": @(self.reservedMemory),
-        @"allocatedMemory": @(self.allocatedMemory),
-        @"availableMemory": @(self.maxAllocatableMemory - self.allocatedMemory),
-        @"targetAllocationSize": @(self.targetAllocationSize)
-    };
-}
-
-// Set up proper entitlements for memory management
-- (void)setupMemoryEntitlements {
-    // Entitlements are already configured in NeoSwapEntitlements.plist
-    // This method is a placeholder for any additional entitlement setup if needed
-    NSLog(@"Memory entitlements already configured");
-}
-
-// Initialize and prepare the memory system for 7GB allocation
-- (BOOL)initializeMemorySystem {
-    NSLog(@"Initializing NeoSwap memory system for 7GB allocation...");
-    
-    // First, check if we can allocate the target amount
-    if (![self allocateTargetMemory]) {
-        NSLog(@"Failed to allocate target memory size");
-        return NO;
+    @synchronized(self) {
+        const uint64_t target = [self targetAllocationSize];
+        const uint64_t margin = 64ULL * 1024 * 1024;
+        const uint64_t available = availableMemory();
+        return sizeBytes && !self.pressureRaised && self.reservedBytes <= target &&
+            sizeBytes <= target - self.reservedBytes &&
+            available > margin && sizeBytes <= available - margin;
     }
-    
-    NSLog(@"Successfully allocated %llu bytes of memory", self.targetAllocationSize);
-    return YES;
 }
-
-// Get current allocation status
-- (NSString *)allocationStatus {
-    uint64_t available = self.maxAllocatableMemory - self.allocatedMemory;
-    double percentage = ((double)self.allocatedMemory / (double)self.targetAllocationSize) * 100.0;
-    
-    return [NSString stringWithFormat:@"Allocated: %llu bytes (%.2f%%), Available: %llu bytes", 
-            self.allocatedMemory, percentage, available];
+- (BOOL)allocateMaximumMemory:(uint64_t)sizeBytes {
+    @synchronized(self) {
+        const uint64_t page = vm_page_size;
+        if (!page || sizeBytes > std::numeric_limits<uint64_t>::max() - (page - 1)) return NO;
+        const uint64_t bytes = ((sizeBytes + page - 1) / page) * page;
+        if (![self canAllocateMoreMemory:bytes]) return NO;
+        vm_address_t address = 0;
+        if (vm_allocate(mach_task_self(), &address, (vm_size_t)bytes, VM_FLAGS_ANYWHERE) != KERN_SUCCESS)
+            return NO;
+        [self.reservations addObject:[@{@"address":@(address), @"bytes":@(bytes)} mutableCopy]];
+        self.reservedBytes += bytes;
+        return YES;
+    }
 }
-
+- (void)releaseMemory:(uint64_t)sizeBytes {
+    @synchronized(self) {
+        // Retire complete private reservations. On kernel failure ownership and
+        // counters remain intact for a later retry; no caller has a data pointer.
+        uint64_t remaining = sizeBytes;
+        for (NSInteger i = (NSInteger)self.reservations.count - 1; i >= 0 && remaining; --i) {
+            NSDictionary* block = self.reservations[(NSUInteger)i];
+            const uint64_t bytes = [block[@"bytes"] unsignedLongLongValue];
+            const vm_address_t address = (vm_address_t)[block[@"address"] unsignedLongLongValue];
+            if (vm_deallocate(mach_task_self(), address, (vm_size_t)bytes) != KERN_SUCCESS) continue;
+            [self.reservations removeObjectAtIndex:(NSUInteger)i];
+            self.reservedBytes -= bytes;
+            remaining -= std::min(remaining, bytes);
+        }
+    }
+}
+- (void)setupMemoryPressureMonitoring {
+    @synchronized(self) {
+        if (self.pressureSource) return;
+        self.pressureSource = dispatch_source_create(DISPATCH_SOURCE_TYPE_MEMORYPRESSURE, 0,
+            DISPATCH_MEMORYPRESSURE_NORMAL | DISPATCH_MEMORYPRESSURE_WARN | DISPATCH_MEMORYPRESSURE_CRITICAL,
+            dispatch_get_main_queue());
+        __weak NeoSwapMemoryManager* weakSelf = self;
+        dispatch_source_set_event_handler(self.pressureSource, ^{
+            NeoSwapMemoryManager* owner = weakSelf;
+            if (!owner) return;
+            const unsigned long level = dispatch_source_get_data(owner.pressureSource);
+            @synchronized(owner) {
+                owner.pressureRaised = (level & (DISPATCH_MEMORYPRESSURE_WARN | DISPATCH_MEMORYPRESSURE_CRITICAL)) != 0;
+                if (owner.pressureRaised) [owner releaseMemory:UINT64_MAX];
+            }
+        });
+        dispatch_resume(self.pressureSource);
+#if TARGET_OS_IOS
+        [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(handleMemoryPressure:)
+            name:UIApplicationDidReceiveMemoryWarningNotification object:nil];
+#endif
+    }
+}
+- (void)handleMemoryPressure:(NSNotification*)notification {
+    (void)notification;
+    [self releaseMemory:UINT64_MAX];
+}
+- (NSDictionary*)memoryStatistics {
+    @synchronized(self) {
+        return @{@"totalMemory":@(NSProcessInfo.processInfo.physicalMemory),
+                 @"maxAllocatableMemory":@([self targetAllocationSize]),
+                 @"reservedMemory":@(self.reservedBytes), @"allocatedMemory":@(self.reservedBytes),
+                 @"availableMemory":@(availableMemory()),
+                 @"targetAllocationSize":@([self targetAllocationSize]),
+                 @"residentMemory":NSNull.null, @"pressureRaised":@(self.pressureRaised)};
+    }
+}
+- (void)setupMemoryEntitlements {
+    // Capabilities are requested and granted at signing, never at runtime.
+}
+- (BOOL)allocateTargetMemory { return [self allocateMaximumMemory:[self targetAllocationSize]]; }
+- (BOOL)initializeMemorySystem {
+    // Initializing diagnostics does not reserve or touch 7 GiB.
+    return self.reservations != nil;
+}
+- (NSString*)allocationStatus { return [[self memoryStatistics] description]; }
+#ifdef NEOSWAP_TESTING
++ (void)setTestingAvailableMemory:(uint64_t)bytes { testingAvailableMemory.store(bytes); }
+- (NSArray<NSNumber*>*)testingReservationAddresses {
+    @synchronized(self) {
+        NSMutableArray<NSNumber*>* addresses = [NSMutableArray new];
+        for (NSDictionary* block in self.reservations) [addresses addObject:block[@"address"]];
+        return addresses;
+    }
+}
+#endif
+- (void)dealloc {
+    [NSNotificationCenter.defaultCenter removeObserver:self];
+    if (_pressureSource) dispatch_source_cancel(_pressureSource);
+    for (NSDictionary* block in _reservations)
+        vm_deallocate(mach_task_self(), (vm_address_t)[block[@"address"] unsignedLongLongValue],
+            (vm_size_t)[block[@"bytes"] unsignedLongLongValue]);
+}
 @end
