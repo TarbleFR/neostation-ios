@@ -1,6 +1,6 @@
 {
   "name": "neoplay-receiver",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "private": true,
   "description": "NeoPlay Desktop Receiver for NeoStation iOS",
   "type": "module",
