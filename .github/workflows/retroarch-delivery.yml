@@ -129,7 +129,7 @@ jobs:
       BUNDLE_GEMFILE: ${{ github.workspace }}/build-utils/Gemfile.dolphin
       SCREENSCRAPER_DEV_ID: ${{ secrets.SCREENSCRAPER_DEV_ID }}
       SCREENSCRAPER_DEV_PASSWORD: ${{ secrets.SCREENSCRAPER_DEV_PASSWORD }}
-      DELIVERY_METRICS: ${{ runner.temp }}/delivery-timings.jsonl
+      DELIVERY_METRICS: ${{ github.workspace }}/build/delivery/timings.jsonl
       CACHE_NAMESPACE: ${{ (inputs.benchmark == true || contains(github.event.head_commit.message, '[benchmark-build]')) && github.run_id || 'normal' }}
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       BUNDLE_PATH: ${{ github.workspace }}/build/ruby-gems
@@ -918,7 +918,7 @@ jobs:
       BUNDLE_GEMFILE: ${{ github.workspace }}/build-utils/Gemfile.dolphin
       SCREENSCRAPER_DEV_ID: ${{ secrets.SCREENSCRAPER_DEV_ID }}
       SCREENSCRAPER_DEV_PASSWORD: ${{ secrets.SCREENSCRAPER_DEV_PASSWORD }}
-      DELIVERY_METRICS: ${{ runner.temp }}/delivery-timings.jsonl
+      DELIVERY_METRICS: ${{ github.workspace }}/build/delivery/timings.jsonl
       CACHE_NAMESPACE: ${{ (inputs.benchmark == true || contains(github.event.head_commit.message, '[benchmark-build]')) && github.run_id || 'normal' }}
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       BUNDLE_PATH: ${{ github.workspace }}/build/ruby-gems
