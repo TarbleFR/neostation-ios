@@ -1,0 +1,58 @@
+name: RetroArch public receiver before and after scenes
+'on':
+  push:
+    branches: [experimental]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: retroarch-source-proof-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  source-receiver:
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[retroarch-source-proof]') }}
+    runs-on: macos-15
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        persist-credentials: false
+    - name: Reuse unchanged successful library and engine checks
+      run: |
+        python3 - <<'PY'
+        import json, subprocess
+        ref='00285ba5cfec694d59e1ca2bcf9de31418fd4e1a'
+        changes=subprocess.check_output(['git','diff','--name-only',ref,'HEAD','--','lib','packages','native','assets','pubspec.yaml','pubspec.lock'],text=True).splitlines()
+        assert not changes, 'Product inputs changed: '+repr(changes)
+        run=json.loads(subprocess.check_output(['gh','api','repos/TarbleFR/neostation-ios/actions/runs/37847695065']))
+        assert run['head_sha']==ref and run['conclusion']=='success'
+        print('Reused successful product evidence at identical inputs; no library/core rebuild or retest')
+        PY
+    - uses: maxim-lobanov/setup-xcode@v1
+      with:
+        xcode-version: '16.4'
+    - name: Install disposable fixture project generator
+      run: brew install xcodegen
+    - name: Compile exact public Objective-C scene and test three supported URLs cold and warm
+      run: python3 tools/test_retroarch_source_receiver.py --output "$RUNNER_TEMP/source-receiver"
+    - name: Seal scoped receiver evidence
+      if: always()
+      run: |
+        mkdir -p evidence
+        python3 - <<'PY'
+        import os, shutil
+        from pathlib import Path
+        for item in (Path(os.environ['RUNNER_TEMP'])/'source-receiver').glob('*.json'):
+            shutil.copy2(item,Path('evidence')/item.name)
+        PY
+        python3 build-utils/delivery_cipher.py artifact evidence encrypted-source-evidence
+    - uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: RetroArch-source-receiver-proof-${{ github.sha }}
+        path: encrypted-source-evidence/
+        if-no-files-found: error
+        retention-days: 14
