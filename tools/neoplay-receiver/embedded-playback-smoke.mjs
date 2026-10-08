@@ -65,6 +65,6 @@ try {
  }
  assert.deepEqual(failures,[]);
  await mkdir('test-output',{recursive:true});
- await writeFile('test-output/embedded-playback.json',JSON.stringify({version:'0.7.0',embeddedReceiver:true,embeddedPlayer:true,physicalIPhone:false,results},null,2));
+ await writeFile('test-output/embedded-playback.json',JSON.stringify({version:'0.8.0',embeddedReceiver:true,embeddedPlayer:true,physicalIPhone:false,results},null,2));
  console.log('NEOPLAY_EMBEDDED_4K60_PLAYBACK_OK',JSON.stringify(results.map(r=>({preset:r.preset,presented:r.stats.presented,decoded:r.stats.decoded,decoder:r.stats.decoderPreference,hardwareFallbacks:r.stats.hardwareFallbacks,qualityFallbacks:r.stats.qualityFallbacks,audioRms:r.audioRms}))));
 } finally {sender?.terminate();await desktop?.close();}
