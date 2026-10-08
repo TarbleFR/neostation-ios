@@ -277,7 +277,7 @@ class Build398Integration(unittest.TestCase):
         self.assertIn('version: 0.0.2+399', pubspec)
     def test_full_ipa_requires_previous_build_and_both_exact_evidence_suites(self):
         text = (ROOT/'.github/workflows/neoswap-ipa.yml').read_text()
-        self.assertIn('neostation-neoswap-neoplay-build415', text)
+        self.assertIn('neostation-neoswap-neoplay-build416', text)
         self.assertNotIn('group: neostation-neoswap-private\n', text)
         self.assertIn('run_id = 37605768644', text)
         self.assertIn("run['conclusion'] == 'success'", text)
@@ -296,7 +296,7 @@ class Build398Integration(unittest.TestCase):
         self.assertIn("if 'Build 411' in row['name'] and row['status'] != 'completed']", text)
         self.assertIn('probe.check_returncode()', text)
         subprocess.run([sys.executable, str(ROOT / 'test/neoswap_ipa_previous_build_gate_test.py')], cwd=ROOT, check=True, timeout=60)
-        self.assertIn('cp docs/neoplay/BUILD415.md build/private-test/Notes-NeoPlay-Build415.md', text)
+        self.assertIn('cp docs/neoplay/BUILD416.md build/private-test/Notes-NeoPlay-Build416.md', text)
         # The Build412 Core (writer-lock attribution): its inputs no longer match the Build411 Core pin.
         self.assertIn("RPCS3_CORE_HOST_SHA: afb33454db50236485bd5ec963a722dcb5f65610", text)
         self.assertIn("RPCS3_CORE_RUN_ID: '37620034517'", text)
@@ -391,7 +391,7 @@ class Build398Integration(unittest.TestCase):
         self.assertIn('failure = nil', request)
     def test_candidate_identity_remains_honest(self):
         data = json.loads((ROOT/'native/import-memory-candidate.json').read_text())
-        self.assertEqual(data['target_build'], 415)
+        self.assertEqual(data['target_build'], 416)
         self.assertEqual(data['neoplay_integration']['previous_build_run_id'], 37605768644)
         self.assertTrue(any(entry.startswith('Build410:') for entry in data['scope']))
         self.assertTrue(any(entry.startswith('Build411:') for entry in data['scope']))

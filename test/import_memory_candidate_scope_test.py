@@ -12,7 +12,7 @@ BASE = '3ccde925351b3e59985ba466e013e87a857d6ad0'
 MANIFEST_PATH = 'native/import-memory-candidate.json'
 manifest = json.loads((ROOT / MANIFEST_PATH).read_text())
 assert manifest['baseline'] == BASE
-assert manifest['target_build'] == 415
+assert manifest['target_build'] == 416
 assert manifest['swap_research']['branch'] == 'swap'
 assert manifest['swap_research']['scope'] == 'RPCS3 only'
 # Build409: relay owner 1 serves identifiable host allocations of the same
@@ -267,6 +267,7 @@ PRODUCTION_FILES = {
 SUPPORT_FILES = {
     'test/neo_swap_channel_test.dart',
     'docs/neoplay/BUILD415.md',
+    'docs/neoplay/BUILD416.md',
     'docs/neoplay/BUILD414.md',
     'test/neoswap_memory_manager_test.mm',
     'packages/neo_swap/ios/NeoSwapEntitlements.plist',
@@ -829,16 +830,16 @@ ARMSX2_PACKAGING_TEST_BUILD412_LINES = (
      "    caller=os.environ.get('GITHUB_WORKFLOW_REF','').split('@',1)[0].rsplit('/',1)[-1]\n"
      "    for name in (caller,) if caller in ('ios-ci.yml','neoswap-ipa.yml') else ('ios-ci.yml','neoswap-ipa.yml'):\n"),
 )
-# Build415: exact candidate labels and release notes; native pins and gates stay byte-identical.
-IPA_WORKFLOW_BUILD415_LINES = (
-    ('name: NeoStation NeoSwap + NeoPlay private • Build 412\n', 'name: NeoStation NeoSwap + NeoPlay private • Build 415\n'),
-    ('run-name: NeoStation NeoSwap + NeoPlay private • Build 412 • ${{ github.sha }}\n', 'run-name: NeoStation NeoSwap + NeoPlay private • Build 415 • ${{ github.sha }}\n'),
-    ("        default: '412'\n", "        default: '415'\n"),
-    ('  group: neostation-neoswap-neoplay-build412\n', '  group: neostation-neoswap-neoplay-build415\n'),
-    ('    name: Neostation iOS 0.0.2 private IPA (412)\n', '    name: Neostation iOS 0.0.2 private IPA (415)\n'),
-    ("      BUILD_NUMBER: ${{ inputs.build_number || '412' }}\n", "      BUILD_NUMBER: ${{ inputs.build_number || '415' }}\n"),
-    ('      ARTIFACT_NAME: NeoStation-NeoSwap-NeoPlay-Build-412-${{ github.sha }}\n', '      ARTIFACT_NAME: NeoStation-NeoSwap-NeoPlay-Build-415-${{ github.sha }}\n'),
-    ('          cp docs/neoplay/BUILD412.md build/private-test/Notes-NeoPlay-Build412.md\n', '          cp docs/neoplay/BUILD415.md build/private-test/Notes-NeoPlay-Build415.md\n'),
+# Build416: exact candidate labels and release notes; native pins and gates stay byte-identical.
+IPA_WORKFLOW_BUILD416_LINES = (
+    ('name: NeoStation NeoSwap + NeoPlay private • Build 412\n', 'name: NeoStation NeoSwap + NeoPlay private • Build 416\n'),
+    ('run-name: NeoStation NeoSwap + NeoPlay private • Build 412 • ${{ github.sha }}\n', 'run-name: NeoStation NeoSwap + NeoPlay private • Build 416 • ${{ github.sha }}\n'),
+    ("        default: '412'\n", "        default: '416'\n"),
+    ('  group: neostation-neoswap-neoplay-build412\n', '  group: neostation-neoswap-neoplay-build416\n'),
+    ('    name: Neostation iOS 0.0.2 private IPA (412)\n', '    name: Neostation iOS 0.0.2 private IPA (416)\n'),
+    ("      BUILD_NUMBER: ${{ inputs.build_number || '412' }}\n", "      BUILD_NUMBER: ${{ inputs.build_number || '416' }}\n"),
+    ('      ARTIFACT_NAME: NeoStation-NeoSwap-NeoPlay-Build-412-${{ github.sha }}\n', '      ARTIFACT_NAME: NeoStation-NeoSwap-NeoPlay-Build-416-${{ github.sha }}\n'),
+    ('          cp docs/neoplay/BUILD412.md build/private-test/Notes-NeoPlay-Build412.md\n', '          cp docs/neoplay/BUILD416.md build/private-test/Notes-NeoPlay-Build416.md\n'),
 )
 for path in ARMSX2_INTEGRATION_FILES:
     reviewed = subprocess.check_output(['git', 'show', ARMSX2_INTEGRATION_SHA + ':' + path], cwd=ROOT)
@@ -862,8 +863,8 @@ for path in ARMSX2_INTEGRATION_FILES:
         for old, new in IPA_WORKFLOW_BUILD412_PURGED_INPUT_LINES:
             assert text.count(old) == 1, 'Build412 purged-input workflow line expected once: ' + old
             text = text.replace(old, new, 1)
-        for old, new in IPA_WORKFLOW_BUILD415_LINES:
-            assert text.count(old) == 1, 'Build415 metadata expected once: ' + old
+        for old, new in IPA_WORKFLOW_BUILD416_LINES:
+            assert text.count(old) == 1, 'Build416 metadata expected once: ' + old
             text = text.replace(old, new, 1)
         reviewed = text.encode('utf-8')
     elif path == 'test/armsx2_packaging_test.py':
@@ -974,9 +975,15 @@ def validate_allocator_v1_layout():
 
 validate_allocator_v1_layout()
 
-# Original allocator/probe API unchanged: only one boolean preference.
+# Preserve the original allocator/probe API exactly. The shader preference
+# and the two reviewed compatibility aliases are the only accepted additions.
 storage_method = "\n  /// Optional regenerable shader cache; applies on the next game launch.\n  static Future<Map<String, dynamic>> setShaderStorage(bool enabled) =>\n      _call('setShaderStorage', {'enabled': enabled});\n"
-assert (ROOT/'packages/neo_swap/lib/neo_swap.dart').read_text().replace(storage_method,'') == before('packages/neo_swap/lib/neo_swap.dart').decode('utf-8')
+diagnostic_aliases = "\n  /// Compatibility diagnostic alias. Production builds refuse synthetic probes;\n  /// this never allocates RAM for an emulator or changes its automatic budget.\n  static Future<Map<String, dynamic>> allocateMaxMemory(int sizeMiB) =>\n      capacityProbe(sizeMiB);\n\n  /// Compatibility alias for the production broker's measured diagnostics.\n  static Future<Map<String, dynamic>> getMemoryStats() => snapshot();\n"
+dart_api = (ROOT/'packages/neo_swap/lib/neo_swap.dart').read_text()
+for addition in (storage_method, diagnostic_aliases):
+    assert dart_api.count(addition) == 1, 'Expected exactly one reviewed Dart API addition'
+    dart_api = dart_api.replace(addition, '', 1)
+assert dart_api == before('packages/neo_swap/lib/neo_swap.dart').decode('utf-8'), 'Original Dart control API changed'
 
 # The requested Dusklight update replaces only its reviewed upstream pins.
 # Keep its disc routing and SDL source identical to the preceding candidate.
