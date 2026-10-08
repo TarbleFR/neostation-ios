@@ -546,6 +546,7 @@ class DirectoriesSettingsContentState
       if (!mounted) return;
 
       await Directory(activePath).list(followLinks: false).take(1).toList();
+      if (!mounted) return;
       ConfigService.linkedExternalFolderPath = activePath;
 
       final configProvider = Provider.of<SqliteConfigProvider>(

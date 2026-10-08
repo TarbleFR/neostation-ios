@@ -355,7 +355,7 @@
     "lib/l10n/app_locale_zh_hant.dart": "eab7dd28a555d7b9abef498a9474fdc4faa59505d4f03b7c8e1c863b42db9e20",
     "lib/providers/sqlite_config_provider.dart": "340e1c537772297ddd102e2d1014f3cd944ed09c0ef6743c6235a16ffef31fd5",
     "lib/providers/sqlite_config_provider/scanning.dart": "2171de0c9d4fe5c6a2c5cfc86a7b80b966553fa848939d97912638a76f730e95",
-    "lib/screens/settings_screen/new_settings_options/directories_settings_content.dart": "7c11301dbfd7c504a84caf843d9925db25b430e031d9e65728851b7d58daa688",
+    "lib/screens/settings_screen/new_settings_options/directories_settings_content.dart": "67f52059193b9ac8aa1048737641448e21868a924b80ecb69270c7369cb8d050",
     "lib/services/config_service.dart": "ac6aefc1d972387c0253af0c9490407f0bc2abbe4a2b7716225962aeafcee80b",
     "lib/services/retroarch_folder_recovery.dart": "b78a9641c350b4801a312affcd433d0624706525a30fd478bd9f5c6779f6b659",
     "lib/services/retroarch_library_protocol.dart": "ba1deeca3d900ff2a831acc258d77efd1a52c24314ce475101c471a21bee0f96",
