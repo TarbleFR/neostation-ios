@@ -25,6 +25,12 @@ storage and handoff defects; the remaining device checks are required.
   The proposed mandatory library round trip before each game was removed.
 - Native rejection, timeout, expiration and concurrent request failures retain
   their technical reasons under the existing translated launch error.
+- Database operations on the same SQLite connection are serialized. Only work
+  belonging to the active asynchronous transaction may join it. Previously, a
+  concurrent import could report success and then lose its rows when another
+  scan rolled back. Two regression tests reproduce that loss on the old adapter.
+  Batches and the remaining manual asynchronous transaction now use the same
+  queue. Synchronous embedded recovery waits for an idle connection.
 
 The external protocol was checked in libretro/RetroArch at
 `a69980050e2d99c8877a84bf7e516d2bd5353f15`: `RetroArchPlaylistManager.m`,
@@ -39,6 +45,16 @@ transport acceptance, callback and timeout now have separate diagnostics.
 original `af0d539` implementation in two disposable iOS simulator apps. The
 receiver models the inspected scene routing, not a RetroArch core or playlist.
 Its evidence distinguishes real UIKit transport from synthetic URL processing.
+
+The comparison passed in [run 37831162616](https://github.com/TarbleFR/neostation-ios/actions/runs/37831162616),
+revision `9b4608b12133d54f2a0af239a909c89edb7fdd6c`. Both legacy cases
+opened `start` successfully, sent the functional URL in application state 2
+(background), received `accepted=false`, and delivered only `start` to the
+receiver. Both corrected warm cases sent in state 0 (active), delivered the
+functional URL exactly once, and the library case returned its callback.
+The cold-scene case deliberately reproduced the separately inspected receiver
+omission: UIKit accepted its URL, but the scene did not process it. The receiver
+is a fixture, so these results do not establish gameplay in TestFlight build 780.
 
 The upstream cold-scene URL omission is a separate limitation: a cold request
 can be accepted by UIKit but discarded inside RetroArch. No unacknowledged game
@@ -58,8 +74,8 @@ unbound mixed-source restoration still has an explicit audit reproduction.
 An external library callback acknowledges an initialized catalog, not a running
 core. UIKit open acceptance is not game-start confirmation. Actual iPhone
 cold/warm launch, missing file/core/BIOS errors, archive/M3U execution and save
-continuity still require device validation. Concurrent success scenarios are
-covered; complete isolation of failures across all database users is not claimed.
+continuity still require device validation. Concurrent imports and rollback
+isolation are tested separately from source identity reconciliation.
 
 ## Repair and rollback
 

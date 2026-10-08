@@ -92,18 +92,17 @@ class ScraperRepository {
     bool enabled,
   ) async {
     final db = await SqliteService.getDatabase();
-    await db.execute('BEGIN');
     try {
-      for (final id in systemIds) {
-        await db.rawInsert(
-          'INSERT OR REPLACE INTO user_screenscraper_system_config (app_system_id, enabled) VALUES (?, ?)',
-          [id, enabled ? 1 : 0],
-        );
-      }
-      await db.execute('COMMIT');
+      await db.transaction((txn) async {
+        for (final id in systemIds) {
+          await txn.rawInsert(
+            'INSERT OR REPLACE INTO user_screenscraper_system_config (app_system_id, enabled) VALUES (?, ?)',
+            [id, enabled ? 1 : 0],
+          );
+        }
+      });
     } catch (e) {
       _log.e('Error saving all scraper systems config: $e');
-      await db.execute('ROLLBACK');
       rethrow;
     }
   }

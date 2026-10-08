@@ -82,54 +82,84 @@ abstract class DatabaseExecutorAdapter {
   BatchAdapter batch();
 }
 
+/// Serializes independent users of the same native SQLite connection.
+class _ConnectionQueue {
+  Future<void> _tail = Future<void>.value();
+  Object? owner;
+
+  bool get ownedByCaller =>
+      owner != null && identical(Zone.current[this], owner);
+
+  Future<T> schedule<T>(FutureOr<T> Function() action) {
+    final previous = _tail;
+    final finished = Completer<void>();
+    _tail = finished.future;
+    return () async {
+      await previous;
+      try {
+        return await action();
+      } finally {
+        finished.complete();
+      }
+    }();
+  }
+}
+
 /// Concrete implementation of [DatabaseExecutorAdapter] using `package:sqlite3`.
 class DatabaseAdapter implements DatabaseExecutorAdapter {
   final sqlite.Database _db;
   DatabaseAdapter(this._db);
+  static final _queues = Expando<_ConnectionQueue>();
+  _ConnectionQueue get _queue => _queues[_db] ??= _ConnectionQueue();
+
+  Future<T> _access<T>(FutureOr<T> Function() action) =>
+      _queue.ownedByCaller ? Future<T>.sync(action) : _queue.schedule(action);
 
   /// Provides access to the raw sqlite3 database instance.
   sqlite.Database get rawDb => _db;
 
+  /// Waits for other transactions before a synchronous recovery operation.
+  /// The callback must not yield or start asynchronous work on this connection.
+  Future<T> synchronousAccess<T>(T Function() action) => _access(action);
+
   /// Closes the database connection.
-  Future<void> close() async {
-    _db.close();
-  }
+  Future<void> close() => _access(_db.close);
 
   @override
-  Future<void> execute(String sql, [List<Object?>? arguments]) async {
+  Future<void> execute(String sql, [List<Object?>? arguments]) => _access(() {
     if (arguments != null && arguments.isNotEmpty) {
       _db.execute(sql, arguments);
     } else {
       _db.execute(sql);
     }
-  }
+  });
 
   @override
-  Future<int> rawInsert(String sql, [List<Object?>? arguments]) async {
+  Future<int> rawInsert(String sql, [List<Object?>? arguments]) => _access(() {
     _db.execute(sql, arguments ?? []);
     return _db.lastInsertRowId;
-  }
+  });
 
   @override
-  Future<int> rawUpdate(String sql, [List<Object?>? arguments]) async {
+  Future<int> rawUpdate(String sql, [List<Object?>? arguments]) => _access(() {
     _db.execute(sql, arguments ?? []);
     return _db.updatedRows;
-  }
+  });
 
   @override
-  Future<int> rawDelete(String sql, [List<Object?>? arguments]) async {
+  Future<int> rawDelete(String sql, [List<Object?>? arguments]) => _access(() {
     _db.execute(sql, arguments ?? []);
     return _db.updatedRows;
-  }
+  });
 
   @override
   Future<List<Map<String, Object?>>> rawQuery(
     String sql, [
     List<Object?>? arguments,
-  ]) async {
+  ]) => _access(() {
     final results = _db.select(sql, arguments ?? []);
     return _resultSetToMap(results);
-  }
+  });
 
   /// Converts an [sqlite.ResultSet] into a standard Dart list of maps.
   List<Map<String, dynamic>> _resultSetToMap(sqlite.ResultSet results) {
@@ -248,25 +278,34 @@ class DatabaseAdapter implements DatabaseExecutorAdapter {
   BatchAdapter batch() => BatchAdapter(_db);
 
   /// Executes a series of database operations within an atomic transaction.
-  Future<T> transaction<T>(
-    Future<T> Function(TransactionAdapter) action,
-  ) async {
-    final bool inTransaction = !_db.autocommit;
-    if (inTransaction) {
-      return await action(TransactionAdapter(_db));
+  Future<T> transaction<T>(Future<T> Function(TransactionAdapter) action) {
+    final queue = _queue;
+    if (queue.ownedByCaller) {
+      return Future<T>.sync(() => action(TransactionAdapter(_db)));
     }
-
-    _db.execute('BEGIN');
-    try {
-      final result = await action(TransactionAdapter(_db));
-      _db.execute('COMMIT');
-      return result;
-    } catch (e) {
+    return queue.schedule(() async {
       if (!_db.autocommit) {
-        _db.execute('ROLLBACK');
+        throw StateError(
+          'Unowned SQLite transaction; use DatabaseAdapter.transaction',
+        );
       }
-      rethrow;
-    }
+      final owner = Object();
+      _db.execute('BEGIN');
+      queue.owner = owner;
+      try {
+        final result = await runZoned(
+          () => action(TransactionAdapter(_db)),
+          zoneValues: {queue: owner},
+        );
+        _db.execute('COMMIT');
+        return result;
+      } catch (_) {
+        if (!_db.autocommit) _db.execute('ROLLBACK');
+        rethrow;
+      } finally {
+        queue.owner = null;
+      }
+    });
   }
 }
 
@@ -391,25 +430,15 @@ class BatchAdapter {
     throw UnimplementedError('BatchAdapter cannot create nested batches.');
   }
 
-  Future<List<Object?>> commit({bool? noResult}) async {
-    final results = <Object?>[];
-    final bool inTransaction = !_db.autocommit;
-
-    if (!inTransaction) _db.execute('BEGIN');
-    try {
-      for (final action in _actions) {
-        final result = await action();
-        if (noResult != true) results.add(result);
-      }
-      if (!inTransaction) _db.execute('COMMIT');
-    } catch (e) {
-      if (!inTransaction && !_db.autocommit) {
-        _db.execute('ROLLBACK');
-      }
-      rethrow;
-    }
-    return results;
-  }
+  Future<List<Object?>> commit({bool? noResult}) =>
+      DatabaseAdapter(_db).transaction((_) async {
+        final results = <Object?>[];
+        for (final action in _actions) {
+          final result = await action();
+          if (noResult != true) results.add(result);
+        }
+        return results;
+      });
 }
 
 /// Core SQLite service responsible for database initialization, schema management,

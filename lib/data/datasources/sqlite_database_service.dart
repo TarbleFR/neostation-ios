@@ -127,11 +127,14 @@ class SqliteDatabaseService {
     }
 
     if (embeddedContainerRoot != null) {
-      final result = EmbeddedLibraryRecovery.reconcile(
-        await SqliteService.getDatabase(),
-        systemId: system.id!,
-        folder: system.folderName,
-        currentContainer: embeddedContainerRoot,
+      final db = await SqliteService.getDatabase();
+      final result = await db.synchronousAccess(
+        () => EmbeddedLibraryRecovery.reconcile(
+          db,
+          systemId: system.id!,
+          folder: system.folderName,
+          currentContainer: embeddedContainerRoot,
+        ),
       );
       _log.i(
         'Embedded library recovery: ${result.relocated} paths, '
