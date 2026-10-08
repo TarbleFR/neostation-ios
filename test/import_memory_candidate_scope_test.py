@@ -12,7 +12,7 @@ BASE = '3ccde925351b3e59985ba466e013e87a857d6ad0'
 MANIFEST_PATH = 'native/import-memory-candidate.json'
 manifest = json.loads((ROOT / MANIFEST_PATH).read_text())
 assert manifest['baseline'] == BASE
-assert manifest['target_build'] == 419
+assert manifest['target_build'] == 420
 assert manifest['swap_research']['branch'] == 'swap'
 assert manifest['swap_research']['scope'] == 'RPCS3 only'
 # Build409: relay owner 1 serves identifiable host allocations of the same
@@ -565,6 +565,67 @@ SUPPORT_FILES |= {
     'tools/neoplay-receiver/test/player-diagnostics.test.mjs',
 }
 
+# Build420: maintainer-authorized RetroArch TestFlight recovery, 8 October 2026.
+# The list is reviewed explicitly; all unrelated native/JIT inputs stay pinned.
+PRODUCTION_FILES |= {
+    '.github/workflows/retroarch-link-check.yml',
+    'lib/l10n/app_locale.dart',
+    'lib/l10n/app_locale_de.dart',
+    'lib/l10n/app_locale_en.dart',
+    'lib/l10n/app_locale_es.dart',
+    'lib/l10n/app_locale_fr.dart',
+    'lib/l10n/app_locale_id.dart',
+    'lib/l10n/app_locale_it.dart',
+    'lib/l10n/app_locale_ja.dart',
+    'lib/l10n/app_locale_ko.dart',
+    'lib/l10n/app_locale_pt.dart',
+    'lib/l10n/app_locale_ru.dart',
+    'lib/l10n/app_locale_zh.dart',
+    'lib/l10n/app_locale_zh_hant.dart',
+    'lib/providers/sqlite_config_provider.dart',
+    'lib/providers/sqlite_config_provider/scanning.dart',
+    'lib/screens/settings_screen/new_settings_options/directories_settings_content.dart',
+    'lib/services/config_service.dart',
+    'lib/services/retroarch_folder_recovery.dart',
+    'lib/services/retroarch_library_protocol.dart',
+    'lib/services/retroarch_library_service.dart',
+    'packages/external_folder_access/ios/Classes/ExternalFolderAccessPlugin.swift',
+    'packages/external_folder_access/ios/Classes/RetroArchURLHandoff.swift',
+    'packages/external_folder_access/lib/external_folder_access.dart',
+}
+SUPPORT_FILES |= {
+    'docs/retroarch-testflight-link-recovery.md',
+    'docs/neoplay/WINDOWS-0.8.0.md',
+    'test/retroarch_folder_recovery_test.dart',
+    'test/retroarch_library_cache_test.dart',
+    'test/retroarch_library_protocol_test.dart',
+    'test/retroarch_sync_locale_test.dart',
+    'test/retroarch_url_handoff_test.swift',
+}
+
+# NeoPlay 0.8.0 predates the RetroArch candidate. Its 12 inherited deltas
+# had not refreshed the Build419 manifest. Admit their immutable endpoint,
+# never the current working bytes as an automatically approved identity.
+NEOPLAY_080_RETAINED_SHA = '12fb62f979f5e6a2317e75e9dcfc01e268bfa018'
+NEOPLAY_080_RETAINED_FILES = {
+    'docs/neoplay/WINDOWS-0.8.0.md',
+    '.github/workflows/neoplay-check.yml',
+    '.github/workflows/neoplay-exe.yml',
+    'tools/neoplay-receiver/index.html',
+    'tools/neoplay-receiver/package-lock.json',
+    'tools/neoplay-receiver/package.json',
+    'tools/neoplay-receiver/player.mjs',
+    'tools/neoplay-receiver/quality-renderer.mjs',
+    'tools/neoplay-receiver/l10n.mjs',
+    'tools/neoplay-receiver/electron.mjs',
+    'tools/neoplay-receiver/test/quality-locales.test.mjs',
+    'tools/neoplay-receiver/embedded-playback-smoke.mjs',
+    'tools/neoplay-receiver/README-WINDOWS.txt',
+}
+for path in NEOPLAY_080_RETAINED_FILES:
+    retained = subprocess.check_output(['git', 'show', NEOPLAY_080_RETAINED_SHA + ':' + path], cwd=ROOT)
+    assert (ROOT / path).read_bytes() == retained, 'Unrelated inherited NeoPlay source changed: ' + path
+
 # Maintainer-authorized integration of swap and armsx2-26 into experimental.
 # Keep the complete reviewed ARMSX2 postimage pinned, separately from RPCS3.
 ARMSX2_INTEGRATION_SHA = '424a360348ae1178feed330da1af8c45909ed675'
@@ -861,6 +922,29 @@ IPA_WORKFLOW_BUILD419_LINES = (
     ('      ARTIFACT_NAME: NeoStation-NeoSwap-NeoPlay-Build-412-${{ github.sha }}\n', '      ARTIFACT_NAME: NeoStation-NeoSwap-NeoPlay-Build-419-${{ github.sha }}\n'),
     ('          cp docs/neoplay/BUILD412.md build/private-test/Notes-NeoPlay-Build412.md\n', '          cp docs/neoplay/BUILD418.md build/private-test/Notes-NeoPlay-Build418.md\n          cp docs/neoswap-build419-memory.md build/private-test/Notes-NeoSwap-Build419.md\n'),
 )
+# Only metadata, the additional exact-SHA RetroArch gate, its behavioral
+# tests and its delivery note may change the reviewed Build419 workflow.
+IPA_WORKFLOW_BUILD420_LINES = (
+    ('name: NeoStation NeoSwap + NeoPlay private • Build 419\n', 'name: NeoStation NeoSwap + NeoPlay private • Build 420\n'),
+    ('run-name: NeoStation NeoSwap + NeoPlay private • Build 419 • ${{ github.sha }}\n', 'run-name: NeoStation NeoSwap + NeoPlay private • Build 420 • ${{ github.sha }}\n'),
+    ("        default: '419'\n", "        default: '420'\n"),
+    ('  group: neostation-neoswap-neoplay-build419-${{ github.sha }}\n', '  group: neostation-neoswap-neoplay-build420-${{ github.sha }}\n'),
+    ('    name: Neostation iOS 0.0.2 private IPA (419)\n', '    name: Neostation iOS 0.0.2 private IPA (420)\n'),
+    ("      BUILD_NUMBER: ${{ inputs.build_number || '419' }}\n", "      BUILD_NUMBER: ${{ inputs.build_number || '420' }}\n"),
+    ('      ARTIFACT_NAME: NeoStation-NeoSwap-NeoPlay-Build-419-${{ github.sha }}\n', '      ARTIFACT_NAME: NeoStation-NeoSwap-NeoPlay-Build-420-${{ github.sha }}\n'),
+    ("              'neoplay-check.yml',\n", "              'neoplay-check.yml',\n              'retroarch-link-check.yml',\n"),
+    ('      - name: Run route, debugger, packaging and deletion regression tests\n',
+     '      - name: Require RetroArch cold-launch and library recovery regressions\n'
+     '        run: |\n'
+     '          flutter test test/retroarch_library_protocol_test.dart test/retroarch_library_cache_test.dart test/retroarch_folder_recovery_test.dart test/retroarch_sync_locale_test.dart test/ios_rom_library_root_resolver_test.dart test/ios_selective_rollback_test.dart test/armsx2_retroarch_routing_isolation_test.dart\n'
+     '          swiftc -warnings-as-errors packages/external_folder_access/ios/Classes/RetroArchURLHandoff.swift test/retroarch_url_handoff_test.swift -o "$RUNNER_TEMP/retroarch-handoff"\n'
+     '          "$RUNNER_TEMP/retroarch-handoff"\n'
+     '\n'
+     '      - name: Run route, debugger, packaging and deletion regression tests\n'),
+    ('          cp docs/neoswap-build419-memory.md build/private-test/Notes-NeoSwap-Build419.md\n',
+     '          cp docs/neoswap-build419-memory.md build/private-test/Notes-NeoSwap-Build419.md\n'
+     '          cp docs/retroarch-testflight-link-recovery.md build/private-test/Notes-RetroArch-Build420.md\n'),
+)
 for path in ARMSX2_INTEGRATION_FILES:
     reviewed = subprocess.check_output(['git', 'show', ARMSX2_INTEGRATION_SHA + ':' + path], cwd=ROOT)
     if path == '.github/workflows/neoswap-ipa.yml':
@@ -885,6 +969,9 @@ for path in ARMSX2_INTEGRATION_FILES:
             text = text.replace(old, new, 1)
         for old, new in IPA_WORKFLOW_BUILD419_LINES:
             assert text.count(old) == 1, 'Build419 metadata expected once: ' + old
+            text = text.replace(old, new, 1)
+        for old, new in IPA_WORKFLOW_BUILD420_LINES:
+            assert text.count(old) == 1, 'Build420 RetroArch workflow delta expected once: ' + old
             text = text.replace(old, new, 1)
         reviewed = text.encode('utf-8')
     elif path == 'test/armsx2_packaging_test.py':

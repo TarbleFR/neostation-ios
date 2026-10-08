@@ -58,8 +58,11 @@ Local validation completed with Flutter 3.47.2 and Swift 6.2 on Linux:
 Analysis of the changed integration returned no errors or warnings (four
 informational findings remain in existing context-handling/documentation).
 The iOS UIKit plugin has not been type-checked locally; that check and IPA
-packaging require the macOS CI runner. Remote push was blocked by automatic
-approval review, so no CI or IPA result is claimed for this candidate.
+packaging require the macOS CI runner. Remote push was initially blocked by
+automatic approval review; the maintainer authorized publication and Build420
+on 8 October. The first CI gate caught the obsolete Build419 scope contract.
+Its update admits only the reviewed RetroArch additions, preserving every
+existing native identity and gate. CI and IPA results remain pending here.
 
 `retroarch-link-check.yml` runs behavioral Flutter tests for real callback
 parsing and persistent cache preservation, serialized requests, missing and
