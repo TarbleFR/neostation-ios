@@ -26,18 +26,17 @@ void main() {
       'CREATE TABLE user_rom_folders(id INTEGER PRIMARY KEY, path TEXT UNIQUE)',
     );
     await db.execute(
-      'CREATE TABLE user_roms(id INTEGER PRIMARY KEY, rom_path TEXT UNIQUE, is_favorite INTEGER, play_time INTEGER, title TEXT)',
+      // Production user_roms has no id column (including migration v76).
+      'CREATE TABLE user_roms(rom_path TEXT NOT NULL COLLATE NOCASE UNIQUE, is_favorite INTEGER, play_time INTEGER, title TEXT)',
     );
     await db.insert('user_rom_folders', {'id': 1, 'path': '/old/roms'});
     await db.insert('user_roms', {
-      'id': 42,
       'rom_path': '/old/roms/gba/a.gba',
       'is_favorite': 1,
       'play_time': 999,
       'title': 'My title',
     });
     await db.insert('user_roms', {
-      'id': 43,
       'rom_path': '/old/roms2/b.gba',
       'is_favorite': 0,
       'play_time': 3,
@@ -50,9 +49,8 @@ void main() {
     'production SQLite relocation preserves favorites and unrelated libraries',
     () async {
       await RetroArchFolderRecovery.relocate(db, '/old/roms', '/new/roms');
-      final rows = await db.query('user_roms', orderBy: 'id');
+      final rows = await db.query('user_roms', orderBy: 'rowid');
       expect(rows.first, {
-        'id': 42,
         'rom_path': '/new/roms/gba/a.gba',
         'is_favorite': 1,
         'play_time': 999,
@@ -61,7 +59,7 @@ void main() {
       expect(rows.last['rom_path'], '/old/roms2/b.gba');
       expect((await db.query('user_rom_folders')).single['path'], '/new/roms');
       await RetroArchFolderRecovery.relocate(db, '/old/roms', '/new/roms');
-      expect(await db.query('user_roms', orderBy: 'id'), rows);
+      expect(await db.query('user_roms', orderBy: 'rowid'), rows);
     },
   );
 
@@ -69,17 +67,16 @@ void main() {
     'a path collision rolls back every update and keeps the old root',
     () async {
       await db.insert('user_roms', {
-        'id': 44,
         'rom_path': '/new/roms/gba/a.gba',
         'is_favorite': 0,
         'play_time': 0,
       });
-      final before = await db.query('user_roms', orderBy: 'id');
+      final before = await db.query('user_roms', orderBy: 'rowid');
       await expectLater(
         RetroArchFolderRecovery.relocate(db, '/old/roms', '/new/roms'),
         throwsA(isA<sqlite.SqliteException>()),
       );
-      expect(await db.query('user_roms', orderBy: 'id'), before);
+      expect(await db.query('user_roms', orderBy: 'rowid'), before);
       expect((await db.query('user_rom_folders')).single['path'], '/old/roms');
     },
   );

@@ -46,6 +46,18 @@ abstract final class RetroArchLibraryImporter {
       final id = alias['system_id'].toString();
       if (folders.containsKey(id)) add(alias['folder_name'].toString(), id);
     }
+    // Optional, backed-up repair bindings established from full .lpl paths.
+    // Never infer these bindings from a basename or a title.
+    final hasRepair = (await db.rawQuery(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='user_retroarch_repair_v1'",
+    )).isNotEmpty;
+    final repairedPaths = <String, String>{};
+    if (hasRepair) {
+      for (final row in await db.query('user_retroarch_repair_v1')) {
+        repairedPaths[row['source_path'] as String] =
+            row['target_path'] as String;
+      }
+    }
     final known = await db.query('user_roms');
     final physicalIdentities = known
         .where((row) {
@@ -67,6 +79,27 @@ abstract final class RetroArchLibraryImporter {
         final id = candidates.single;
         final virtualPath = libraryPath(system, filename);
         if (!identities.add(virtualPath)) continue;
+        final repairedPath = repairedPaths[virtualPath];
+        if (repairedPath != null) {
+          final target = await txn.query(
+            'user_roms',
+            where: 'rom_path = ?',
+            whereArgs: [repairedPath],
+          );
+          if (target.isEmpty) {
+            throw StateError(
+              'RetroArch repair binding target missing: $repairedPath',
+            );
+          }
+          await txn.insert('user_detected_systems', {
+            'app_system_id': id,
+            'actual_folder_name': folders[id],
+          }, conflictAlgorithm: ConflictAlgorithm.ignore);
+          // Preserve merged user data and the physical archive identity.
+          restored++;
+          continue;
+        }
+
         // Reuse only rows under an authoritative RetroArch bookmark. A same
         // basename in an unrelated library is never treated as this game's row.
         if (!physicalIdentities.contains((id, filename))) {

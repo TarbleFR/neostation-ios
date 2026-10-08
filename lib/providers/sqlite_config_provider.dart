@@ -1,3 +1,4 @@
+import '../services/embedded_library_recovery.dart';
 import 'dart:async';
 /* DOLPHIN_ISOLATION_BEGIN: provider_import */
 import '../services/dolphin_internal_v2_service.dart';

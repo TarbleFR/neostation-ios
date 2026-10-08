@@ -6,7 +6,7 @@ void main() {
   test('iOS launcher is RetroArch TestFlight only for general ROMs', () {
     final launcher = File('lib/services/game/game_launch_service.dart')
         .readAsStringSync();
-    expect(launcher, contains('RetroArchLibraryService.launchGameByRomPath'));
+    expect(launcher, contains('RetroArchLibraryService.launchGameWithDiagnostics'));
     expect(launcher, contains('RetroArchLibraryService.hasGameForRomPath'));
     expect(launcher, isNot(contains('ExternalFolderAccess.openInMenu(')));
     expect(launcher, isNot(contains('SharePlus.instance.share(')));

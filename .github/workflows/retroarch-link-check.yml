@@ -27,15 +27,27 @@ jobs:
         run: flutter analyze --no-fatal-infos lib/services/retroarch_library_service.dart lib/services/retroarch_library_protocol.dart lib/services/retroarch_folder_recovery.dart lib/providers/sqlite_config_provider.dart lib/screens/settings_screen/new_settings_options/directories_settings_content.dart packages/external_folder_access/lib/external_folder_access.dart test/retroarch_library_protocol_test.dart test/retroarch_library_cache_test.dart test/retroarch_folder_recovery_test.dart test/retroarch_sync_locale_test.dart lib/services/retroarch_library_importer.dart lib/services/ios_rom_library_root_resolver.dart lib/data/datasources/sqlite_database_service.dart lib/data/datasources/sqlite_service.dart lib/repositories/system_repository.dart lib/screens/systems_screen/system_content.dart test/retroarch_library_restoration_test.dart
       - name: Exercise sync, cache preservation, relocation and twelve locales
         run: flutter test test/retroarch_library_protocol_test.dart test/retroarch_library_cache_test.dart test/retroarch_folder_recovery_test.dart test/retroarch_sync_locale_test.dart test/ios_rom_library_root_resolver_test.dart test/ios_selective_rollback_test.dart test/armsx2_retroarch_routing_isolation_test.dart test/retroarch_library_restoration_test.dart test/rom_scan_symlink_alias_test.dart test/rom_scan_emulator_default_test.dart
+      - name: Exercise backed-up repair, identity bindings and launch diagnostics
+        run: |
+          flutter test test/embedded_library_recovery_test.dart test/retroarch_repair_bindings_test.dart test/retroarch_launch_diagnostics_test.dart test/library_identity_evidence_test.dart
+          python3 -m unittest test/retroarch_playlist_repair_test.py -v
   native:
     runs-on: macos-15
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Reproduce cold-scene URL loss and exercise the production handoff
+      - name: Exercise foreground handoff, expiration and delayed callbacks
         run: |
           swiftc -warnings-as-errors packages/external_folder_access/ios/Classes/RetroArchURLHandoff.swift test/retroarch_url_handoff_test.swift -o "$RUNNER_TEMP/retroarch-handoff"
           "$RUNNER_TEMP/retroarch-handoff"
           xcrun swiftc -parse -target arm64-apple-ios17.0 -sdk "$(xcrun --sdk iphoneos --show-sdk-path)" packages/external_folder_access/ios/Classes/ExternalFolderAccessPlugin.swift packages/external_folder_access/ios/Classes/RetroArchURLHandoff.swift
+      - name: Compare old and corrected transport with real UIKit on simulator
+        run: python3 tools/test_retroarch_uikit_handoff.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: retroarch-uikit-transport-${{ github.sha }}
+          path: ${{ runner.temp }}/retroarch-uikit-evidence.json
+          if-no-files-found: warn

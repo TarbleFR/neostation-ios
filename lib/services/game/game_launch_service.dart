@@ -420,19 +420,23 @@ class GameLaunchService {
         // launch path for systems RetroArch knows about, and the fallback for
         // PS2 games that are not owned by the linked ARMSX2 root.
         try {
-          final launched = await RetroArchLibraryService.launchGameByRomPath(
+          final attempt = await RetroArchLibraryService.launchGameWithDiagnostics(
             game.romPath!,
           );
-          if (launched) return GameLaunchResult.success();
+          if (attempt.accepted) return GameLaunchResult.success();
+          if (!context.mounted) return GameLaunchResult.failure('', '');
+          return GameLaunchResult.failure(
+            AppLocale.failedToLaunchRetroArch.getString(context),
+            attempt.details,
+          );
         } catch (e) {
-          // Fall through to the playlist/Open In/Share fallbacks below.
+          _log.e('RetroArch launch preparation failed: $e');
+          if (!context.mounted) return GameLaunchResult.failure('', '');
+          return GameLaunchResult.failure(
+            AppLocale.failedToLaunchRetroArch.getString(context),
+            'stage=preparationError\nerror=$e',
+          );
         }
-
-        if (!context.mounted) return GameLaunchResult.failure('', '');
-        return GameLaunchResult.failure(
-          'RetroArch TestFlight library entry not found.',
-          'Synchronize the RetroArch TestFlight library in NeoStation and try again.',
-        );
       }
 
       final configFileName = '${system.folderName}.json';

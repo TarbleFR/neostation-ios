@@ -15,6 +15,7 @@ class RetroArchSyncController {
   Completer<RetroArchSyncOutcome>? _pending;
   Timer? _timer;
   RetroArchSyncOutcome? lastOutcome;
+  Object? lastTransportError;
   bool get isPending => _pending != null;
 
   Future<RetroArchSyncOutcome> request(Future<bool> Function() send) {
@@ -23,6 +24,7 @@ class RetroArchSyncController {
     final pending = Completer<RetroArchSyncOutcome>();
     _pending = pending;
     lastOutcome = null;
+    lastTransportError = null;
     _timer = Timer(timeout, () => complete(RetroArchSyncOutcome.timedOut));
     Future<bool>.sync(send).then(
       (opened) {
@@ -32,6 +34,7 @@ class RetroArchSyncController {
       },
       onError: (Object error, StackTrace stack) {
         if (identical(_pending, pending)) {
+          lastTransportError = error;
           complete(RetroArchSyncOutcome.unavailable);
         }
       },
@@ -77,7 +80,11 @@ abstract final class RetroArchLibraryProtocol {
     List<Map<String, dynamic>> entries,
   ) {
     final indexed = <String, Map<String, dynamic>>{};
-    for (final map in entries) {
+    for (var index = 0; index < entries.length; index++) {
+      final map = entries[index];
+      // Preserve every export record. Filename aliases below are convenience
+      // lookups, never identities: two source paths can share a launch name.
+      indexed['retroarch-export-record:$index'] = map;
       final filename = (map['filename'] ?? map['titleId']) as String;
       indexed[filename] = map;
       indexed[path.basename(filename)] = map;

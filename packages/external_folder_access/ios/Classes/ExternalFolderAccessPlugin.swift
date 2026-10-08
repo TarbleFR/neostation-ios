@@ -141,27 +141,43 @@ public class ExternalFolderAccessPlugin: NSObject, FlutterPlugin, UIDocumentPick
     // MARK: - Pick
 
     private func openRetroArchUrl(call: FlutterMethodCall, result: @escaping FlutterResult) {
-        guard let args = call.arguments as? [String: Any],
+        let args = call.arguments as? [String: Any]
+        let reportErrors = args?["reportErrors"] as? Bool ?? false
+        func fail(_ reason: String) {
+            NSLog("[RetroArch handoff] %@", reason)
+            if reportErrors {
+                result(FlutterError(code: "RETROARCH_HANDOFF_FAILED", message: reason, details: nil))
+            } else { result(false) }
+        }
+        guard let args = args,
               let raw = args["url"] as? String, let target = URL(string: raw),
-              target.scheme == "retroarch", ["library", "game"].contains(target.host ?? ""),
-              retroArchBackgroundTask == .invalid else {
-            result(false)
+              target.scheme == "retroarch", ["library", "game"].contains(target.host ?? "") else {
+            fail("invalid_functional_url")
             return
         }
+        guard retroArchBackgroundTask == .invalid else { fail("handoff_already_active"); return }
         let app = UIApplication.shared
         retroArchBackgroundTask = app.beginBackgroundTask(withName: "RetroArch URL handoff") { [weak self] in
             self?.retroArchHandoff.cancel()
         }
-        guard retroArchBackgroundTask != .invalid else { result(false); return }
+        guard retroArchBackgroundTask != .invalid else { fail("background_task_unavailable"); return }
         retroArchHandoff.start(target: target,
-            open: { url, completion in app.open(url, options: [:], completionHandler: completion) },
+            open: { url, completion in
+                NSLog("[RetroArch handoff] sending host=%@ state=%ld", url.host ?? "", app.applicationState.rawValue)
+                app.open(url, options: [:]) { accepted in
+                    NSLog("[RetroArch handoff] transport accepted=%@", accepted ? "true" : "false")
+                    completion(accepted)
+                }
+            },
             schedule: { delay, action in DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: action) },
+            isForeground: { app.applicationState == .active },
             completion: { [weak self] opened in
                 if let self = self, self.retroArchBackgroundTask != .invalid {
                     app.endBackgroundTask(self.retroArchBackgroundTask)
                     self.retroArchBackgroundTask = .invalid
                 }
-                result(opened)
+                if opened { result(true) }
+                else { fail(self?.retroArchHandoff.failureReason ?? "handoff_rejected") }
             })
     }
 

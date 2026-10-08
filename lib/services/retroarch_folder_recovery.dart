@@ -40,7 +40,7 @@ abstract final class RetroArchFolderRecovery {
     await db.transaction((txn) async {
       final prefix = '${path.normalize(oldRoot)}/';
       final rows = await txn.rawQuery(
-        'SELECT id, rom_path FROM user_roms WHERE rom_path = ? OR substr(rom_path, 1, ?) = ?',
+        'SELECT rom_path FROM user_roms WHERE rom_path = ? OR substr(rom_path, 1, ?) = ?',
         [path.normalize(oldRoot), prefix.length, prefix],
       );
       for (final row in rows) {
@@ -48,9 +48,25 @@ abstract final class RetroArchFolderRecovery {
         await txn.update(
           'user_roms',
           {'rom_path': target},
-          where: 'id = ?',
-          whereArgs: [row['id']],
+          where: 'rom_path = ?',
+          whereArgs: [row['rom_path']],
         );
+      }
+      final hasRepair = (await txn.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='user_retroarch_repair_v1'",
+      )).isNotEmpty;
+      if (hasRepair) {
+        for (final row in await txn.query('user_retroarch_repair_v1')) {
+          final target = rebase(row['target_path'] as String, oldRoot, newRoot);
+          if (target != null) {
+            await txn.update(
+              'user_retroarch_repair_v1',
+              {'target_path': target},
+              where: 'source_path = ?',
+              whereArgs: [row['source_path']],
+            );
+          }
+        }
       }
       await txn.update(
         'user_rom_folders',

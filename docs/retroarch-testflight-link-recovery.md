@@ -26,7 +26,15 @@ rebasing the registered SQLite ROM roots. These defects are directly visible
 in the inspected NeoStation sources at
 `12fb62f979f5e6a2317e75e9dcfc01e268bfa018`.
 
-## Candidate behavior
+## Superseded handoff sequence
+
+The start-then-delay sequence below was the Build421 candidate, not the current
+correction. It moves the functional request into the sender's background state.
+See `retroarch-library-repair.md` and the UIKit transport regression harness for
+the replacement: one functional URL while NeoStation is active. The original
+unit fixture accepted all opens and did not model sender visibility.
+
+## Build421 candidate behavior (historical)
 
 - Open the harmless `retroarch://start` first, then send one functional URL
   to the running scene after one second. A native background task keeps this

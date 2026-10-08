@@ -17,7 +17,7 @@ void main() {
 
     final ownershipIndex = launch.indexOf('final isArmsx2OwnedRom');
     final retroFallbackIndex = launch.indexOf(
-      'RetroArchLibraryService.launchGameByRomPath',
+      'RetroArchLibraryService.launchGameWithDiagnostics',
       ownershipIndex,
     );
     expect(ownershipIndex, greaterThanOrEqualTo(0));

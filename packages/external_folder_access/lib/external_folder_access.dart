@@ -165,18 +165,23 @@ class ExternalFolderAccess {
     }
   }
 
-  /// Opens RetroArch before sending a library/game URL to its running scene.
-  /// The native handoff owns a finite background task across the app switch.
+  /// Sends one library/game URL while NeoStation is in the foreground.
+  /// No preliminary app-opening URL is sent before the actual request.
   /// True means only that iOS accepted the functional URL, not that a game
   /// launched or that a library callback arrived.
-  static Future<bool> openRetroArchUrl(String url) async {
+  static Future<bool> openRetroArchUrl(
+    String url, {
+    bool preserveErrors = false,
+  }) async {
     if (!Platform.isIOS) return false;
     try {
       return await _channel.invokeMethod<bool>('openRetroArchUrl', {
             'url': url,
+            'reportErrors': preserveErrors,
           }) ??
           false;
     } on PlatformException {
+      if (preserveErrors) rethrow;
       return false;
     }
   }

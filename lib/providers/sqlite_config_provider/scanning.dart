@@ -768,6 +768,9 @@ extension SqliteConfigScanning on SqliteConfigProvider {
       final summary = await SqliteDatabaseService.scanSystemRoms(
         system,
         nativeScanRoots,
+        embeddedContainerRoot: isNativeInternalSystem
+            ? EmbeddedLibraryRecovery.containerRoot(nativeScanRoots.first)
+            : null,
         ignoreHiddenFiles: _config.ignoreHiddenFiles,
         rootFoldersMap: effectiveRootFoldersMap,
       );

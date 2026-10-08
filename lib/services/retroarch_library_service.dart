@@ -16,6 +16,26 @@ import 'package:neostation/providers/sqlite_config_provider.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/services/diagnostics_directory.dart';
 
+enum RetroArchLaunchStage {
+  cacheEmpty,
+  entryMissing,
+  invalidEntry,
+  ambiguousEntry,
+  launchBusy,
+  handoffRejected,
+  handoffError,
+  handoffAccepted,
+}
+
+/// RetroArch's external URL protocol has no game-start acknowledgement.
+/// An accepted handoff is deliberately not a claim that a core is running.
+class RetroArchLaunchAttempt {
+  const RetroArchLaunchAttempt(this.stage, this.details);
+  final RetroArchLaunchStage stage;
+  final String details;
+  bool get accepted => stage == RetroArchLaunchStage.handoffAccepted;
+}
+
 /// Talks to RetroArch's real, confirmed URL-scheme protocol for library
 /// export and direct game launching, on the TestFlight build.
 ///
@@ -57,19 +77,43 @@ class RetroArchLibraryService {
   /// gameId/system/coreName), cached in memory after the first sync or
   /// load from disk this session.
   static Map<String, Map<String, dynamic>>? _cache;
+  static bool _launchPending = false;
 
   /// Waits for a real, validated library response. Opening the URL alone is
   /// never reported as a completed sync. Failure preserves the previous cache.
   static Future<bool> requestLibrarySync() async {
     await loadCachedLibrary();
-    final outcome = await _sync.request(
-      () => ExternalFolderAccess.openRetroArchUrl(
-        'retroarch://library?scheme=$_callbackScheme',
-      ),
+    final outcome = await _sync.request(() async {
+      final started = DateTime.now().toUtc().toIso8601String();
+      _log.i('RetroArchSync stage=requested time=$started');
+      await _writeDebugFile(
+        'retroarch_sync_status_debug.txt',
+        'time: $started\nstage: requested\ncallbackReceived: false',
+      );
+      try {
+        final accepted = await ExternalFolderAccess.openRetroArchUrl(
+          'retroarch://library?scheme=$_callbackScheme',
+          preserveErrors: true,
+        );
+        _log.i(
+          'RetroArchSync stage=transportCompleted accepted=$accepted '
+          '(does not confirm callback delivery)',
+        );
+        return accepted;
+      } catch (error) {
+        _log.e('RetroArchSync stage=transportFailed error=$error');
+        rethrow;
+      }
+    });
+    _log.i(
+      'RetroArchSync stage=finished outcome=${outcome.name} '
+      'transportError=${_sync.lastTransportError}',
     );
     await _writeDebugFile(
       'retroarch_sync_status_debug.txt',
-      'outcome: ${outcome.name}\ncacheKeys: ${_cache?.length ?? 0}',
+      'time: ${DateTime.now().toUtc().toIso8601String()}\n'
+          'outcome: ${outcome.name}\ncacheKeys: ${_cache?.length ?? 0}\n'
+          'transportError: ${_sync.lastTransportError}',
     );
     return outcome == RetroArchSyncOutcome.synced;
   }
@@ -83,6 +127,12 @@ class RetroArchLibraryService {
     }
 
     final gamesParam = uri.queryParameters['games'];
+    _log.i(
+      'RetroArchSync stage=callbackReceived '
+      'time=${DateTime.now().toUtc().toIso8601String()} '
+      'payloadCharacters=${gamesParam?.length ?? 0} '
+      'requestPending=${_sync.isPending}',
+    );
     if (gamesParam == null) {
       _log.w('RetroArchLibraryService: callback with no "games" param');
       _sync.complete(RetroArchSyncOutcome.invalid);
@@ -307,36 +357,84 @@ class RetroArchLibraryService {
   /// Attempts a genuine one-tap launch for [romPath] via RetroArch's
   /// `retroarch://game/<filename>` scheme, matching against the
   /// last-synced library by filename. Returns `true` only if a match was
-  /// found AND the URL was opened — callers should fall back to another
-  /// launch path otherwise (see GameLaunchService).
-  static Future<bool> launchGameByRomPath(String romPath) async {
+  /// found AND iOS accepted the URL. This is not a game-start acknowledgement.
+  static Future<bool> launchGameByRomPath(String romPath) async =>
+      (await launchGameWithDiagnostics(romPath)).accepted;
+
+  static Future<RetroArchLaunchAttempt> launchGameWithDiagnostics(
+    String romPath, {
+    Future<bool> Function(String)? openUrl,
+  }) async {
+    if (_launchPending) {
+      return const RetroArchLaunchAttempt(
+        RetroArchLaunchStage.launchBusy,
+        'A RetroArch launch is already awaiting its handoff.',
+      );
+    }
+    _launchPending = true;
+    try {
+      return await _launchGameWithDiagnostics(romPath, openUrl: openUrl);
+    } finally {
+      _launchPending = false;
+    }
+  }
+
+  static Future<RetroArchLaunchAttempt> _launchGameWithDiagnostics(
+    String romPath, {
+    Future<bool> Function(String)? openUrl,
+  }) async {
+    final attempt = DateTime.now().microsecondsSinceEpoch;
+    Future<RetroArchLaunchAttempt> finish(
+      RetroArchLaunchStage stage,
+      String details,
+    ) async {
+      final diagnostic =
+          'attempt=$attempt stage=${stage.name}\nromPath=$romPath\n$details';
+      _log.i('RetroArchLaunch $diagnostic');
+      await _writeDebugFile('launch_debug.txt', diagnostic);
+      return RetroArchLaunchAttempt(stage, diagnostic);
+    }
+
     if (_cache == null) await loadCachedLibrary();
     final cache = _cache;
     if (cache == null || cache.isEmpty) {
-      await _writeDebugFile(
-        'launch_debug.txt',
-        'romPath: $romPath\ncache is null or empty (no sync done yet?)',
+      return finish(
+        RetroArchLaunchStage.cacheEmpty,
+        'No persisted RetroArch export is available. Synchronize the library.',
       );
-      return false;
+    }
+    final entry = _entryForRomPath(cache, romPath);
+    if (entry == null) {
+      return finish(
+        RetroArchLaunchStage.entryMissing,
+        'cacheKeys=${cache.length}\nNo matching export entry. Synchronize the library.',
+      );
     }
 
-    final basename = path.basename(romPath);
-    final entry = _entryForRomPath(cache, romPath);
-
-    await _writeDebugFile(
-      'launch_debug.txt',
-      'romPath: $romPath\n'
-          'basename looked up: $basename\n'
-          'match found: ${entry != null}\n'
-          'matched entry: ${entry != null ? jsonEncode(entry) : "none"}\n'
-          'all cache keys (${cache.length}):\n'
-          '${cache.keys.join('\n')}',
-    );
-
-    if (entry == null) return false;
-
     final filename = (entry['filename'] ?? entry['titleId'])?.toString();
-    if (filename == null || filename.isEmpty) return false;
+    if (filename == null || filename.isEmpty) {
+      return finish(
+        RetroArchLaunchStage.invalidEntry,
+        'Export has no launch filename.',
+      );
+    }
+
+    // RetroArch's verified dispatcher takes only a filename and chooses its
+    // first match globally. A namespaced UI key cannot disambiguate that URL.
+    final matches = <String>{};
+    for (final candidate in cache.values) {
+      if ((candidate['filename'] ?? candidate['titleId']) == filename) {
+        matches.add(candidate['gameId']?.toString() ?? jsonEncode(candidate));
+      }
+    }
+    if (matches.length > 1) {
+      return finish(
+        RetroArchLaunchStage.ambiguousEntry,
+        'launchFilename=$filename\nexportRecords=${matches.length}\n'
+        'The external filename-only route cannot identify this content uniquely. '
+        'Select the exact playlist entry inside RetroArch.',
+      );
+    }
 
     final uri = Uri(
       scheme: 'retroarch',
@@ -344,11 +442,26 @@ class RetroArchLibraryService {
       pathSegments: [filename],
     );
 
+    final details =
+        'entry=${jsonEncode(entry)}\nurl=$uri\n'
+        'Content, core and BIOS validation belong to external RetroArch; '
+        'this protocol provides no game-start acknowledgement.';
+    _log.i('RetroArchLaunch attempt=$attempt stage=handoffRequested $details');
     try {
-      return await ExternalFolderAccess.openRetroArchUrl(uri.toString());
+      final opened =
+          await (openUrl ??
+              (url) => ExternalFolderAccess.openRetroArchUrl(
+                url,
+                preserveErrors: true,
+              ))(uri.toString());
+      return await finish(
+        opened
+            ? RetroArchLaunchStage.handoffAccepted
+            : RetroArchLaunchStage.handoffRejected,
+        details,
+      );
     } catch (e) {
-      _log.e('RetroArchLibraryService: failed to launch $uri: $e');
-      return false;
+      return finish(RetroArchLaunchStage.handoffError, '$details\nerror=$e');
     }
   }
 

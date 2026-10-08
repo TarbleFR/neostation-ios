@@ -1,3 +1,4 @@
+import 'package:neostation/services/embedded_library_recovery.dart';
 import '../../models/database_game_model.dart';
 import '../../models/system_model.dart';
 import '../../models/emulator_model.dart';
@@ -112,6 +113,7 @@ class SqliteDatabaseService {
     List<String> romFolders, {
     bool ignoreHiddenFiles = true,
     bool? preserveUnscannedSources,
+    String? embeddedContainerRoot,
     Map<String, Map<String, String>>? rootFoldersMap,
   }) async {
     if (system.id == null) {
@@ -122,6 +124,22 @@ class SqliteDatabaseService {
         total: 0,
         systemName: system.realName,
       );
+    }
+
+    if (embeddedContainerRoot != null) {
+      final result = EmbeddedLibraryRecovery.reconcile(
+        await SqliteService.getDatabase(),
+        systemId: system.id!,
+        folder: system.folderName,
+        currentContainer: embeddedContainerRoot,
+      );
+      _log.i(
+        'Embedded library recovery: ${result.relocated} paths, '
+        '${result.ambiguous.length} unresolved conflicts',
+      );
+      for (final value in result.ambiguous) {
+        _log.w('Embedded library recovery requires review: $value');
+      }
     }
 
     final validExtensions = await SqliteService.getExtensionsForSystem(

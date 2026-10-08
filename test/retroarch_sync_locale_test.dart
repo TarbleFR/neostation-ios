@@ -18,6 +18,7 @@ void main() {
       AppLocale.ko,
     ];
     for (final key in [
+      AppLocale.failedToLaunchRetroArch,
       AppLocale.iosRetroarchSyncing,
       AppLocale.iosRetroarchSyncTimedOut,
       AppLocale.iosRetroarchSyncEmpty,
