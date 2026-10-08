@@ -43,7 +43,7 @@ else {
     if (testMode) {
       const capabilities = await window.webContents.executeJavaScript("({webcodecs:typeof VideoDecoder!=='undefined',worklet:typeof AudioWorkletNode!=='undefined',nodeExposed:typeof require!=='undefined',logo:document.querySelector('.logo').complete,version:navigator.userAgent})");
       if (!capabilities.webcodecs || !capabilities.worklet || capabilities.nodeExposed || !capabilities.logo) throw new Error('Embedded player capabilities or isolation failed');
-      const result={version:'0.7.0',embeddedReceiver:true,embeddedPlayer:true,port:receiver.port,...capabilities};
+      const result={version:'0.8.0',embeddedReceiver:true,embeddedPlayer:true,port:receiver.port,...capabilities};
       if (reportPath) await writeFile(reportPath,JSON.stringify(result,null,2));
       console.log('NEOPLAY_EMBEDDED_APP_OK',JSON.stringify(result));
       if (smoke) { await stop(); app.exit(0); }
