@@ -43,6 +43,8 @@ jobs:
           swiftc -warnings-as-errors packages/external_folder_access/ios/Classes/RetroArchURLHandoff.swift test/retroarch_url_handoff_test.swift -o "$RUNNER_TEMP/retroarch-handoff"
           "$RUNNER_TEMP/retroarch-handoff"
           xcrun swiftc -parse -target arm64-apple-ios17.0 -sdk "$(xcrun --sdk iphoneos --show-sdk-path)" packages/external_folder_access/ios/Classes/ExternalFolderAccessPlugin.swift packages/external_folder_access/ios/Classes/RetroArchURLHandoff.swift
+      - name: Install simulator UI test project generator
+        run: command -v xcodegen || brew install xcodegen
       - name: Compare old and corrected transport with real UIKit on simulator
         run: python3 tools/test_retroarch_uikit_handoff.py
       - uses: actions/upload-artifact@v4

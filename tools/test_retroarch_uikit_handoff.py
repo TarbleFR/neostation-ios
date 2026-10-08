@@ -13,8 +13,8 @@ FIXTURE = ROOT / 'test/fixtures/retroarch_handoff'
 OUT = pathlib.Path(os.environ.get('RUNNER_TEMP', tempfile.gettempdir())) / 'retroarch-uikit-evidence.json'
 
 
-def run(*args, env=None, check=True):
-    result = subprocess.run(args, text=True, capture_output=True, env=env, timeout=240)
+def run(*args, env=None, check=True, timeout=240):
+    result = subprocess.run(args, text=True, capture_output=True, env=env, timeout=timeout)
     if check and result.returncode:
         raise RuntimeError(f'{args!r}\n{result.stdout}\n{result.stderr}')
     return result.stdout.strip()
@@ -22,10 +22,12 @@ def run(*args, env=None, check=True):
 
 def main():
     devices = json.loads(run('xcrun', 'simctl', 'list', 'devices', 'available', '-j'))['devices']
+    sdk_version = run('xcrun', '--sdk', 'iphonesimulator', '--show-sdk-version')
+    matching_runtime = 'com.apple.CoreSimulator.SimRuntime.iOS-' + sdk_version.replace('.', '-')
     device_type = None
     runtime = None
     for key, group in devices.items():
-        if 'iOS' in key:
+        if key == matching_runtime:
             for item in group:
                 if item.get('isAvailable') and 'iPhone' in item['name']:
                     runtime, device_type = key, item.get('deviceTypeIdentifier')
@@ -44,6 +46,7 @@ def main():
         with tempfile.TemporaryDirectory(prefix='retroarch-handoff-') as tmp:
             sdk = run('xcrun', '--sdk', 'iphonesimulator', '--show-sdk-path')
             target = f'{platform.machine()}-apple-ios17.0-simulator'
+            targets = {}
             for name, scheme in [('Sender', 'neostation-handoff-test'), ('Receiver', 'retroarch')]:
                 bundle = pathlib.Path(tmp) / f'{name}.app'
                 bundle.mkdir()
@@ -70,8 +73,44 @@ def main():
                     sources += [str(FIXTURE / 'LegacyRetroArchURLHandoff.swift'), str(ROOT / 'packages/external_folder_access/ios/Classes/RetroArchURLHandoff.swift')]
                 run('xcrun', '--sdk', 'iphonesimulator', 'swiftc', '-swift-version', '5', '-parse-as-library', '-module-name', name,
                     '-target', target, '-sdk', sdk, *sources, '-o', str(bundle / name))
+                targets[name] = {
+                    'type': 'application', 'platform': 'iOS', 'sources': sources,
+                    'settings': {'base': {
+                        'PRODUCT_BUNDLE_IDENTIFIER': info['CFBundleIdentifier'],
+                        'INFOPLIST_FILE': str(bundle / 'Info.plist'),
+                    }},
+                }
                 run('codesign', '--force', '--sign', '-', str(bundle))
                 run('xcrun', 'simctl', 'install', udid, str(bundle))
+            targets['ConsentTests'] = {
+                'type': 'bundle.ui-testing', 'platform': 'iOS',
+                'sources': [str(FIXTURE / 'ConsentTests.swift')],
+                'dependencies': [{'target': 'Sender'}],
+                'settings': {'base': {
+                    'PRODUCT_BUNDLE_IDENTIFIER': 'org.neostation.handofftest.consent',
+                    'GENERATE_INFOPLIST_FILE': 'YES', 'TEST_TARGET_NAME': 'Sender',
+                }},
+            }
+            project = {
+                'name': 'HandoffConsent',
+                'options': {'deploymentTarget': {'iOS': '17.0'}},
+                'settings': {'base': {'SWIFT_VERSION': '5.0', 'CODE_SIGNING_ALLOWED': 'YES', 'CODE_SIGN_IDENTITY': '-'}},
+                'targets': targets,
+                'schemes': {'HandoffConsent': {
+                    'build': {'targets': {'Sender': 'all', 'Receiver': 'all', 'ConsentTests': 'test'}},
+                    'test': {'targets': ['ConsentTests']},
+                }},
+            }
+            spec = pathlib.Path(tmp) / 'project.json'
+            spec.write_text(json.dumps(project))
+            run('xcodegen', 'generate', '--spec', str(spec), '--project', tmp)
+            print('Authorizing only the two fixture app links through XCTest', flush=True)
+            consent_log = run('xcodebuild', 'test', '-project', str(pathlib.Path(tmp) / 'HandoffConsent.xcodeproj'),
+                '-scheme', 'HandoffConsent', '-destination', 'platform=iOS Simulator,id=' + udid,
+                '-parallel-testing-enabled', 'NO', 'CODE_SIGNING_ALLOWED=YES', 'CODE_SIGN_IDENTITY=-',
+                'DEVELOPMENT_TEAM=', timeout=600)
+            print(consent_log[-2500:], flush=True)
+            evidence['fixture_links_authorized_via_ui'] = True
             sender = 'org.neostation.handofftest.sender'
             receiver = 'org.neostation.handofftest.receiver'
             sender_file = pathlib.Path(run('xcrun', 'simctl', 'get_app_container', udid, sender, 'data')) / 'Documents/result.json'

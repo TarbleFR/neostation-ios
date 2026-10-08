@@ -34,6 +34,11 @@ import UIKit
         let target = URL(string: env["HANDOFF_TARGET"]!)!
         let mode = env["HANDOFF_MODE"]!
         record(["event": "begin", "mode": mode, "state": app.applicationState.rawValue])
+        if mode == "authorize" {
+            // Consent setup only; production and baseline are tested later.
+            app.open(target, options: [:])
+            return
+        }
         backgroundTask = app.beginBackgroundTask(withName: "Handoff reproduction") {
             self.current.cancel(); self.legacy.cancel()
         }
