@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "baseline": "3ccde925351b3e59985ba466e013e87a857d6ad0",
-  "target_build": 417,
+  "target_build": 418,
   "real_device_8gib_validated": false,
   "real_device_donation_validated": false,
   "real_device_dolphin_motion_validated": false,
@@ -92,7 +92,8 @@
     "Build414: repair the canonical host broker, retain the explicit 7GiB virtual-reservation experiment, test real cleanup, preserve native pins and require exact candidate CI evidence.",
     "Build415: declare and hash the added Dart regression tests; compile injected-headroom VM tests on macOS while preserving iPhone-only OS API availability and all native evidence gates.",
     "Build416: preserve the original Dart control plane byte-for-byte after removing only the two exact reviewed compatibility aliases and shader preference; keep every exact native evidence gate.",
-    "Build417: retain the complete NeoPlay Windows 0.7.0 commit unchanged, declare its exact paths and hashes, and isolate candidate evidence by source SHA after the Build416 concurrency cancellation; iOS/Core inputs unchanged."
+    "Build417: retain the complete NeoPlay Windows 0.7.0 commit unchanged, declare its exact paths and hashes, and isolate candidate evidence by source SHA after the Build416 concurrency cancellation; iOS/Core inputs unchanged.",
+    "Build418: retain all NeoPlay Windows 0.7.0 modes and link adaptation, restore the validated low-latency Canvas 2D option, reject major-performance-caveat WebGL contexts with the existing fallback, and report measured native-fixture playback counters without altering any video/audio threshold."
   ],
   "files_sha256": {
     ".gitattributes": "93b8dd50f1120e097f797bdaf5c53342e08a4af05984137266bba82d3435bfce",
@@ -106,7 +107,7 @@
     ".github/workflows/neoswap-1gib-proof.yml": "a7cdc9223d0d230de76eb3f10a80c2a52c30bb019070cebce3941d8aca1e3f36",
     ".github/workflows/neoswap-check.yml": "96a2ead2b0c1da542448f6766babcc4654c273c547522a199204f276545310a0",
     ".github/workflows/neoswap-donation-check.yml": "1cdef32861062bb0ecefeb76fc0b4d91181aeb4917ee9442aac2fde915b49559",
-    ".github/workflows/neoswap-ipa.yml": "de3fd803d147aeecff2199b415b05137a6984371eabbf93f057362502585be1a",
+    ".github/workflows/neoswap-ipa.yml": "c463fdd14fbb69350f97fcfb1cd27f1ee66da069040c20087cd8cd3fea9f5a71",
     ".github/workflows/neoswap-relay-check.yml": "5e9cd422c34fb33e961ab129ccf1df95095893099d3d3c39a788a3db669928f3",
     ".github/workflows/neoswap-research-check.yml": "6131026ab3b51f130f1145cf5dd05dcee338452a89f6e770ec655314e38bced5",
     ".github/workflows/neoswap-vulkan-1gib-proof.yml": "709aec0b06794226c9c33450d0a44b83bb18bf8c8433da97b2db81c41190f32f",
@@ -319,7 +320,7 @@
     "tools/neoplay-receiver/index.html": "c42bb53ee39db7d97369b916ca4261f0a14e86161a8b38e5c289b37353e3bd1c",
     "tools/neoplay-receiver/package-lock.json": "92d739880ad751742d3266ed809c684a0ca35c4adfe94917fdfa93a627ac0469",
     "tools/neoplay-receiver/package.json": "3ca403a84c45fd9c1f6e986889f9d55bafdddd95d8152c0a0b82dabf077dc486",
-    "tools/neoplay-receiver/player.mjs": "833c6b489f385aba5e8bdc5fd716ee935e14baf04caa5a8b5f02929e3684be13",
+    "tools/neoplay-receiver/player.mjs": "296131c0806ff9b32d4f11feac3dcd66dd9123c7f0c1fe95b31b976a25d34caf",
     "tools/neoplay-receiver/presenter.mjs": "d0003552e2aa61b1afd6108cf4e0f481343ab20309395a4602190288b46cbcdb",
     "tools/neoplay-receiver/protocol.mjs": "0eb33923a5cb3e1ccae2a4bd878df0856d7d40ecf2c712030ce4450c1083d5da",
     "tools/neoplay-receiver/server.mjs": "7d4637ba17738b3c81364e26e1b1d8a2db4ee6024515062fc435ccca7a7f788b",
@@ -328,7 +329,7 @@
     "tools/neoplay-receiver/link-quality.mjs": "79356805f33b352d642d46b2625efa3efd27ebebbb4c7bce15f0dbb07aec1a0d",
     "tools/neoplay-receiver/neostation-logo.svg": "248b0721deb38cde88751051be76042fc91671bdeb693a1c1178baad876d3a8b",
     "tools/neoplay-receiver/windows-installer.nsi": "746795388108d28788126ade141529b9d10e5c33ca76e8d72d382a3c63cf405b",
-    "tools/neoplay-receiver/quality-renderer.mjs": "b56950ef1c921ff2a7e433dd5e1bcfc1cebdf260c87e53204c281f098bfef279",
+    "tools/neoplay-receiver/quality-renderer.mjs": "74c9c92fa13292b03f7b2fd6e2062012e2113270e29eece3c43c07eb480da465",
     "tools/neoplay-receiver/neoplay-icon.ico": "85002e8b502fc0cec18a263a110363d15ff237d5df7afdd54898c2cad3ad2be9",
     "tools/neoplay-receiver/build-windows.mjs": "7c509ec6beb2f2f45d3d1a0ae464b27fa2396c67485f98e7dc4d95a3afff3ea8",
     "tools/neoplay-receiver/neoplay-icon.png": "2414011d84a8c96a35b747498d7f60f6c32e60838acf9a056adc7ec3e672b46b",
@@ -672,7 +673,7 @@
     "test/dolphin_texture_zip_test.py": "918c2df1371dad2b2b6cb084516231adf6205c6ca7d84705cd9115f62ac648a1",
     "test/dusklight_bridge_contract_test.py": "8c5d2b55bc1bf652260209f0fa8bd8ed2d0de7625ab613a017ffc296f72bae94",
     "test/dusklight_terminal_shutdown_test.py": "00dd9f61c7a882ee1e0c25d7066bce81aa2535c2ed35a0bc1a08027a027d7399",
-    "test/import_memory_candidate_scope_test.py": "d553b496e3a336e2abcbda7a1657df1cda493778ae24fe2fbf2109d2e808edc5",
+    "test/import_memory_candidate_scope_test.py": "d21406e66ecd92fbaf86381a600a057800910f9c0261d8d3a0aa076f19458939",
     "test/jit_backend_preference_service_test.dart": "d9335110f2a86ea1521e3a104ae882bed331001bcfc33a3856c295b49e0a1831",
     "test/kartpad_display_title_test.dart": "1525c2e6913f7e62b40b78c50868599febb2b51e03b29834ee2e45474e3bde04",
     "test/kartpad_personal_pack_test.py": "88530eb99bfea9d03e57b97f63bcfc57233d75b54f2d7813d80a5f58abeafc7f",
@@ -699,7 +700,7 @@
     "test/neoplay/native_tests.swift": "0b67657d880524a861d7100db0ea2a349eb42475b811ca5183e32c2884742d7a",
     "test/neoplay/stream_policy_tests.swift": "72c700352021fddf425889170d6a52ec36602cdcab8e4f562e272852e2249c86",
     "test/neoplay/transport_tests.swift": "a72bade2f06421de9bceda9149f22279b9e931f10dc32e15d9246c24917511ab",
-    "test/neoplay_build397_integration_test.py": "f5b906fe44ea73da86bc51fda3b223e67e04b683e844aec3360a7bbdc3ecd2a1",
+    "test/neoplay_build397_integration_test.py": "9489374307775ac24e3652164389c584aafe6fdd08a6f13f4ba08f43327234c8",
     "test/neoplay_companion_contract_test.py": "d71354f2c791a94cd3b89a3164a5221cf6719f5cbd1ca007e6920093856b3154",
     "test/neoplay_companion_test.dart": "70480905495e95c5b8f0703386b1014f4af7290741af3f333247cfd52cb99ce6",
     "test/neoplay_config_test.py": "5b4498bed9665515f22e24f29120f7b5ab5e09d95bc599e06c0db3d7e0fe6a7f",
@@ -764,7 +765,7 @@
     "test/stikjit_scoped_host_test.py": "d5a397c7c17453a5584cac5ecb2390f099b2f2edd35649cb8522a9bba74e4717",
     "tools/compare_neoswap_sessions.py": "6772265dd1112da9c7a53582f6bbccfa9fed68578eb46882fe23d2dba1f2ca81",
     "tools/compare_rpcs3_neoswap_builds.py": "b95aaf1b24a43f2b020162b43a590590554b089763993631c8d8aa0e0c316461",
-    "tools/neoplay-receiver/playback-smoke.mjs": "a59f8181f8197c85e4dc1b45fe5527bbf2efeba5be8c8cf3dc7a399be6e3799c",
+    "tools/neoplay-receiver/playback-smoke.mjs": "b4b2cee40eed7e836b9394251dba0c064e68eb7ef721bcaf1845933ebc3d2552",
     "tools/neoplay-receiver/test/audio-ring.test.mjs": "a578b84033d4c7731473c4e2e7df93aaa6b573575d027461cfe43b7b4411049f",
     "tools/neoplay-receiver/test/diagnostics.test.mjs": "1cf435703338294dd28609bad359cd1ea1d82146cc164a2ed166961799ff9dff",
     "tools/neoplay-receiver/test/discovery.test.mjs": "474ca339397399620d357cd764f5e4988bd20f89f709967859333180fb8c1666",
@@ -790,7 +791,8 @@
     "tools/neoplay-receiver/test/quality-locales.test.mjs": "bf41bb67624154bb008bc0811c12ed097df21c1f394c1e0a5a2e3d706eb25569",
     "tools/neoplay-receiver/embedded-playback-smoke.mjs": "32e663094d8287857c2952678f3dcdde66ec7f36121c37fa94ee85d92657494b",
     "tools/neoplay-receiver/README-WINDOWS.txt": "e6aa1295e1befca17d1701da584586f6b1735a7cb311d282f9b389a53b28e5dd",
-    "tools/neoplay-receiver/test/link-quality.test.mjs": "56e3ef40eed796305d936c8354915f4452722b6ecf25a04a24017f8499d1f7ac"
+    "tools/neoplay-receiver/test/link-quality.test.mjs": "56e3ef40eed796305d936c8354915f4452722b6ecf25a04a24017f8499d1f7ac",
+    "docs/neoplay/BUILD418.md": "3cc749d6738932f136edd52085921becae6f8c606e620fbaa45c0f79b3bf3121"
   },
   "support_git_modes": {
     ".github/workflows/neoswap-storage-prototype.yml": "100644",
@@ -1002,7 +1004,8 @@
     "tools/neoplay-receiver/test/quality-locales.test.mjs": "100644",
     "tools/neoplay-receiver/embedded-playback-smoke.mjs": "100644",
     "tools/neoplay-receiver/README-WINDOWS.txt": "100644",
-    "tools/neoplay-receiver/test/link-quality.test.mjs": "100644"
+    "tools/neoplay-receiver/test/link-quality.test.mjs": "100644",
+    "docs/neoplay/BUILD418.md": "100644"
   },
   "rpcs3_postimages_sha256": {
     "rpcs3/Emu/CMakeLists.txt": "7ab3cd25ae4d951272fbae7236b755aed6a3354c5421743bb6230b57e254fd08",

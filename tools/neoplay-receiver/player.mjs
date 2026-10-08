@@ -58,7 +58,7 @@ function createFramesEngine(senderNeverReorders) {
   const link = new LinkQuality();
   let decodedAt = performance.now(), hardwareFallback = null, hardwareFallbacks = 0;
   let settings = null, lastKeyRequest = 0, qualityRenderer = null, qualityFallbacks = 0, qualityBlocked = false;
-  const context = canvas.getContext('2d', { alpha: false });
+  const context = canvas.getContext('2d', { alpha: false, desynchronized: true });
   video.hidden = true; canvas.hidden = false; if (sharpCanvas) sharpCanvas.hidden = true;
   function present() {
     raf = 0; if (closed) return;

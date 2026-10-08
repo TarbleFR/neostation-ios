@@ -47,7 +47,7 @@ void main() {
 export function createQualityRenderer(canvas, stage) {
   if (!canvas || typeof canvas.getContext !== 'function') return null;
   let gl;
-  try { gl = canvas.getContext('webgl2', { alpha:false, depth:false, antialias:false, preserveDrawingBuffer:false }); }
+  try { gl = canvas.getContext('webgl2', { alpha:false, depth:false, antialias:false, preserveDrawingBuffer:false, desynchronized:true, failIfMajorPerformanceCaveat:true }); }
   catch { return null; }
   if (!gl) return null;
   const compile = (type, source) => {
