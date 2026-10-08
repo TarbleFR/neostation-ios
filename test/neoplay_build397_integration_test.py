@@ -192,6 +192,17 @@ APPROVED_POST410_FILES = frozenset(REVIEWED_POST410_POSTIMAGES)
 REVIEWED_BUILD414_POSTIMAGES = {'packages/neo_swap/ios/Classes/NeoSwapMemoryManager.h': '70d6a019e0fb1f858d86b0668c12e580f9c0ed53d951fd9b737baa4cdeeb4cc6', 'packages/neo_swap/ios/Classes/NeoSwapMemoryManager.mm': '9cbfa345c126c2a235e31cfaea55697d44066b38451c7ae8b50943f1cb44f9b1', 'packages/neo_swap/ios/NeoSwapEntitlements.plist': '8fc9ab2ab65b3dfa2457a635267f9c58b489ac53d23a88bd72561c4dd5cb95b6', 'packages/neo_swap/lib/neo_swap.dart': '09239ca0e797cc48c6806d6fd319d0966341bec9e64842b3f3a5b2655c5182ab'}
 APPROVED_BUILD414_FILES = frozenset(REVIEWED_BUILD414_POSTIMAGES)
 
+# Build420: the maintainer's RetroArch TestFlight repair changes only these
+# services within the protected runtime scope. Exact postimages preserve the
+# narrow contract; every unrelated emulator/helper assertion remains active.
+REVIEWED_BUILD420_RETROARCH_POSTIMAGES = {
+    'lib/services/config_service.dart': 'ac6aefc1d972387c0253af0c9490407f0bc2abbe4a2b7716225962aeafcee80b',
+    'lib/services/retroarch_folder_recovery.dart': '447acee97839df983299c7e83d2f3172fa76e2a400fa80742d3c69dd2ccd2f33',
+    'lib/services/retroarch_library_protocol.dart': '75ed8387ea2add20bc5d40eef58b2b6670066070526ca428c412008a7dd86043',
+    'lib/services/retroarch_library_service.dart': 'cfbec4b8607b436fa7d798fc1094d4a3b346d908bf975c8362ba0b7d1d8bbfb9',
+}
+APPROVED_BUILD420_RETROARCH_FILES = frozenset(REVIEWED_BUILD420_RETROARCH_POSTIMAGES)
+
 def original(path, revision=BASE):
     return subprocess.check_output(['git', 'show', revision + ':' + path], cwd=ROOT)
 
@@ -201,8 +212,11 @@ class Build398Integration(unittest.TestCase):
         changed = set(subprocess.check_output(['git', 'diff', '--name-only', BASE, '--', *protected], cwd=ROOT).decode().splitlines())
         self.assertEqual(changed - APPROVED_RPCS3_MENU_FILES - APPROVED_MANAGED_SWAP_FILES
                          - APPROVED_SWAP_INTEGRATION_FILES - APPROVED_ARMSX2_INTEGRATION_FILES
-                         - APPROVED_BUILD409_FILES - APPROVED_POST410_FILES - APPROVED_BUILD414_FILES, set(),
-                         'Only explicitly reviewed menu, swap/ARMSX2 integrations, Build409 budget and exact post410 postimages may differ from Build396')
+                         - APPROVED_BUILD409_FILES - APPROVED_POST410_FILES - APPROVED_BUILD414_FILES
+                         - APPROVED_BUILD420_RETROARCH_FILES, set(),
+                         'Only explicitly reviewed integrations and exact post410/RetroArch postimages may differ from Build396')
+        for path, expected in REVIEWED_BUILD420_RETROARCH_POSTIMAGES.items():
+            self.assertEqual(hashlib.sha256((ROOT / path).read_bytes()).hexdigest(), expected, path)
         for path in sorted(APPROVED_ARMSX2_INTEGRATION_FILES):
             self.assertEqual((ROOT / path).read_bytes(), original(path, ARMSX2_INTEGRATION_SHA), path)
         for path in ('native/neoswap-storage/Store.h', 'native/neoswap-storage/Store.cpp',
@@ -278,13 +292,15 @@ class Build398Integration(unittest.TestCase):
         self.assertIn('version: 0.0.2+399', pubspec)
     def test_full_ipa_requires_previous_build_and_both_exact_evidence_suites(self):
         text = (ROOT/'.github/workflows/neoswap-ipa.yml').read_text()
-        self.assertIn('neostation-neoswap-neoplay-build419', text)
+        self.assertIn('neostation-neoswap-neoplay-build420', text)
         self.assertNotIn('group: neostation-neoswap-private\n', text)
         self.assertIn('run_id = 37605768644', text)
         self.assertIn("run['conclusion'] == 'success'", text)
         self.assertIn('8c63c682946b7ad736d5391086016399100c4bd9', text)
         self.assertIn("expected = 'NeoStation-NeoSwap-NeoPlay-Build-411-' + expected_sha", text)
         self.assertIn("'neoplay-check.yml',", text)
+        self.assertIn("'retroarch-link-check.yml',", text)
+        self.assertIn('Require RetroArch cold-launch and library recovery regressions', text)
         self.assertIn('head_sha={sha}', text)
         self.assertLess(text.index('Require completed Build 411'), text.index('Wait for exact-SHA validation workflows'))
         # 7 October 2026: the Build411 run record was deleted from GitHub after
@@ -393,7 +409,7 @@ class Build398Integration(unittest.TestCase):
         self.assertIn('failure = nil', request)
     def test_candidate_identity_remains_honest(self):
         data = json.loads((ROOT/'native/import-memory-candidate.json').read_text())
-        self.assertEqual(data['target_build'], 419)
+        self.assertEqual(data['target_build'], 420)
         self.assertEqual(data['neoplay_integration']['previous_build_run_id'], 37605768644)
         self.assertTrue(any(entry.startswith('Build410:') for entry in data['scope']))
         self.assertTrue(any(entry.startswith('Build411:') for entry in data['scope']))
