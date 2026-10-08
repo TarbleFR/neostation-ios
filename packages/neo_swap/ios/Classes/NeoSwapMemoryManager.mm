@@ -19,7 +19,12 @@ static uint64_t availableMemory() {
     const uint64_t value = testingAvailableMemory.load();
     if (value != UINT64_MAX) return value;
 #endif
+    #if TARGET_OS_IOS && !TARGET_OS_MACCATALYST
     return os_proc_available_memory();
+    #else
+    // macOS test headroom is injected above; iOS is the production target.
+    return 0;
+    #endif
 }
 
 // Compatibility helper for explicit virtual reservations. RPCS3 continues to

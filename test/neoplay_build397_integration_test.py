@@ -188,7 +188,7 @@ REVIEWED_POST410_POSTIMAGES = {
 APPROVED_POST410_FILES = frozenset(REVIEWED_POST410_POSTIMAGES)
 
 # Build414: retain and repair the post412 experimental helper without changing game allocators.
-REVIEWED_BUILD414_POSTIMAGES = {'packages/neo_swap/ios/Classes/NeoSwapMemoryManager.h': '70d6a019e0fb1f858d86b0668c12e580f9c0ed53d951fd9b737baa4cdeeb4cc6', 'packages/neo_swap/ios/Classes/NeoSwapMemoryManager.mm': '85732e16c0f7a4aadcc0e31b81da22578e7611d259e82b1101fe7310e8017ef8', 'packages/neo_swap/ios/NeoSwapEntitlements.plist': '8fc9ab2ab65b3dfa2457a635267f9c58b489ac53d23a88bd72561c4dd5cb95b6', 'packages/neo_swap/lib/neo_swap.dart': '09239ca0e797cc48c6806d6fd319d0966341bec9e64842b3f3a5b2655c5182ab'}
+REVIEWED_BUILD414_POSTIMAGES = {'packages/neo_swap/ios/Classes/NeoSwapMemoryManager.h': '70d6a019e0fb1f858d86b0668c12e580f9c0ed53d951fd9b737baa4cdeeb4cc6', 'packages/neo_swap/ios/Classes/NeoSwapMemoryManager.mm': '9cbfa345c126c2a235e31cfaea55697d44066b38451c7ae8b50943f1cb44f9b1', 'packages/neo_swap/ios/NeoSwapEntitlements.plist': '8fc9ab2ab65b3dfa2457a635267f9c58b489ac53d23a88bd72561c4dd5cb95b6', 'packages/neo_swap/lib/neo_swap.dart': '09239ca0e797cc48c6806d6fd319d0966341bec9e64842b3f3a5b2655c5182ab'}
 APPROVED_BUILD414_FILES = frozenset(REVIEWED_BUILD414_POSTIMAGES)
 
 def original(path, revision=BASE):
@@ -277,7 +277,7 @@ class Build398Integration(unittest.TestCase):
         self.assertIn('version: 0.0.2+399', pubspec)
     def test_full_ipa_requires_previous_build_and_both_exact_evidence_suites(self):
         text = (ROOT/'.github/workflows/neoswap-ipa.yml').read_text()
-        self.assertIn('neostation-neoswap-neoplay-build414', text)
+        self.assertIn('neostation-neoswap-neoplay-build415', text)
         self.assertNotIn('group: neostation-neoswap-private\n', text)
         self.assertIn('run_id = 37605768644', text)
         self.assertIn("run['conclusion'] == 'success'", text)
@@ -296,7 +296,7 @@ class Build398Integration(unittest.TestCase):
         self.assertIn("if 'Build 411' in row['name'] and row['status'] != 'completed']", text)
         self.assertIn('probe.check_returncode()', text)
         subprocess.run([sys.executable, str(ROOT / 'test/neoswap_ipa_previous_build_gate_test.py')], cwd=ROOT, check=True, timeout=60)
-        self.assertIn('cp docs/neoplay/BUILD414.md build/private-test/Notes-NeoPlay-Build414.md', text)
+        self.assertIn('cp docs/neoplay/BUILD415.md build/private-test/Notes-NeoPlay-Build415.md', text)
         # The Build412 Core (writer-lock attribution): its inputs no longer match the Build411 Core pin.
         self.assertIn("RPCS3_CORE_HOST_SHA: afb33454db50236485bd5ec963a722dcb5f65610", text)
         self.assertIn("RPCS3_CORE_RUN_ID: '37620034517'", text)
@@ -391,7 +391,7 @@ class Build398Integration(unittest.TestCase):
         self.assertIn('failure = nil', request)
     def test_candidate_identity_remains_honest(self):
         data = json.loads((ROOT/'native/import-memory-candidate.json').read_text())
-        self.assertEqual(data['target_build'], 414)
+        self.assertEqual(data['target_build'], 415)
         self.assertEqual(data['neoplay_integration']['previous_build_run_id'], 37605768644)
         self.assertTrue(any(entry.startswith('Build410:') for entry in data['scope']))
         self.assertTrue(any(entry.startswith('Build411:') for entry in data['scope']))

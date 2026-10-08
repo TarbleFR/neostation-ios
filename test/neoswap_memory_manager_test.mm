@@ -22,7 +22,7 @@ int main() {
         [NeoSwapMemoryManager setTestingAvailableMemory:128 * MiB];
         NeoSwapMemoryManager* manager = [[NeoSwapMemoryManager alloc] init];
         assert([manager initializeMemorySystem]);
-        assert([manager memoryStatistics][@"reservedMemory"].unsignedLongLongValue == 0);
+        assert([[manager memoryStatistics][@"reservedMemory"] unsignedLongLongValue] == 0);
         assert(![manager allocateMaximumMemory:0]);
         assert(![manager allocateMaximumMemory:UINT64_MAX]);
         [NeoSwapMemoryManager setTestingAvailableMemory:16ULL * 1024 * MiB];
@@ -37,13 +37,13 @@ int main() {
         const uint64_t first = addresses[0].unsignedLongLongValue;
         const uint64_t second = addresses[1].unsignedLongLongValue;
         assert(mapped(first) && mapped(second));
-        assert([manager memoryStatistics][@"reservedMemory"].unsignedLongLongValue == 3 * MiB);
+        assert([[manager memoryStatistics][@"reservedMemory"] unsignedLongLongValue] == 3 * MiB);
         [manager releaseMemory:MiB]; // complete last private reservation
         assert(mapped(first) && !mapped(second));
-        assert([manager memoryStatistics][@"reservedMemory"].unsignedLongLongValue == MiB);
+        assert([[manager memoryStatistics][@"reservedMemory"] unsignedLongLongValue] == MiB);
         [manager releaseMemory:UINT64_MAX];
         assert(!mapped(first));
-        assert([manager memoryStatistics][@"reservedMemory"].unsignedLongLongValue == 0);
+        assert([[manager memoryStatistics][@"reservedMemory"] unsignedLongLongValue] == 0);
         assert([manager testingReservationAddresses].count == 0);
         assert([manager memoryStatistics][@"residentMemory"] == NSNull.null);
         [manager releaseMemory:UINT64_MAX]; // repeated cleanup is harmless

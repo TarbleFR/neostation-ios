@@ -12,7 +12,7 @@ BASE = '3ccde925351b3e59985ba466e013e87a857d6ad0'
 MANIFEST_PATH = 'native/import-memory-candidate.json'
 manifest = json.loads((ROOT / MANIFEST_PATH).read_text())
 assert manifest['baseline'] == BASE
-assert manifest['target_build'] == 414
+assert manifest['target_build'] == 415
 assert manifest['swap_research']['branch'] == 'swap'
 assert manifest['swap_research']['scope'] == 'RPCS3 only'
 # Build409: relay owner 1 serves identifiable host allocations of the same
@@ -265,6 +265,8 @@ PRODUCTION_FILES = {
     'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm',
 }
 SUPPORT_FILES = {
+    'test/neo_swap_channel_test.dart',
+    'docs/neoplay/BUILD415.md',
     'docs/neoplay/BUILD414.md',
     'test/neoswap_memory_manager_test.mm',
     'packages/neo_swap/ios/NeoSwapEntitlements.plist',
@@ -827,16 +829,16 @@ ARMSX2_PACKAGING_TEST_BUILD412_LINES = (
      "    caller=os.environ.get('GITHUB_WORKFLOW_REF','').split('@',1)[0].rsplit('/',1)[-1]\n"
      "    for name in (caller,) if caller in ('ios-ci.yml','neoswap-ipa.yml') else ('ios-ci.yml','neoswap-ipa.yml'):\n"),
 )
-# Build414: exact candidate labels and release notes; native pins and gates stay byte-identical.
-IPA_WORKFLOW_BUILD414_LINES = (
-    ('name: NeoStation NeoSwap + NeoPlay private • Build 412\n', 'name: NeoStation NeoSwap + NeoPlay private • Build 414\n'),
-    ('run-name: NeoStation NeoSwap + NeoPlay private • Build 412 • ${{ github.sha }}\n', 'run-name: NeoStation NeoSwap + NeoPlay private • Build 414 • ${{ github.sha }}\n'),
-    ("        default: '412'\n", "        default: '414'\n"),
-    ('  group: neostation-neoswap-neoplay-build412\n', '  group: neostation-neoswap-neoplay-build414\n'),
-    ('    name: Neostation iOS 0.0.2 private IPA (412)\n', '    name: Neostation iOS 0.0.2 private IPA (414)\n'),
-    ("      BUILD_NUMBER: ${{ inputs.build_number || '412' }}\n", "      BUILD_NUMBER: ${{ inputs.build_number || '414' }}\n"),
-    ('      ARTIFACT_NAME: NeoStation-NeoSwap-NeoPlay-Build-412-${{ github.sha }}\n', '      ARTIFACT_NAME: NeoStation-NeoSwap-NeoPlay-Build-414-${{ github.sha }}\n'),
-    ('          cp docs/neoplay/BUILD412.md build/private-test/Notes-NeoPlay-Build412.md\n', '          cp docs/neoplay/BUILD414.md build/private-test/Notes-NeoPlay-Build414.md\n'),
+# Build415: exact candidate labels and release notes; native pins and gates stay byte-identical.
+IPA_WORKFLOW_BUILD415_LINES = (
+    ('name: NeoStation NeoSwap + NeoPlay private • Build 412\n', 'name: NeoStation NeoSwap + NeoPlay private • Build 415\n'),
+    ('run-name: NeoStation NeoSwap + NeoPlay private • Build 412 • ${{ github.sha }}\n', 'run-name: NeoStation NeoSwap + NeoPlay private • Build 415 • ${{ github.sha }}\n'),
+    ("        default: '412'\n", "        default: '415'\n"),
+    ('  group: neostation-neoswap-neoplay-build412\n', '  group: neostation-neoswap-neoplay-build415\n'),
+    ('    name: Neostation iOS 0.0.2 private IPA (412)\n', '    name: Neostation iOS 0.0.2 private IPA (415)\n'),
+    ("      BUILD_NUMBER: ${{ inputs.build_number || '412' }}\n", "      BUILD_NUMBER: ${{ inputs.build_number || '415' }}\n"),
+    ('      ARTIFACT_NAME: NeoStation-NeoSwap-NeoPlay-Build-412-${{ github.sha }}\n', '      ARTIFACT_NAME: NeoStation-NeoSwap-NeoPlay-Build-415-${{ github.sha }}\n'),
+    ('          cp docs/neoplay/BUILD412.md build/private-test/Notes-NeoPlay-Build412.md\n', '          cp docs/neoplay/BUILD415.md build/private-test/Notes-NeoPlay-Build415.md\n'),
 )
 for path in ARMSX2_INTEGRATION_FILES:
     reviewed = subprocess.check_output(['git', 'show', ARMSX2_INTEGRATION_SHA + ':' + path], cwd=ROOT)
@@ -860,8 +862,8 @@ for path in ARMSX2_INTEGRATION_FILES:
         for old, new in IPA_WORKFLOW_BUILD412_PURGED_INPUT_LINES:
             assert text.count(old) == 1, 'Build412 purged-input workflow line expected once: ' + old
             text = text.replace(old, new, 1)
-        for old, new in IPA_WORKFLOW_BUILD414_LINES:
-            assert text.count(old) == 1, 'Build414 metadata expected once: ' + old
+        for old, new in IPA_WORKFLOW_BUILD415_LINES:
+            assert text.count(old) == 1, 'Build415 metadata expected once: ' + old
             text = text.replace(old, new, 1)
         reviewed = text.encode('utf-8')
     elif path == 'test/armsx2_packaging_test.py':

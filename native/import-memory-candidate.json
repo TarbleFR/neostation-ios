@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "baseline": "3ccde925351b3e59985ba466e013e87a857d6ad0",
-  "target_build": 414,
+  "target_build": 415,
   "real_device_8gib_validated": false,
   "real_device_donation_validated": false,
   "real_device_dolphin_motion_validated": false,
@@ -89,7 +89,8 @@
     "Post410 PCM continuity: preserve the session-owned converter and sample clock across video encoder replacement, acknowledge actual initial CONFIG forwarding before PCM, count initial unplaceable samples, and cancel audio separately on its existing queue. Native tests cover transition continuity, 44.1 kHz conversion, configuration refusal, cancellation and relaunch. No added queue, thread or audio buffer. The historical 300 ms tier gap is reproduced from native fixtures; new native CI and physical iPhone validation remain required.",
     "Build411: one NeoPlay PCM session across video tiers (sender), receiver reuses its engine, audio node and decoded pictures across configurations and resizes; SPU warmup gated by llvm_precompilation with loading/gameplay telemetry; NeoSwap ready-only acquisition, deferred bounded retirement and incremental donor preparation; Vulkan proof ledger wait aligned with the heartbeat tolerance; RPCS3 Core run 37595624383 on d9589fa2; no physical iPhone validation.",
     "Build412: God of War III cycle (7 October 2026): overlay draws device RAM and NeoSwap only; 30 fps hold measured in the performance summary; SPUPROF/RANGELOCKPROF exported, boot policy, MLAA bypass, renderer (MoltenVK) and host CPU topology kept as milestones; Core run 37620034517 on afb33454 attributes vm::writer_lock to its callers and counts rsx::thread; GoW3 profile sets Accurate SPU Reservations false and Frame limit 30 as measured hypotheses; no physical iPhone validation.",
-    "Build414: repair the canonical host broker, retain the explicit 7GiB virtual-reservation experiment, test real cleanup, preserve native pins and require exact candidate CI evidence."
+    "Build414: repair the canonical host broker, retain the explicit 7GiB virtual-reservation experiment, test real cleanup, preserve native pins and require exact candidate CI evidence.",
+    "Build415: declare and hash the added Dart regression tests; compile injected-headroom VM tests on macOS while preserving iPhone-only OS API availability and all native evidence gates."
   ],
   "files_sha256": {
     ".gitattributes": "93b8dd50f1120e097f797bdaf5c53342e08a4af05984137266bba82d3435bfce",
@@ -103,7 +104,7 @@
     ".github/workflows/neoswap-1gib-proof.yml": "a7cdc9223d0d230de76eb3f10a80c2a52c30bb019070cebce3941d8aca1e3f36",
     ".github/workflows/neoswap-check.yml": "96a2ead2b0c1da542448f6766babcc4654c273c547522a199204f276545310a0",
     ".github/workflows/neoswap-donation-check.yml": "1cdef32861062bb0ecefeb76fc0b4d91181aeb4917ee9442aac2fde915b49559",
-    ".github/workflows/neoswap-ipa.yml": "8041796bcc3e412b8b4d7a8750a9fb1d5d156bb7da21c0cc21a48a244b4ad130",
+    ".github/workflows/neoswap-ipa.yml": "700bcb9bd9227fa9fee849d7b426a8b8814c8d8d713d7626d9586bea546e39ce",
     ".github/workflows/neoswap-relay-check.yml": "5e9cd422c34fb33e961ab129ccf1df95095893099d3d3c39a788a3db669928f3",
     ".github/workflows/neoswap-research-check.yml": "6131026ab3b51f130f1145cf5dd05dcee338452a89f6e770ec655314e38bced5",
     ".github/workflows/neoswap-vulkan-1gib-proof.yml": "709aec0b06794226c9c33450d0a44b83bb18bf8c8433da97b2db81c41190f32f",
@@ -321,7 +322,7 @@
     "tools/neoplay-receiver/protocol.mjs": "0eb33923a5cb3e1ccae2a4bd878df0856d7d40ecf2c712030ce4450c1083d5da",
     "tools/neoplay-receiver/server.mjs": "4c864e3bc2c847633c303103cc2cd6498cabd17c1eae2b3e80c74762523c82cd",
     "packages/neo_swap/ios/Classes/NeoSwapMemoryManager.h": "70d6a019e0fb1f858d86b0668c12e580f9c0ed53d951fd9b737baa4cdeeb4cc6",
-    "packages/neo_swap/ios/Classes/NeoSwapMemoryManager.mm": "85732e16c0f7a4aadcc0e31b81da22578e7611d259e82b1101fe7310e8017ef8"
+    "packages/neo_swap/ios/Classes/NeoSwapMemoryManager.mm": "9cbfa345c126c2a235e31cfaea55697d44066b38451c7ae8b50943f1cb44f9b1"
   },
   "git_modes": {
     ".gitattributes": "100644",
@@ -647,7 +648,7 @@
     "test/dolphin_texture_zip_test.py": "918c2df1371dad2b2b6cb084516231adf6205c6ca7d84705cd9115f62ac648a1",
     "test/dusklight_bridge_contract_test.py": "8c5d2b55bc1bf652260209f0fa8bd8ed2d0de7625ab613a017ffc296f72bae94",
     "test/dusklight_terminal_shutdown_test.py": "00dd9f61c7a882ee1e0c25d7066bce81aa2535c2ed35a0bc1a08027a027d7399",
-    "test/import_memory_candidate_scope_test.py": "19ec6bbe6732c1b6b57c42025edbb92799e5e2d7a64603adb7d7de066d6e90e7",
+    "test/import_memory_candidate_scope_test.py": "ccb24db751aab3b2d426f0b7b14249b1448f1474e4527f03d7fbda4ede724e2a",
     "test/jit_backend_preference_service_test.dart": "d9335110f2a86ea1521e3a104ae882bed331001bcfc33a3856c295b49e0a1831",
     "test/kartpad_display_title_test.dart": "1525c2e6913f7e62b40b78c50868599febb2b51e03b29834ee2e45474e3bde04",
     "test/kartpad_personal_pack_test.py": "88530eb99bfea9d03e57b97f63bcfc57233d75b54f2d7813d80a5f58abeafc7f",
@@ -674,7 +675,7 @@
     "test/neoplay/native_tests.swift": "0b67657d880524a861d7100db0ea2a349eb42475b811ca5183e32c2884742d7a",
     "test/neoplay/stream_policy_tests.swift": "72c700352021fddf425889170d6a52ec36602cdcab8e4f562e272852e2249c86",
     "test/neoplay/transport_tests.swift": "a72bade2f06421de9bceda9149f22279b9e931f10dc32e15d9246c24917511ab",
-    "test/neoplay_build397_integration_test.py": "79bf5395dd08275c99aa50ba3c4d11340521c79b85fcf88e2005741f771bb0a8",
+    "test/neoplay_build397_integration_test.py": "fc283a4557418a33beb4054fb6ad6b5a05dfa46e967ac268710481a51b7f43cb",
     "test/neoplay_companion_contract_test.py": "d71354f2c791a94cd3b89a3164a5221cf6719f5cbd1ca007e6920093856b3154",
     "test/neoplay_companion_test.dart": "70480905495e95c5b8f0703386b1014f4af7290741af3f333247cfd52cb99ce6",
     "test/neoplay_config_test.py": "5b4498bed9665515f22e24f29120f7b5ab5e09d95bc599e06c0db3d7e0fe6a7f",
@@ -754,8 +755,10 @@
     "build-utils/restore_kartpad_donor_from_ipa.py": "5896b11efa346eeea0fe4f084fd30aa3c05864ccb4ba3d34fccafff4cda0d164",
     "test/kartpad_donor_restore_test.py": "55f1a2d12df59f20c4341b32942f00a5c014e59394898d66abc9a9097726466f",
     "docs/neoplay/BUILD414.md": "f4990483bd5d44d9a53e24116764cef6c74b63e8bcf248be2b8742845b342515",
-    "test/neoswap_memory_manager_test.mm": "e385e3d50ca4c7b9d9deadaebb774ce3c287e3751d682f6e1961ee267e6b7021",
-    "packages/neo_swap/ios/NeoSwapEntitlements.plist": "8fc9ab2ab65b3dfa2457a635267f9c58b489ac53d23a88bd72561c4dd5cb95b6"
+    "test/neoswap_memory_manager_test.mm": "dd742556d96af2334aed7c134c374d5c87a990f3cdfd7a47c76668f52e5e4655",
+    "packages/neo_swap/ios/NeoSwapEntitlements.plist": "8fc9ab2ab65b3dfa2457a635267f9c58b489ac53d23a88bd72561c4dd5cb95b6",
+    "test/neo_swap_channel_test.dart": "7a6cc13576a2ac59cb92a40d9ed1e50c2b97e593c1ff392989b33201ab91a6e5",
+    "docs/neoplay/BUILD415.md": "7add9052df6d2c25481e74145ef7756f549c0222c6938f9f90efa22793eda8be"
   },
   "support_git_modes": {
     ".github/workflows/neoswap-storage-prototype.yml": "100644",
@@ -957,7 +960,9 @@
     "test/kartpad_donor_restore_test.py": "100644",
     "docs/neoplay/BUILD414.md": "100644",
     "test/neoswap_memory_manager_test.mm": "100644",
-    "packages/neo_swap/ios/NeoSwapEntitlements.plist": "100644"
+    "packages/neo_swap/ios/NeoSwapEntitlements.plist": "100644",
+    "test/neo_swap_channel_test.dart": "100644",
+    "docs/neoplay/BUILD415.md": "100644"
   },
   "rpcs3_postimages_sha256": {
     "rpcs3/Emu/CMakeLists.txt": "7ab3cd25ae4d951272fbae7236b755aed6a3354c5421743bb6230b57e254fd08",
