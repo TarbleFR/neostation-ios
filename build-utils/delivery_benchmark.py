@@ -58,6 +58,24 @@ def check_cache():
     if previous != cache_inputs():
         raise ValueError('Cached compilation inputs, SDK or secret defines differ')
 
+def source_times(restore=False):
+    """Preserve metadata only after verifying the exact tracked source bytes."""
+    manifest=ROOT/'build/fast-native/source-times.json'
+    if restore:
+        records=json.loads(manifest.read_text())
+        for name,record in records.items():
+            path=ROOT/name
+            if path.is_symlink() or not path.is_file() or sha(path.read_bytes())!=record['sha256']:
+                raise ValueError('Cached source identity changed: '+name)
+        for name,record in records.items():
+            os.utime(ROOT/name,ns=(record['mtimeNS'],record['mtimeNS']))
+    else:
+        names=subprocess.check_output(['git','ls-files','-z','lib','packages','native','assets','pubspec.yaml','pubspec.lock'],cwd=ROOT).decode().split('\0')
+        records={name:{'sha256':sha((ROOT/name).read_bytes()),'mtimeNS':(ROOT/name).stat().st_mtime_ns}
+                 for name in names if name and (ROOT/name).is_file() and not (ROOT/name).is_symlink()}
+        manifest.parent.mkdir(parents=True,exist_ok=True)
+        manifest.write_text(json.dumps(records,sort_keys=True)+'\n')
+
 def payload_fingerprint(data):
     """Seal code/data sections and ABI metadata; code signatures may differ."""
     if data[:4] != b'\xcf\xfa\xed\xfe':
@@ -134,4 +152,6 @@ def report():
     print(json.dumps({'mode':result['mode'],'phases':rows},indent=2))
 
 if __name__ == '__main__':
-    {'environment':environment,'record-inputs':record_inputs,'check-cache':check_cache,'seal':seal,'report':report}[sys.argv[1]]()
+    {'environment':environment,'record-inputs':record_inputs,'check-cache':check_cache,
+     'record-source-times':source_times,'restore-source-times':lambda:source_times(True),
+     'seal':seal,'report':report}[sys.argv[1]]()

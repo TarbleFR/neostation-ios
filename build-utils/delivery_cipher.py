@@ -11,6 +11,9 @@ import tempfile
 
 ROOT=Path(__file__).resolve().parents[1]
 CACHE_PATHS=['ios','build/ios/DolphinDerivedData','build/stikjit-current',
+ 'build/ios/Release-iphoneos','build/native_assets',
+ 'packages/neo_swap/ios/Classes/Storage','packages/neo_swap/ios/Classes/Relay',
+ 'packages/neo_swap/ios/Classes/Donation',
  'build/dolphin-ci','build/fast-native','build/ruby-gems','.dart_tool',
  'packages/dolphin_internal_bridge/ios/Frameworks','packages/dolphin_internal_bridge/ios/TouchResources',
  'packages/stikjit_bridge/ios/Frameworks','packages/dolphin_jit_helper/ios/Frameworks',

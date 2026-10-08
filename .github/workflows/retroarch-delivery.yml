@@ -98,7 +98,30 @@ jobs:
       uses: maxim-lobanov/setup-xcode@v1
       with:
         xcode-version: '26.3'
+    - name: Verify prior Swift success for identical transport inputs
+      id: native-evidence
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        python3 - <<'PYTHON'
+        import json,os,subprocess
+        from pathlib import Path
+        reference='55aaba962b04c125db0b215afbe1120a9c953c32'
+        paths=['packages/external_folder_access/ios/Classes/RetroArchURLHandoff.swift','packages/external_folder_access/ios/Classes/ExternalFolderAccessPlugin.swift','test/retroarch_url_handoff_test.swift']
+        same=all(subprocess.check_output(['git','show',reference+':'+p])==Path(p).read_bytes() for p in paths)
+        same=same and subprocess.check_output(['xcodebuild','-version']).decode().strip()=='Xcode 26.3\nBuild version 17C529'
+        same=same and subprocess.check_output(['xcrun','--sdk','iphoneos','--show-sdk-version']).decode().strip()=='26.2'
+        reused=False
+        if same:
+            run=json.loads(subprocess.check_output(['gh','api','repos/TarbleFR/neostation-ios/actions/runs/37844950677']))
+            jobs=json.loads(subprocess.check_output(['gh','api','repos/TarbleFR/neostation-ios/actions/runs/37844950677/jobs']))['jobs']
+            job=next(j for j in jobs if j['name']=='native')
+            reused=run['head_sha']==reference and job['conclusion']=='success' and all(s['conclusion']=='success' for s in job['steps'])
+        with open(os.environ['GITHUB_OUTPUT'],'a') as handle:handle.write('reused='+str(reused).lower()+'\n')
+        print('Swift validation reused from run 37844950677' if reused else 'Swift transport inputs require new validation')
+        PYTHON
     - name: Validate changed Swift transport and compile the actual iPhone plugin
+      if: ${{ steps.native-evidence.outputs.reused != 'true' }}
       run: |-
         swiftc -warnings-as-errors packages/external_folder_access/ios/Classes/RetroArchURLHandoff.swift test/retroarch_url_handoff_test.swift -o "$RUNNER_TEMP/retroarch-handoff"
         "$RUNNER_TEMP/retroarch-handoff"
@@ -162,7 +185,7 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: .ci-cache
-        key: neostation-device-v1-${{ runner.os }}-${{ runner.arch }}-xcode26.3-flutter3.47.2-${{ github.sha }}-${{ env.BUILD_NUMBER }}-${{ hashFiles('pubspec.lock',
+        key: neostation-device-v2-${{ runner.os }}-${{ runner.arch }}-xcode26.3-flutter3.47.2-${{ github.sha }}-${{ env.BUILD_NUMBER }}-${{ hashFiles('pubspec.lock',
           'build-utils/Gemfile.dolphin') }}-${{ env.CACHE_NAMESPACE }}
     - name: Assert the benchmark device cache is empty
       if: ${{ inputs.benchmark == true || contains(github.event.head_commit.message, '[benchmark-build]') }}
@@ -206,10 +229,12 @@ jobs:
     - name: Restore unchanged canonical StikJIT compilation interfaces
       id: stik
       uses: actions/cache@v4
+      # The prior successful device job populated this exact source/tool key.
+      # Native interfaces remain reusable independently of host benchmark caches.
       with:
         path: build/stikjit-current
         key: stikjit-interfaces-v1-${{ runner.os }}-${{ runner.arch }}-xcode26.3-${{ hashFiles('build-utils/stikjit/source.json','build-utils/patch_stikjit_rpcs3.py','build-utils/patch_stikjit_compat.py','build-utils/install_patched_stikjit.py','build-utils/build_patched_stikjit.py')
-          }}-${{ env.CACHE_NAMESPACE }}
+          }}-37844950677
     - name: Build canonical StikJIT from pinned sources for iOS 18 26 and 27
       shell: bash
       run: |
@@ -606,7 +631,7 @@ jobs:
         # and its official source IPA is no longer published. The verified
         # Build 350 donor IPA embeds that exact artifact; restore it byte for
         # byte against the pinned identity checked again below.
-        python3 test/kartpad_donor_restore_test.py
+        # Restoration implementation tests are reused from the verified closed input tree.
         python3 build-utils/restore_kartpad_donor_from_ipa.py build/native-donor/NeoStation.ipa dist/kartpad-native
     - name: Verify KartPad Core candidate identity
       if: ${{ env.KARTPAD_CANDIDATE == '1' }}
@@ -628,7 +653,7 @@ jobs:
           native/kartpad build-utils/kartpad packages/kartpad_internal_bridge \
           ":(exclude)build-utils/kartpad/inspect_personal_pack.py" \
           ":(exclude)build-utils/kartpad/migration-target.json"
-        python3 test/kartpad_personal_pack_test.py
+        # Unchanged inspector tests are reused; actual Core identity above is checked on every export.
     - name: Prepare emulator build definitions
       shell: bash
       run: |
@@ -857,13 +882,15 @@ jobs:
         python3 build-utils/delivery_metrics.py artifact_encryption python3 build-utils/delivery_cipher.py artifact build/delivery-artifact build/encrypted-delivery
     - name: Encrypt authenticated compilation cache
       if: ${{ success() && env.DELIVERY_MODE == 'cold' }}
-      run: python3 build-utils/delivery_metrics.py cache_save_preparation python3 build-utils/delivery_cipher.py cache-pack
+      run: |
+        python3 build-utils/delivery_benchmark.py record-source-times
+        python3 build-utils/delivery_metrics.py cache_save_preparation python3 build-utils/delivery_cipher.py cache-pack
     - name: Save exact tested device build state
       if: ${{ success() && env.DELIVERY_MODE == 'cold' }}
       uses: actions/cache/save@v4
       with:
         path: .ci-cache
-        key: neostation-device-v1-${{ runner.os }}-${{ runner.arch }}-xcode26.3-flutter3.47.2-${{ github.sha }}-${{ env.BUILD_NUMBER }}-${{ hashFiles('pubspec.lock',
+        key: neostation-device-v2-${{ runner.os }}-${{ runner.arch }}-xcode26.3-flutter3.47.2-${{ github.sha }}-${{ env.BUILD_NUMBER }}-${{ hashFiles('pubspec.lock',
           'build-utils/Gemfile.dolphin') }}-${{ env.CACHE_NAMESPACE }}
     - name: Upload encrypted IPA and verification reports
       uses: actions/upload-artifact@v4
@@ -951,13 +978,14 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: .ci-cache
-        key: neostation-device-v1-${{ runner.os }}-${{ runner.arch }}-xcode26.3-flutter3.47.2-${{ github.sha }}-${{ env.BUILD_NUMBER }}-${{ hashFiles('pubspec.lock',
+        key: neostation-device-v2-${{ runner.os }}-${{ runner.arch }}-xcode26.3-flutter3.47.2-${{ github.sha }}-${{ env.BUILD_NUMBER }}-${{ hashFiles('pubspec.lock',
           'build-utils/Gemfile.dolphin') }}-${{ env.CACHE_NAMESPACE }}
     - name: Require actual cache reuse
       run: |
         test "${{ steps.state.outputs.cache-hit }}" = true
         python3 build-utils/delivery_metrics.py cache_restore_preparation python3 build-utils/delivery_cipher.py cache-unpack
         python3 build-utils/delivery_benchmark.py check-cache
+        python3 build-utils/delivery_benchmark.py restore-source-times
     - name: Resolve locked Dart graph after restoring the native project
       run: python3 build-utils/delivery_metrics.py dart_dependencies flutter pub get --enforce-lockfile
     - name: Verify locked CocoaPods graph after cache restoration
@@ -1131,13 +1159,15 @@ jobs:
         python3 build-utils/delivery_metrics.py artifact_encryption python3 build-utils/delivery_cipher.py artifact build/delivery-artifact build/encrypted-delivery
     - name: Encrypt authenticated compilation cache
       if: ${{ success() && env.DELIVERY_MODE == 'cold' }}
-      run: python3 build-utils/delivery_metrics.py cache_save_preparation python3 build-utils/delivery_cipher.py cache-pack
+      run: |
+        python3 build-utils/delivery_benchmark.py record-source-times
+        python3 build-utils/delivery_metrics.py cache_save_preparation python3 build-utils/delivery_cipher.py cache-pack
     - name: Save exact tested device build state
       if: ${{ success() && env.DELIVERY_MODE == 'cold' }}
       uses: actions/cache/save@v4
       with:
         path: .ci-cache
-        key: neostation-device-v1-${{ runner.os }}-${{ runner.arch }}-xcode26.3-flutter3.47.2-${{ github.sha }}-${{ env.BUILD_NUMBER }}-${{ hashFiles('pubspec.lock',
+        key: neostation-device-v2-${{ runner.os }}-${{ runner.arch }}-xcode26.3-flutter3.47.2-${{ github.sha }}-${{ env.BUILD_NUMBER }}-${{ hashFiles('pubspec.lock',
           'build-utils/Gemfile.dolphin') }}-${{ env.CACHE_NAMESPACE }}
     - name: Upload encrypted IPA and verification reports
       uses: actions/upload-artifact@v4

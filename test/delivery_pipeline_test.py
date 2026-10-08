@@ -56,6 +56,21 @@ class DeliveryPipeline(unittest.TestCase):
         original=header+segment+section+version+b'ABCD'
         self.assertNotEqual(benchmark.payload_fingerprint(original),benchmark.payload_fingerprint(original[:-1]+b'E'))
 
+    def test_source_metadata_restoration_requires_identical_bytes(self):
+        benchmark=module('delivery_benchmark')
+        with tempfile.TemporaryDirectory() as temp:
+            folder=Path(temp);(folder/'native').mkdir()
+            source=folder/'native/fixture.cpp';source.write_text('verified source')
+            subprocess.run(['git','init','-q',str(folder)],check=True)
+            subprocess.run(['git','-C',str(folder),'add','native'],check=True)
+            benchmark.ROOT=folder
+            before=source.stat().st_mtime_ns;benchmark.source_times()
+            os.utime(source,ns=(before+1000000000,before+1000000000))
+            benchmark.source_times(True)
+            self.assertEqual(source.stat().st_mtime_ns,before)
+            source.write_text('changed source')
+            with self.assertRaisesRegex(ValueError,'source identity changed'):benchmark.source_times(True)
+
     def test_artifact_encryption_round_trip(self):
         cipher=module('delivery_cipher')
         with tempfile.TemporaryDirectory() as temp:
