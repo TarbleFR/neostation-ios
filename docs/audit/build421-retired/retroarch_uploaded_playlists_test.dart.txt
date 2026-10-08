@@ -1,0 +1,95 @@
+// Optional full-data validation. Never opens the supplied database for writing.
+import 'dart:convert';
+import 'dart:io';
+import 'package:archive/archive.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:sqlite3/sqlite3.dart' as sqlite;
+import 'package:neostation/data/datasources/sqlite_service.dart';
+import 'package:neostation/services/retroarch_library_importer.dart';
+import 'package:neostation/services/retroarch_library_protocol.dart';
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  final database = Platform.environment['NEOSTATION_REPAIRED_DATABASE'];
+  final playlists = Platform.environment['NEOSTATION_AUDIT_PLAYLISTS'];
+  test(
+    'full repaired copy: repeat/concurrent original exports retain 5514 rows after reopen',
+    () async {
+      final temp = await Directory.systemTemp.createTemp('ra-replay-');
+      addTearDown(() => temp.delete(recursive: true));
+      final file = await File(database!).copy('${temp.path}/copy.sqlite');
+      var raw = sqlite.sqlite3.open(file.path);
+      addTearDown(() => raw.close());
+      var db = DatabaseAdapter(raw);
+      final archive = ZipDecoder().decodeBytes(
+        await File(playlists!).readAsBytes(),
+      );
+      final entries = <Map<String, dynamic>>[];
+      for (final f in archive.files) {
+        if (!f.name.startsWith('playlists/') ||
+            f.name.split('/').length != 2 ||
+            !f.name.endsWith('.lpl')) {
+          continue;
+        }
+        final data = jsonDecode(utf8.decode(f.content as List<int>)) as Map;
+        final playlist = f.name.split('/').last;
+        final items = data['items'] as List;
+        for (var i = 0; i < items.length; i++) {
+          final item = items[i] as Map;
+          final full = item['path'] as String;
+          final filename = full.contains('#')
+              ? full.substring(full.indexOf('#') + 1)
+              : full.split('/').last;
+          entries.add({
+            'filename': filename,
+            'titleId': filename,
+            'titleName': item['label'],
+            'system': playlist.substring(0, playlist.length - 4),
+            'gameId': '$playlist:$i',
+          });
+        }
+      }
+      expect(entries, hasLength(4842));
+      final indexed = RetroArchLibraryProtocol.index(entries);
+      expect(indexed.values.map((e) => e['gameId']).toSet(), hasLength(4842));
+      const root =
+          '/private/var/mobile/Containers/Data/Application/3FD46CD2-0E12-4DB6-B29F-9561060C46E8/Documents/RetroArch/Bibliothèques ';
+      final bound = raw
+          .select('SELECT target_path FROM user_retroarch_repair_v1')
+          .map((r) => r['target_path'] as String)
+          .toSet();
+      final before = {
+        for (final row in raw.select('SELECT * FROM user_roms'))
+          if (bound.contains(row['rom_path']))
+            row['rom_path']: Map<String, Object?>.from(row),
+      };
+      for (var i = 0; i < 2; i++) {
+        await RetroArchLibraryImporter.restore(db, entries, ownedRoots: [root]);
+      }
+      await Future.wait([
+        RetroArchLibraryImporter.restore(db, entries, ownedRoots: [root]),
+        RetroArchLibraryImporter.restore(db, entries, ownedRoots: [root]),
+      ]);
+      expect(
+        raw.select('SELECT count(*) AS n FROM user_roms').single['n'],
+        5514,
+      );
+      for (final row in raw.select('SELECT * FROM user_roms')) {
+        if (bound.contains(row['rom_path'])) {
+          expect(Map<String, Object?>.from(row), before[row['rom_path']]);
+        }
+      }
+      raw.close();
+      raw = sqlite.sqlite3.open(file.path);
+      db = DatabaseAdapter(raw);
+      await RetroArchLibraryImporter.restore(db, entries, ownedRoots: [root]);
+      expect(
+        raw.select('SELECT count(*) AS n FROM user_roms').single['n'],
+        5514,
+      );
+    },
+    skip: database == null || playlists == null
+        ? 'Requires offline repaired copy and original playlists.zip'
+        : false,
+  );
+}

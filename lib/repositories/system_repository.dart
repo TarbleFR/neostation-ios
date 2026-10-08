@@ -53,21 +53,6 @@ class SystemRepository {
     final allSystems = await getAllSystems();
     final detected = await SqliteService.getUserDetectedSystems();
 
-    return visibleSystems(
-      allSystems,
-      detected,
-      isIOS: Platform.isIOS,
-      isAndroid: Platform.isAndroid,
-    );
-  }
-
-  /// The same catalog policy is used at startup and after every scan failure.
-  static List<SystemModel> visibleSystems(
-    List<SystemModel> allSystems,
-    List<SystemModel> detected, {
-    required bool isIOS,
-    required bool isAndroid,
-  }) {
     // Filter detected systems to only include those present in the JSON configuration
     // AND platform-specific systems (like Android) only on their respective platforms.
     final visible = detected.where((d) {
@@ -75,7 +60,7 @@ class SystemRepository {
       if (!isPresent) return false;
 
       // Filter out Android if not on Android platform
-      if (d.folderName == 'android' && !isAndroid) {
+      if (d.folderName == 'android' && !Platform.isAndroid) {
         return false;
       }
 
@@ -85,12 +70,8 @@ class SystemRepository {
     // Embedded iOS emulator playlists must remain reachable even at zero
     // games so their import actions are never trapped behind a missing tile.
     // Merely exposing these systems does not initialize either native Core.
-    if (isIOS) {
-      final embeddedFolders = [
-        ...const <String>['gc', 'wii'],
-        ...const <String>['ps2', 'ps3', 'ports'],
-      ];
-      for (final folderName in embeddedFolders) {
+    if (Platform.isIOS) {
+      for (final folderName in const <String>['ps2', 'ps3', 'ports']) {
         if (visible.any((system) => system.folderName == folderName)) continue;
         for (final system in allSystems) {
           if (system.folderName == folderName) {

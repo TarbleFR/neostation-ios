@@ -1,4 +1,3 @@
-import '../services/embedded_library_recovery.dart';
 import 'dart:async';
 /* DOLPHIN_ISOLATION_BEGIN: provider_import */
 import '../services/dolphin_internal_v2_service.dart';
@@ -35,8 +34,6 @@ import '../constants/system_folder_names.dart';
 import '../services/game_session_persistence.dart';
 import '../utils/nav_tabs.dart';
 import '../services/saf_directory_service.dart';
-import '../services/retroarch_folder_recovery.dart';
-import '../services/retroarch_library_service.dart';
 
 part 'sqlite_config_provider/mutators.dart';
 part 'sqlite_config_provider/scanning.dart';
@@ -227,10 +224,6 @@ class SqliteConfigProvider extends ChangeNotifier with WidgetsBindingObserver {
 
       // Refresh RetroAchievements data from SQL asset
       await SqliteService.instance.refreshRetroAchievementsData();
-
-      if (Platform.isIOS) {
-        await RetroArchLibraryService.restoreCachedLibrary();
-      }
 
       // Load initial data
       await _loadInitialData();

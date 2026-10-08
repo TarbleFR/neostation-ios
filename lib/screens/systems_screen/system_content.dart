@@ -88,10 +88,7 @@ class _SystemContentState extends State<SystemContent> {
             configProvider.scanCompleted;
 
         final showContent =
-            !showSplash &&
-            (configProvider.scanCompleted ||
-                configProvider.hasDetectedSystems) &&
-            !showInitialSetup;
+            !showSplash && configProvider.scanCompleted && !showInitialSetup;
 
         final routeIsCurrent = ModalRoute.of(context)?.isCurrent ?? true;
         _syncHomeMusic(showContent && routeIsCurrent);

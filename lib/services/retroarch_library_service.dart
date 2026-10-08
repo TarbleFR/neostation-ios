@@ -6,9 +6,6 @@ import 'package:path/path.dart' as path;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:external_folder_access/external_folder_access.dart';
 import 'package:neostation/services/retroarch_library_protocol.dart';
-import 'package:neostation/services/retroarch_library_importer.dart';
-import 'package:neostation/services/retroarch_folder_recovery.dart';
-import 'package:neostation/data/datasources/sqlite_service.dart';
 export 'package:neostation/services/retroarch_library_protocol.dart'
     show RetroArchSyncOutcome;
 import 'package:neostation/main.dart' show rootNavigatorKey;
@@ -150,11 +147,9 @@ class RetroArchLibraryService {
       }
       final byFilename = RetroArchLibraryProtocol.index(decoded);
 
-      // SQLite restoration must succeed before the sync reports success.
-      final imported = await _restoreEntries(decoded);
-      if (imported == 0) {
-        throw StateError('No supported system found in RetroArch export');
-      }
+      // The export is launch metadata. Keep the established filesystem scanner
+      // as the only live writer of the library; a callback must not create a
+      // second, virtual representation of the scanned content.
       await _persist(byFilename);
       _cache = byFilename;
       _sync.complete(RetroArchSyncOutcome.synced);
@@ -167,18 +162,18 @@ class RetroArchLibraryService {
             'Raw entries:\n${const JsonEncoder.withIndent('  ').convert(decoded)}',
       );
 
-      // Refresh the catalog directly. An unavailable external folder must not
-      // prevent a successful URL export from making its games visible.
+      // Preserve the pre-Build421 path: refresh physical content through the
+      // existing scanner after a successful export.
       try {
         final context = rootNavigatorKey.currentContext;
         if (context != null && context.mounted) {
           await Provider.of<SqliteConfigProvider>(
             context,
             listen: false,
-          ).refreshLibraryCatalog();
+          ).scanSystems();
         }
       } catch (e) {
-        _log.e('RetroArchLibraryService: post-sync catalog refresh failed: $e');
+        _log.e('RetroArchLibraryService: post-sync rescan failed: $e');
       }
 
       return true;
@@ -281,35 +276,6 @@ class RetroArchLibraryService {
     return cache[basename] ?? cache[romPath] ?? cache[stem];
   }
 
-  static Future<Map<String, dynamic>?> _entryForLaunchPath(
-    Map<String, Map<String, dynamic>> cache,
-    String romPath,
-  ) async {
-    final db = await SqliteService.getDatabase();
-    final hasBindings = (await db.rawQuery(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name='user_retroarch_repair_v1'",
-    )).isNotEmpty;
-    if (hasBindings) {
-      final bindings = await db.query(
-        'user_retroarch_repair_v1',
-        where: 'target_path = ?',
-        whereArgs: [romPath],
-      );
-      if (bindings.isNotEmpty) {
-        // The verified full playlist path/member binding takes precedence over
-        // filename aliases. An archive's launch name can differ from its ZIP.
-        if (bindings.length != 1) {
-          throw StateError('Conflicting RetroArch launch bindings: $romPath');
-        }
-        return _entryForRomPath(
-          cache,
-          bindings.single['source_path'] as String,
-        );
-      }
-    }
-    return _entryForRomPath(cache, romPath);
-  }
-
   /// Returns true when the last TestFlight library export contains this game.
   /// This intentionally does not require the old absolute iOS container path
   /// to still exist after an emulator reinstall/update.
@@ -317,7 +283,7 @@ class RetroArchLibraryService {
     if (_cache == null) await loadCachedLibrary();
     final cache = _cache;
     if (cache == null || cache.isEmpty) return false;
-    return await _entryForLaunchPath(cache, romPath) != null;
+    return _entryForRomPath(cache, romPath) != null;
   }
 
   /// Loads the last-synced library from disk into memory, if not already
@@ -345,31 +311,6 @@ class RetroArchLibraryService {
     } catch (e) {
       _log.e('RetroArchLibraryService: failed loading cached library: $e');
       _cache = {};
-    }
-  }
-
-  static Future<int> _restoreEntries(
-    Iterable<Map<String, dynamic>> entries,
-  ) async {
-    final prefs = await SharedPreferences.getInstance();
-    final root = prefs.getString(RetroArchFolderRecovery.rootKey);
-    return RetroArchLibraryImporter.restore(
-      await SqliteService.getDatabase(),
-      entries,
-      ownedRoots: root == null ? const [] : [root],
-    );
-  }
-
-  /// Rebuild the visible index from the last valid export after a failed scan
-  /// or a container change. This does not replace or clear the launch cache.
-  static Future<void> restoreCachedLibrary() async {
-    await loadCachedLibrary();
-    if (_cache == null || _cache!.isEmpty) return;
-    try {
-      final count = await _restoreEntries(_cache!.values);
-      _log.i('RetroArch cached library restored: $count games');
-    } catch (error) {
-      _log.e('RetroArch cached library restoration failed: $error');
     }
   }
 
@@ -432,7 +373,7 @@ class RetroArchLibraryService {
         'No persisted RetroArch export is available. Synchronize the library.',
       );
     }
-    final entry = await _entryForLaunchPath(cache, romPath);
+    final entry = _entryForRomPath(cache, romPath);
     if (entry == null) {
       return finish(
         RetroArchLaunchStage.entryMissing,

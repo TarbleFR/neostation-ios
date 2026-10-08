@@ -82,84 +82,54 @@ abstract class DatabaseExecutorAdapter {
   BatchAdapter batch();
 }
 
-/// Serializes independent users of the same native SQLite connection.
-class _ConnectionQueue {
-  Future<void> _tail = Future<void>.value();
-  Object? owner;
-
-  bool get ownedByCaller =>
-      owner != null && identical(Zone.current[this], owner);
-
-  Future<T> schedule<T>(FutureOr<T> Function() action) {
-    final previous = _tail;
-    final finished = Completer<void>();
-    _tail = finished.future;
-    return () async {
-      await previous;
-      try {
-        return await action();
-      } finally {
-        finished.complete();
-      }
-    }();
-  }
-}
-
 /// Concrete implementation of [DatabaseExecutorAdapter] using `package:sqlite3`.
 class DatabaseAdapter implements DatabaseExecutorAdapter {
   final sqlite.Database _db;
   DatabaseAdapter(this._db);
-  static final _queues = Expando<_ConnectionQueue>();
-  _ConnectionQueue get _queue => _queues[_db] ??= _ConnectionQueue();
-
-  Future<T> _access<T>(FutureOr<T> Function() action) =>
-      _queue.ownedByCaller ? Future<T>.sync(action) : _queue.schedule(action);
 
   /// Provides access to the raw sqlite3 database instance.
   sqlite.Database get rawDb => _db;
 
-  /// Waits for other transactions before a synchronous recovery operation.
-  /// The callback must not yield or start asynchronous work on this connection.
-  Future<T> synchronousAccess<T>(T Function() action) => _access(action);
-
   /// Closes the database connection.
-  Future<void> close() => _access(_db.close);
+  Future<void> close() async {
+    _db.close();
+  }
 
   @override
-  Future<void> execute(String sql, [List<Object?>? arguments]) => _access(() {
+  Future<void> execute(String sql, [List<Object?>? arguments]) async {
     if (arguments != null && arguments.isNotEmpty) {
       _db.execute(sql, arguments);
     } else {
       _db.execute(sql);
     }
-  });
+  }
 
   @override
-  Future<int> rawInsert(String sql, [List<Object?>? arguments]) => _access(() {
+  Future<int> rawInsert(String sql, [List<Object?>? arguments]) async {
     _db.execute(sql, arguments ?? []);
     return _db.lastInsertRowId;
-  });
+  }
 
   @override
-  Future<int> rawUpdate(String sql, [List<Object?>? arguments]) => _access(() {
+  Future<int> rawUpdate(String sql, [List<Object?>? arguments]) async {
     _db.execute(sql, arguments ?? []);
     return _db.updatedRows;
-  });
+  }
 
   @override
-  Future<int> rawDelete(String sql, [List<Object?>? arguments]) => _access(() {
+  Future<int> rawDelete(String sql, [List<Object?>? arguments]) async {
     _db.execute(sql, arguments ?? []);
     return _db.updatedRows;
-  });
+  }
 
   @override
   Future<List<Map<String, Object?>>> rawQuery(
     String sql, [
     List<Object?>? arguments,
-  ]) => _access(() {
+  ]) async {
     final results = _db.select(sql, arguments ?? []);
     return _resultSetToMap(results);
-  });
+  }
 
   /// Converts an [sqlite.ResultSet] into a standard Dart list of maps.
   List<Map<String, dynamic>> _resultSetToMap(sqlite.ResultSet results) {
@@ -278,34 +248,25 @@ class DatabaseAdapter implements DatabaseExecutorAdapter {
   BatchAdapter batch() => BatchAdapter(_db);
 
   /// Executes a series of database operations within an atomic transaction.
-  Future<T> transaction<T>(Future<T> Function(TransactionAdapter) action) {
-    final queue = _queue;
-    if (queue.ownedByCaller) {
-      return Future<T>.sync(() => action(TransactionAdapter(_db)));
+  Future<T> transaction<T>(
+    Future<T> Function(TransactionAdapter) action,
+  ) async {
+    final bool inTransaction = !_db.autocommit;
+    if (inTransaction) {
+      return await action(TransactionAdapter(_db));
     }
-    return queue.schedule(() async {
+
+    _db.execute('BEGIN');
+    try {
+      final result = await action(TransactionAdapter(_db));
+      _db.execute('COMMIT');
+      return result;
+    } catch (e) {
       if (!_db.autocommit) {
-        throw StateError(
-          'Unowned SQLite transaction; use DatabaseAdapter.transaction',
-        );
+        _db.execute('ROLLBACK');
       }
-      final owner = Object();
-      _db.execute('BEGIN');
-      queue.owner = owner;
-      try {
-        final result = await runZoned(
-          () => action(TransactionAdapter(_db)),
-          zoneValues: {queue: owner},
-        );
-        _db.execute('COMMIT');
-        return result;
-      } catch (_) {
-        if (!_db.autocommit) _db.execute('ROLLBACK');
-        rethrow;
-      } finally {
-        queue.owner = null;
-      }
-    });
+      rethrow;
+    }
   }
 }
 
@@ -430,15 +391,25 @@ class BatchAdapter {
     throw UnimplementedError('BatchAdapter cannot create nested batches.');
   }
 
-  Future<List<Object?>> commit({bool? noResult}) =>
-      DatabaseAdapter(_db).transaction((_) async {
-        final results = <Object?>[];
-        for (final action in _actions) {
-          final result = await action();
-          if (noResult != true) results.add(result);
-        }
-        return results;
-      });
+  Future<List<Object?>> commit({bool? noResult}) async {
+    final results = <Object?>[];
+    final bool inTransaction = !_db.autocommit;
+
+    if (!inTransaction) _db.execute('BEGIN');
+    try {
+      for (final action in _actions) {
+        final result = await action();
+        if (noResult != true) results.add(result);
+      }
+      if (!inTransaction) _db.execute('COMMIT');
+    } catch (e) {
+      if (!inTransaction && !_db.autocommit) {
+        _db.execute('ROLLBACK');
+      }
+      rethrow;
+    }
+    return results;
+  }
 }
 
 /// Core SQLite service responsible for database initialization, schema management,
@@ -2451,7 +2422,7 @@ class SqliteService {
     final db = await instance.database;
     await db.transaction((txn) async {
       await txn.delete('user_rom_folders');
-      for (final folder in folders.toSet()) {
+      for (final folder in folders) {
         if (folder.isNotEmpty) {
           await txn.insert('user_rom_folders', {'path': folder});
         }
@@ -3052,7 +3023,7 @@ class SqliteService {
           .map((r) => r['actual_folder_name'] as String)
           .toSet();
 
-      // Preserve systems represented by retained game rows. A
+      // Preserve systems represented by external-library/deeplink rows. A
       // normal filesystem scan cannot rediscover these rows, so deleting the
       // detected-system table used to hide RPCS3/MeloNX/ARMSX2 until the user
       // manually synchronized again.
@@ -3066,7 +3037,7 @@ class SqliteService {
         INNER JOIN app_systems s ON s.id = ur.app_system_id
         LEFT JOIN user_detected_systems uds
           ON uds.app_system_id = ur.app_system_id
-        WHERE ur.rom_path IS NOT NULL
+        WHERE instr(ur.rom_path, '://') > 0
       ''');
 
       // Clear previous detections to avoid stale or duplicate entries.

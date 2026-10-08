@@ -1,0 +1,97 @@
+// Optional forensic validation against a local copy. No phone file access is
+// inferred: file existence is supplied from the current-container database rows.
+import 'dart:io';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:sqlite3/sqlite3.dart' as sqlite;
+import 'package:neostation/data/datasources/sqlite_service.dart';
+import 'package:neostation/services/embedded_library_recovery.dart';
+
+void main() {
+  final input = Platform.environment['NEOSTATION_AUDIT_DATABASE'];
+  test(
+    'uploaded schema: ten container duplicates; other tables and histories preserved; reopen idempotent',
+    () async {
+      final temp = await Directory.systemTemp.createTemp('neostation-copy-');
+      addTearDown(() => temp.delete(recursive: true));
+      final file = await File(input!).copy('${temp.path}/copy.sqlite');
+      var raw = sqlite.sqlite3.open(file.path);
+      final allTables = raw
+          .select("SELECT name FROM sqlite_master WHERE type='table'")
+          .map((r) => r['name'] as String)
+          .toList();
+      final before = {
+        for (final name in allTables)
+          name: raw
+              .select('SELECT * FROM "$name"')
+              .map((r) => Map<String, Object?>.from(r))
+              .toList(),
+      };
+      const current =
+          '/var/mobile/Containers/Data/Application/9E970DF0-826F-495C-BE58-B3EA9A3FECF2';
+      final currentPaths = before['user_roms']!
+          .map((r) => r['rom_path'] as String)
+          .where((p) => p.startsWith('$current/'))
+          .toSet();
+      final adapter = DatabaseAdapter(raw);
+      var count = 0;
+      for (final folder in ['gc', 'wii', 'ports', 'ps2']) {
+        final result = EmbeddedLibraryRecovery.reconcile(
+          adapter,
+          systemId: folder,
+          folder: folder,
+          currentContainer: current,
+          fileExists: currentPaths.contains,
+        );
+        count += result.relocated;
+        expect(result.ambiguous, isEmpty);
+      }
+      expect(count, 10);
+      for (final name in allTables.where((n) => n != 'user_roms')) {
+        expect(
+          raw
+              .select('SELECT * FROM "$name"')
+              .map((r) => Map<String, Object?>.from(r))
+              .toList(),
+          before[name],
+          reason: name,
+        );
+      }
+      final after = raw.select('SELECT * FROM user_roms');
+      expect(after.length, 8913);
+      for (final row in before['user_roms']!.where(
+        (r) => !['gc', 'wii', 'ports', 'ps2'].contains(r['app_system_id']),
+      )) {
+        expect(
+          Map<String, Object?>.from(
+            after.singleWhere((r) => r['rom_path'] == row['rom_path']),
+          ),
+          row,
+        );
+      }
+      expect(
+        raw.select('SELECT * FROM user_library_path_repair_v1'),
+        hasLength(10),
+      );
+      expect(raw.select('PRAGMA integrity_check').single.values.single, 'ok');
+      expect(raw.select('PRAGMA foreign_key_check'), isEmpty);
+      raw.close();
+      raw = sqlite.sqlite3.open(file.path);
+      for (final folder in ['gc', 'wii', 'ports', 'ps2']) {
+        expect(
+          EmbeddedLibraryRecovery.reconcile(
+            DatabaseAdapter(raw),
+            systemId: folder,
+            folder: folder,
+            currentContainer: current,
+            fileExists: currentPaths.contains,
+          ).relocated,
+          0,
+        );
+      }
+      raw.close();
+    },
+    skip: input == null
+        ? 'Set NEOSTATION_AUDIT_DATABASE to an offline copy; never the live database.'
+        : false,
+  );
+}

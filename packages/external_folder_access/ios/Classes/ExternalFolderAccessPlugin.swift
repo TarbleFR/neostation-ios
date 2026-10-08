@@ -113,8 +113,6 @@ public class ExternalFolderAccessPlugin: NSObject, FlutterPlugin, UIDocumentPick
             pickFolder(key: Self.bookmarkKey(from: call), result: result)
         case "resolveBookmarkedFolder":
             resolveBookmarkedFolder(key: Self.bookmarkKey(from: call), result: result)
-        case "resolveBookmarkedFolderDetails":
-            resolveBookmarkedFolder(key: Self.bookmarkKey(from: call), includeDetails: true, result: result)
         case "clearBookmark":
             clearBookmark(key: Self.bookmarkKey(from: call), result: result)
         case "openInMenu":
@@ -232,7 +230,7 @@ public class ExternalFolderAccessPlugin: NSObject, FlutterPlugin, UIDocumentPick
         do {
             let bookmarkData = try url.bookmarkData(
                 options: [],
-                includingResourceValuesForKeys: [.pathKey],
+                includingResourceValuesForKeys: nil,
                 relativeTo: nil
             )
             UserDefaults.standard.set(
@@ -264,7 +262,7 @@ public class ExternalFolderAccessPlugin: NSObject, FlutterPlugin, UIDocumentPick
     /// Deliberately never calls stopAccessingSecurityScopedResource() here —
     /// NeoStation needs the folder readable for as long as the app runs, and
     /// iOS releases the scope automatically when the process exits.
-    private func resolveBookmarkedFolder(key: String, includeDetails: Bool = false, result: @escaping FlutterResult) {
+    private func resolveBookmarkedFolder(key: String, result: @escaping FlutterResult) {
         guard
             let bookmarkData = UserDefaults.standard.data(
                 forKey: Self.bookmarkDefaultsKey(for: key)
@@ -276,10 +274,6 @@ public class ExternalFolderAccessPlugin: NSObject, FlutterPlugin, UIDocumentPick
 
         var isStale = false
         do {
-            // Read the original path from THIS bookmark before refreshing it.
-            // This establishes ownership; matching an arbitrary container UUID
-            // or a ROM filename from another app does not.
-            let previousPath = NSURL.resourceValues(forKeys: [.pathKey], fromBookmarkData: bookmarkData)?[.pathKey] as? String
             let url = try URL(
                 resolvingBookmarkData: bookmarkData,
                 options: [],
@@ -304,7 +298,7 @@ public class ExternalFolderAccessPlugin: NSObject, FlutterPlugin, UIDocumentPick
                 do {
                     let refreshedBookmark = try url.bookmarkData(
                         options: [],
-                        includingResourceValuesForKeys: [.pathKey],
+                        includingResourceValuesForKeys: nil,
                         relativeTo: nil
                     )
                     UserDefaults.standard.set(
@@ -318,13 +312,7 @@ public class ExternalFolderAccessPlugin: NSObject, FlutterPlugin, UIDocumentPick
                     print("ExternalFolderAccess: failed refreshing stale bookmark for \(key): \(error)")
                 }
             }
-            if includeDetails {
-                var details: [String: Any] = ["path": url.path]
-                if let previousPath = previousPath { details["previousPath"] = previousPath }
-                result(details)
-            } else {
-                result(url.path)
-            }
+            result(url.path)
         } catch {
             result(
                 FlutterError(

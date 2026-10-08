@@ -31,8 +31,6 @@ class ConfigService {
   /// case launching goes through the share sheet, see
   /// GameLaunchService.launchGame).
   static String? linkedExternalFolderPath;
-  /// Previous path read from the same RetroArch bookmark before refreshing.
-  static String? linkedExternalFolderPreviousPath;
 
   /// iOS-only: absolute path of the folder linked for ARMSX2, resolved at
   /// startup from its own security-scoped bookmark (key `'armsx2'`, see

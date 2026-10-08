@@ -624,9 +624,10 @@ jobs:
           flutter pub get --enforce-lockfile
           flutter analyze --no-fatal-infos
 
-      - name: Require RetroArch cold-launch and library recovery regressions
+      - name: Require direct RetroArch link on restored library baseline
         run: |
-          flutter test test/retroarch_library_protocol_test.dart test/retroarch_library_cache_test.dart test/retroarch_folder_recovery_test.dart test/retroarch_sync_locale_test.dart test/ios_rom_library_root_resolver_test.dart test/ios_selective_rollback_test.dart test/armsx2_retroarch_routing_isolation_test.dart test/retroarch_library_restoration_test.dart test/rom_scan_symlink_alias_test.dart test/rom_scan_emulator_default_test.dart
+          flutter test test/retroarch_library_protocol_test.dart test/retroarch_library_cache_test.dart test/retroarch_launch_diagnostics_test.dart test/retroarch_sync_locale_test.dart test/ios_selective_rollback_test.dart test/armsx2_retroarch_routing_isolation_test.dart test/rom_scan_symlink_alias_test.dart test/rom_scan_emulator_default_test.dart
+          python3 test/retroarch_baseline_scope_test.py
           swiftc -warnings-as-errors packages/external_folder_access/ios/Classes/RetroArchURLHandoff.swift test/retroarch_url_handoff_test.swift -o "$RUNNER_TEMP/retroarch-handoff"
           "$RUNNER_TEMP/retroarch-handoff"
 

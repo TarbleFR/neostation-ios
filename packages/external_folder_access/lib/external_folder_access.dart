@@ -2,12 +2,6 @@ import 'dart:io';
 
 import 'package:flutter/services.dart';
 
-class ExternalFolderBookmark {
-  const ExternalFolderBookmark(this.path, this.previousPath);
-  final String path;
-  final String? previousPath;
-}
-
 /// Thin Dart wrapper around the native iOS folder-bookmark plugin.
 ///
 /// All methods are no-ops (return null) on platforms other than iOS, so
@@ -83,28 +77,6 @@ class ExternalFolderAccess {
       return await _channel.invokeMethod<String>('resolveBookmarkedFolder', {
         'key': key,
       });
-    } on PlatformException {
-      return null;
-    }
-  }
-
-  /// Both paths come from the same persisted bookmark, before any stale
-  /// bookmark is refreshed. This permits ownership-safe path relocation.
-  static Future<ExternalFolderBookmark?> resolveBookmarkedFolderDetails({
-    String key = defaultBookmarkKey,
-  }) async {
-    if (!Platform.isIOS) return null;
-    try {
-      final details = await _channel.invokeMapMethod<String, dynamic>(
-        'resolveBookmarkedFolderDetails',
-        {'key': key},
-      );
-      final resolved = details?['path'];
-      if (resolved is! String || resolved.isEmpty) return null;
-      return ExternalFolderBookmark(
-        resolved,
-        details?['previousPath'] as String?,
-      );
     } on PlatformException {
       return null;
     }

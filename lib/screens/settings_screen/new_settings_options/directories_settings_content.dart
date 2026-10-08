@@ -531,10 +531,6 @@ class DirectoriesSettingsContentState
 
     setState(() => _linkingFolderKey = bookmarkKey);
     try {
-      final previous = await ExternalFolderAccess.resolveBookmarkedFolder(
-        key: bookmarkKey,
-      );
-      ConfigService.linkedExternalFolderPreviousPath = previous;
       final selected = await ExternalFolderAccess.pickAndBookmarkFolder(
         key: bookmarkKey,
       );
@@ -545,8 +541,6 @@ class DirectoriesSettingsContentState
       final activePath = resolved ?? selected;
       if (!mounted) return;
 
-      await Directory(activePath).list(followLinks: false).take(1).toList();
-      if (!mounted) return;
       ConfigService.linkedExternalFolderPath = activePath;
 
       final configProvider = Provider.of<SqliteConfigProvider>(
@@ -564,21 +558,10 @@ class DirectoriesSettingsContentState
               ),
             )
           : activePath;
-      if (bookmarkKey == ExternalFolderAccess.defaultBookmarkKey ||
-          configProvider.config.romFolders.contains(scanRoot)) {
+      if (configProvider.config.romFolders.contains(scanRoot)) {
         await configProvider.scanSystems();
       } else {
         await configProvider.addRomFolder(scanRoot, scan: true);
-      }
-      if (bookmarkKey == ExternalFolderAccess.defaultBookmarkKey &&
-          !configProvider.config.romFolders.contains(scanRoot)) {
-        throw FileSystemException(
-          'RetroArch source could not be registered; library retained',
-          scanRoot,
-        );
-      }
-      if (configProvider.error != null) {
-        throw StateError(configProvider.error!);
       }
       _log.i('iOS emulator link: root=$activePath romScanRoot=$scanRoot');
       if (!mounted) return;
