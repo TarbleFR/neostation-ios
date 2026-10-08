@@ -4,12 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>NeoPlay</title>
+<link rel="icon" href="/neoplay-icon.ico">
 <style>
 :root{color-scheme:dark;--bg:#090b10;--panel:#11151d;--panel2:#151a24;--line:#242b38;--text:#f4f7fb;--muted:#8e99aa;--accent:#7b8cff;--accent2:#9b7cff;--ok:#4fd1a5}
 *{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:radial-gradient(circle at 15% 0%,#161b2e 0,#090b10 35%,#07090d 100%);color:var(--text);font:14px Inter,Segoe UI,system-ui,sans-serif}
-body{display:grid;grid-template-columns:250px 1fr}
-aside{border-right:1px solid var(--line);background:rgba(10,13,19,.92);padding:26px 18px;display:flex;flex-direction:column;gap:24px}
-.brand{display:flex;align-items:center;gap:12px;font-size:20px;font-weight:700;letter-spacing:-.4px}.logo{width:34px;height:34px;border-radius:10px;background:linear-gradient(145deg,var(--accent),var(--accent2));box-shadow:0 8px 30px rgba(123,140,255,.25);display:grid;place-items:center;font-weight:800}.sub{color:var(--muted);font-size:12px;margin-top:2px}
+body{display:grid;grid-template-columns:270px minmax(0,1fr)}
+aside{border-right:1px solid var(--line);background:rgba(10,13,19,.92);padding:22px 16px;display:flex;flex-direction:column;gap:18px;overflow:auto}
+.brand{display:flex;align-items:center;gap:12px;font-size:20px;font-weight:700;letter-spacing:-.4px}.logo{width:48px;height:40px;object-fit:contain;filter:drop-shadow(0 4px 10px rgba(78,219,134,.15))}.sub{color:var(--muted);font-size:12px;margin-top:2px}
 .nav{display:grid;gap:8px}.navitem{padding:11px 12px;border-radius:10px;color:#cbd3df}.navitem.active{background:#171d29;color:white;border:1px solid #252d3a}
 .device{margin-top:auto;padding:14px;border:1px solid var(--line);border-radius:14px;background:#0f131b}.dot{width:8px;height:8px;border-radius:50%;background:var(--ok);box-shadow:0 0 10px rgba(79,209,165,.7);display:inline-block;margin-right:7px}
 main{padding:22px;display:grid;grid-template-rows:auto 1fr;gap:18px;min-width:0}
@@ -17,33 +18,58 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 4
 .actions{display:flex;gap:9px}button{border:1px solid var(--line);background:#141923;color:#eaf0f8;border-radius:10px;padding:9px 13px;font:inherit;cursor:pointer}button:hover{background:#1b2230}.primary{border-color:#5667e8;background:linear-gradient(135deg,#596cf0,#7f64ef);box-shadow:0 8px 24px rgba(94,106,238,.18)}
 .workspace{display:grid;grid-template-columns:minmax(0,1fr) 310px;gap:18px;min-height:0}
 .player{position:relative;border:1px solid var(--line);border-radius:18px;overflow:hidden;background:#050608;min-height:0;box-shadow:0 18px 60px rgba(0,0,0,.28)}
-#stage{position:absolute;inset:0}video,canvas{display:block;width:100%;height:100%;object-fit:contain;background:#030405}#stage:fullscreen{background:#000}
+#stage{position:absolute;inset:0;overflow:hidden}#stage>video,#stage>canvas{position:absolute;inset:0;display:block;width:100%;height:100%;object-fit:contain;background:#030405}#stage>[hidden]{display:none!important}#stage:fullscreen{background:#000}
 .empty{position:absolute;inset:0;display:grid;place-items:center;pointer-events:none}.empty[hidden]{display:none}.emptybox{text-align:center;color:var(--muted);max-width:360px}.screenicon{width:58px;height:42px;border:2px solid #31394a;border-radius:8px;margin:0 auto 16px;position:relative}.screenicon:after{content:"";position:absolute;width:22px;height:2px;background:#31394a;bottom:-10px;left:16px}
-.side{display:grid;grid-template-rows:auto auto 1fr;gap:14px;min-height:0}.card{background:linear-gradient(180deg,rgba(20,25,35,.96),rgba(14,18,25,.96));border:1px solid var(--line);border-radius:16px;padding:17px}.label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.09em}.pin{font:600 32px ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:7px;margin:9px 0 5px}.status{margin-top:9px;color:#cbd4e2;line-height:1.45}.hint{font-size:12px;color:var(--muted);line-height:1.5;margin-top:8px}.metric{display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid #202633}.metric:last-child{border-bottom:0}.value{color:#dfe6f1}.badge{display:inline-flex;align-items:center;gap:7px;padding:6px 10px;border-radius:999px;background:#101d1a;color:#9ae8cb;border:1px solid #1e4438;font-size:12px}
-#auth{display:none}
+.side{display:grid;grid-template-rows:auto auto 1fr;gap:14px;min-height:0;overflow:auto}.card{background:linear-gradient(180deg,rgba(20,25,35,.96),rgba(14,18,25,.96));border:1px solid var(--line);border-radius:16px;padding:17px}.label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.09em}.pin{font:600 32px ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:7px;margin:9px 0 5px}.status{margin-top:9px;color:#cbd4e2;line-height:1.45}.hint{font-size:12px;color:var(--muted);line-height:1.5;margin-top:8px}.metric{display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid #202633}.metric:last-child{border-bottom:0}.value{color:#dfe6f1}.badge{display:inline-flex;align-items:center;gap:7px;padding:6px 10px;border-radius:999px;background:#101d1a;color:#9ae8cb;border:1px solid #1e4438;font-size:12px}
+.sidebar-controls{display:grid;gap:8px}.sidebar-controls label{color:var(--muted);font-size:12px}.sidebar-controls select{width:100%;border:1px solid var(--line);border-radius:9px;padding:10px;background:#141923;color:#eaf0f8;font:inherit}.sidebar-controls .hint{margin:2px 0 12px;font-size:11px;line-height:1.45}.sidebar-controls select:focus{outline:2px solid #7b8cff}#auth{display:none}
 @media(max-width:900px){body{grid-template-columns:1fr}aside{display:none}.workspace{grid-template-columns:1fr}.side{display:none}}
 </style>
 </head>
 <body>
 <aside>
-  <div><div class="brand"><div class="logo">N</div><div>NeoPlay<div class="sub">Desktop Receiver</div></div></div></div>
-  <div class="nav"><div class="navitem active">Réception</div><div class="navitem">Connexion locale</div><div class="navitem">Diagnostics</div></div>
-  <div class="device"><div><span class="dot"></span>Service actif</div><div class="sub">Réseau local uniquement</div></div>
+  <div><div class="brand"><img class="logo" src="/neostation-logo.svg" alt="NeoStation iOS"><div>NeoPlay<div class="sub" data-i18n="sidebarTag">Desktop Receiver</div></div></div></div>
+  <div class="nav"><div class="navitem active" data-i18n="receive">R&eacute;ception</div><div class="navitem" data-i18n="connection">Connexion locale</div><div class="navitem" data-i18n="diagnostics">Diagnostics</div></div>
+  <div class="sidebar-controls">
+    <label for="language-select" data-i18n="language">Langue</label>
+    <select id="language-select">
+      <option value="auto" data-i18n="auto">Automatique</option>
+      <option value="en">English</option>
+      <option value="fr">Français</option>
+      <option value="de">Deutsch</option>
+      <option value="es">Español</option>
+      <option value="it">Italiano</option>
+      <option value="pt">Português</option>
+      <option value="ru">Русский</option>
+      <option value="id">Bahasa Indonesia</option>
+      <option value="ja">日本語</option>
+      <option value="ko">한국어</option>
+      <option value="zh">简体中文</option>
+      <option value="zh-Hant">繁體中文</option>
+    </select>
+    <label for="quality-select" data-i18n="quality">Netteté</label>
+    <select id="quality-select">
+      <option value="original" data-i18n="original">Original · rapide</option>
+      <option value="enhanced" data-i18n="enhanced">Améliorée</option>
+      <option value="crisp" data-i18n="crisp">Renforcée</option>
+    </select>
+    <div class="hint" data-i18n="qualityDescription">Le traitement améliore les contours de l'image sans inventer des détails.</div>
+  </div>
+  <div class="device"><div><span class="dot"></span><span data-i18n="serviceActive">Service actif</span></div><div class="sub" data-i18n="localOnly">R&eacute;seau local uniquement</div></div>
 </aside>
 <main>
   <header>
-    <div class="title"><h1>Réception NeoStation</h1><p>Diffuse ton écran iPhone vers ce PC avec une latence minimale.</p></div>
-    <div class="actions"><button id="full">Plein écran</button><button id="stop">Déconnecter</button><button id="ready" class="primary">Réactiver</button></div>
+    <div class="title"><h1 data-i18n="mainTitle">R&eacute;ception NeoStation</h1><p data-i18n="subtitle">Diffuse ton &eacute;cran iPhone vers ce PC avec une latence minimale.</p></div>
+    <div class="actions"><button id="full" data-i18n="fullscreen">Plein &eacute;cran</button><button id="stop" data-i18n="disconnect">D&eacute;connecter</button><button id="ready" class="primary" data-i18n="readyButton">Activer NeoPlay</button></div>
   </header>
   <section class="workspace">
     <div class="player">
-      <div id="stage"><video id="video" playsinline></video><canvas id="canvas" hidden></canvas></div>
-      <div id="empty-state" class="empty"><div class="emptybox"><div class="screenicon"></div><strong>En attente de NeoStation iOS</strong><div class="hint">Ouvre NeoPlay dans NeoStation, sélectionne ce PC puis saisis le code affiché.</div></div></div>
+      <div id="stage"><video id="video" playsinline></video><canvas id="canvas" hidden></canvas><canvas id="sharp-canvas" hidden></canvas></div>
+      <div id="empty-state" class="empty"><div class="emptybox"><div class="screenicon"></div><strong data-i18n="waiting">En attente de NeoStation iOS</strong><div class="hint" data-i18n="waitingHint">Ouvre NeoPlay dans NeoStation, s&eacute;lectionne ce PC puis saisis le code affich&eacute;.</div></div></div>
     </div>
     <div class="side">
-      <div class="card"><div class="label">Code d’association</div><div id="pin" class="pin">------</div><div class="hint">Valide 5 minutes. Il change après chaque session.</div></div>
-      <div class="card"><div class="label">État</div><div class="badge"><span class="dot"></span>Prêt</div><div id="status" class="status">Initialisation du récepteur local…</div></div>
-      <div class="card"><div class="label">Session</div><div class="metric"><span>Transport</span><span class="value">LAN sécurisé par code</span></div><div class="metric"><span>Vidéo</span><span class="value">H.264 faible latence · mode stable</span></div><div class="metric"><span>Audio</span><span class="value">AAC synchronisé</span></div><div class="hint">NeoPlay reste local au réseau. Aucun compte ni relais Internet n’est nécessaire pour la session Windows.</div></div>
+      <div class="card"><div class="label" data-i18n="pin">Code d&rsquo;association</div><div id="pin" class="pin">------</div><div class="hint" data-i18n="pinHint">Valide 5 minutes. Il change apr&egrave;s chaque session.</div></div>
+      <div class="card"><div class="label" data-i18n="status">&Eacute;tat</div><div class="badge"><span class="dot"></span><span data-i18n="readyStatus">Pr&ecirc;t</span></div><div id="status" class="status" data-i18n="initializing">Initialisation du r&eacute;cepteur local&hellip;</div></div>
+      <div class="card"><div class="label" data-i18n="session">Session</div><div class="metric"><span data-i18n="transport">Transport</span><span class="value" data-i18n="lanSecure">LAN s&eacute;curis&eacute; par code</span></div><div class="metric"><span data-i18n="video">Vid&eacute;o</span><span class="value" data-i18n="videoMode">H.264 temps r&eacute;el &middot; faible latence</span></div><div class="metric"><span data-i18n="audio">Audio</span><span class="value" data-i18n="audioMode">PCM synchronis&eacute;</span></div><div class="metric"><span data-i18n="qualitySource">Source</span><span id="source-resolution" class="value">—</span></div><div class="metric"><span data-i18n="qualityDisplay">Affichage</span><span id="display-resolution" class="value">—</span></div><div class="metric"><span data-i18n="cadence">Cadence</span><span id="source-fps" class="value">—</span></div><div class="metric"><span data-i18n="linkQuality">Qualité du lien</span><span id="link-state" class="value" data-i18n="linkAutomatic">Automatique</span></div><div class="hint" data-i18n="nativeHint">La 4K à 60 fps dépend de la capture et du réseau local.</div><div class="hint" data-i18n="privacy">NeoPlay reste local au r&eacute;seau. Aucun relais Internet ni compte n&rsquo;est n&eacute;cessaire.</div></div>
     </div>
   </section>
 </main>

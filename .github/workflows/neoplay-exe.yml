@@ -1,39 +1,41 @@
-name: NeoPlay Windows executable
+name: NeoPlay Windows application
 on:
   push:
     branches: [experimental]
     paths:
       - 'tools/neoplay-receiver/**'
       - '.github/workflows/neoplay-exe.yml'
+  workflow_dispatch:
 permissions:
   contents: read
 jobs:
   build:
     runs-on: windows-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Test receiver
+      - name: Test and build integrated NeoPlay
         working-directory: tools/neoplay-receiver
+        env:
+          NEOPLAY_SOURCE_SHA: ${{ github.sha }}
         run: |
           npm ci --ignore-scripts
           npm test
-      - name: Build and smoke-test standalone receiver
-        working-directory: tools/neoplay-receiver
-        run: |
-          node build-executable.mjs
-          $p = Start-Process -FilePath '.\dist\NeoPlay-0.5.1.exe' -ArgumentList '--smoke-test' -Wait -PassThru
+          node node_modules/electron/install.js
+          npm run build:windows
+          $p = Start-Process -FilePath '.\dist\win-unpacked\NeoPlay.exe' -ArgumentList '--smoke-test', '--report=embedded-smoke.json' -Wait -PassThru
           if ($p.ExitCode -ne 0) { exit $p.ExitCode }
-          $p = Start-Process -FilePath '.\dist\NeoPlay-0.5.1.exe' -ArgumentList '--port-conflict-test' -Wait -PassThru
-          if ($p.ExitCode -ne 0) { exit $p.ExitCode }
+          npm run build:installer
       - uses: actions/upload-artifact@v4
         with:
-          name: NeoPlay-0.5.1-${{ github.sha }}
+          name: NeoPlay-0.7.0-${{ github.sha }}
           path: |
-            tools/neoplay-receiver/dist/NeoPlay-0.5.1.exe
+            tools/neoplay-receiver/dist/NeoPlay-Setup-0.7.0.exe
             tools/neoplay-receiver/dist/build.json
+            tools/neoplay-receiver/dist/installer.json
+            tools/neoplay-receiver/embedded-smoke.json
           if-no-files-found: error
           retention-days: 30

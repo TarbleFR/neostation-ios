@@ -1,6 +1,6 @@
 {
   "name": "neoplay-receiver",
-  "version": "0.5.1",
+  "version": "0.7.0",
   "private": true,
   "description": "NeoPlay Desktop Receiver for NeoStation iOS",
   "type": "module",
@@ -9,15 +9,20 @@
     "node": ">=22"
   },
   "scripts": {
-    "start": "node server.mjs",
-    "test": "node --test test/*.test.mjs"
+    "start": "electron .",
+    "test": "node --test test/*.test.mjs",
+    "build:windows": "node build-windows.mjs",
+    "build:installer": "node build-installer.mjs"
   },
   "dependencies": {
     "bonjour-service": "1.4.4",
     "ws": "8.22.0"
   },
   "devDependencies": {
-    "esbuild": "0.28.2",
-    "postject": "1.0.0-alpha.6"
-  }
+    "rcedit": "5.0.2",
+    "electron": "44.7.0",
+    "playwright": "1.58.2",
+    "7zip-bin": "5.2.0"
+  },
+  "main": "electron.mjs"
 }

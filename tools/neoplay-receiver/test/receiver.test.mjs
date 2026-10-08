@@ -28,7 +28,7 @@ test('the relay serves the page and every module it imports, directly or through
   }
   assert.ok(served.has('player.mjs') && served.has('presenter.mjs') && served.has('audio-ring.mjs'), [...served].join(','));
   assert.equal((await fetch(base+'/server.mjs')).status, 404); // the relay itself is never served
-  assert.equal((await fetch(base+'/favicon.ico')).status, 204); // the browser's icon request is answered without a body
+  assert.equal((await fetch(base+'/favicon.ico')).status, 200); // real NeoStation icon
 });
 test('malformed protocol packets and codec metadata are rejected', () => {
   assert.throws(() => validatePacket(Buffer.alloc(2)));
