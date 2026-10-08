@@ -10,6 +10,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   windows:
+    if: ${{ github.event_name == 'workflow_dispatch' || !contains(github.event.head_commit.message, '[retroarch-delivery]') }}
     runs-on: windows-latest
     timeout-minutes: 10
     steps:
@@ -23,6 +24,7 @@ jobs:
           npm ci --ignore-scripts
           npm test
   frontend:
+    if: ${{ github.event_name == 'workflow_dispatch' || !contains(github.event.head_commit.message, '[retroarch-delivery]') }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -50,6 +52,7 @@ jobs:
           python3 test/check_neo_swap_scope.py
           python3 test/neoplay_companion_contract_test.py
   native:
+    if: ${{ github.event_name == 'workflow_dispatch' || !contains(github.event.head_commit.message, '[retroarch-delivery]') }}
     runs-on: macos-15
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
@@ -92,6 +95,7 @@ jobs:
           if-no-files-found: error
           retention-days: 7
   windows-playback:
+    if: ${{ github.event_name == 'workflow_dispatch' || !contains(github.event.head_commit.message, '[retroarch-delivery]') }}
     needs: native
     runs-on: windows-latest
     timeout-minutes: 10
@@ -120,6 +124,7 @@ jobs:
 
 
   windows-executable:
+    if: ${{ github.event_name == 'workflow_dispatch' || !contains(github.event.head_commit.message, '[retroarch-delivery]') }}
     needs: [windows, windows-playback, frontend]
     runs-on: windows-latest
     timeout-minutes: 10

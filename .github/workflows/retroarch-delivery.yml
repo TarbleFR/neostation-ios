@@ -1,0 +1,1170 @@
+name: NeoStation RetroArch • Build 422 • SideStore
+run-name: NeoStation Build 422 • ${{ github.sha }} • cache comparison
+'on':
+  push:
+    branches:
+    - experimental
+  workflow_dispatch:
+    inputs:
+      build_number:
+        description: New delivery build number
+        required: true
+        default: '422'
+        type: string
+      benchmark:
+        description: Measure a cold and a cached build on comparable macOS runners
+        type: boolean
+        default: false
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: neostation-retroarch-delivery-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  checks:
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[retroarch-delivery]') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      CI: 'true'
+      BOT: 'true'
+      FLUTTER_SUPPRESS_ANALYTICS: 'true'
+    steps:
+    - &id001
+      name: Checkout exact candidate
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        persist-credentials: false
+    - name: Reuse successful unchanged Dart validation
+      id: dart-evidence
+      uses: actions/cache@v4
+      with:
+        path: build/delivery/dart-validation.json
+        key: neostation-validation-v1-ubuntu24.04-${{ runner.arch }}-flutter3.47.2-${{ hashFiles('lib/**','packages/**/*.dart','packages/**/pubspec.yaml','assets/**','test/**/*.dart','pubspec.lock','pubspec.yaml')
+          }}
+    - uses: subosito/flutter-action@v2
+      with:
+        flutter-version: 3.47.2
+        channel: stable
+        cache: true
+      if: ${{ steps.dart-evidence.outputs.cache-hit != 'true' }}
+    - name: Verify closed validation input tree and previous CI success
+      run: python3 build-utils/verify_delivery_reuse.py
+    - name: Analyze the changed integration and its restored dependencies
+      run: |-
+        flutter pub get --enforce-lockfile
+        flutter analyze --no-fatal-infos
+      if: ${{ steps.dart-evidence.outputs.cache-hit != 'true' }}
+    - name: Validate changed library, callback, launch and restart behavior
+      run: |
+        flutter test test/library_scan_restart_test.dart test/retroarch_library_protocol_test.dart test/retroarch_library_cache_test.dart test/retroarch_launch_diagnostics_test.dart test/retroarch_sync_locale_test.dart test/rom_scan_symlink_alias_test.dart test/rom_scan_emulator_default_test.dart test/ios_selective_rollback_test.dart test/armsx2_retroarch_routing_isolation_test.dart test/game_repository_test.dart test/system_repository_test.dart test/config_repository_test.dart test/scraper_repository_test.dart test/sqlite_database_service_hidden_files_test.dart test/ios_rom_library_root_resolver_test.dart
+        python3 - <<'PY'
+        import json,os
+        from pathlib import Path
+        Path("build/delivery/dart-validation.json").write_text(json.dumps({"result":"passed","testedSHA":os.environ["GITHUB_SHA"],"key":"neostation-validation-v1-ubuntu24.04-${{ runner.arch }}-flutter3.47.2-${{ hashFiles('lib/**','packages/**/*.dart','packages/**/pubspec.yaml','assets/**','test/**/*.dart','pubspec.lock','pubspec.yaml') }}","tool":"Flutter 3.47.2, Ubuntu 24.04"}))
+        PY
+      if: ${{ steps.dart-evidence.outputs.cache-hit != 'true' }}
+    - name: Verify reused Dart evidence and changed pipeline guards
+      run: |
+        python3 - <<'PY'
+        import json
+        from pathlib import Path
+        record=json.loads(Path('build/delivery/dart-validation.json').read_text())
+        assert record['result']=='passed'
+        assert record['key']
+        assert record['tool']=='Flutter 3.47.2, Ubuntu 24.04'
+        assert record['key']=='neostation-validation-v1-ubuntu24.04-${{ runner.arch }}-flutter3.47.2-${{ hashFiles('lib/**','packages/**/*.dart','packages/**/pubspec.yaml','assets/**','test/**/*.dart','pubspec.lock','pubspec.yaml') }}'
+        print('Dart tests validated at',record['testedSHA'],'; exact locked input key verified')
+        PY
+        python3 test/retroarch_baseline_scope_test.py
+        python3 test/delivery_pipeline_test.py
+    - name: Preserve validation provenance
+      uses: actions/upload-artifact@v4
+      with:
+        name: NeoStation-422-validation-${{ github.sha }}
+        path: build/delivery/
+        if-no-files-found: error
+        retention-days: 14
+  native:
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[retroarch-delivery]') }}
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+    - *id001
+    - name: Select Xcode 26.3 for NeoPlay and Google Cast
+      uses: maxim-lobanov/setup-xcode@v1
+      with:
+        xcode-version: '26.3'
+    - name: Validate changed Swift transport and compile the actual iPhone plugin
+      run: |-
+        swiftc -warnings-as-errors packages/external_folder_access/ios/Classes/RetroArchURLHandoff.swift test/retroarch_url_handoff_test.swift -o "$RUNNER_TEMP/retroarch-handoff"
+        "$RUNNER_TEMP/retroarch-handoff"
+        xcrun swiftc -parse -target arm64-apple-ios18.0 -sdk "$(xcrun --sdk iphoneos --show-sdk-path)" packages/external_folder_access/ios/Classes/ExternalFolderAccessPlugin.swift packages/external_folder_access/ios/Classes/RetroArchURLHandoff.swift
+  cold:
+    name: Release device build • cold
+    runs-on: macos-15
+    timeout-minutes: 60
+    needs:
+    - checks
+    - native
+    env:
+      BUILD_NUMBER: ${{ inputs.build_number || '422' }}
+      IPA_NAME: NeoStation
+      ARTIFACT_NAME: NeoStation-Build-422-${{ github.sha }}-cold
+      KARTPAD_CORE_RUN_ID: ${{ inputs.kartpad_core_run_id || '36322395443' }}
+      KARTPAD_CORE_HOST_SHA: ${{ inputs.kartpad_core_host_sha || '3934ac9d333247d5374b9fb7d71f8ef49bbcd79e' }}
+      KARTPAD_CANDIDATE: '1'
+      DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
+      DOLPHIN_CORE_HOST_SHA: ae7d46f90dff64ce698b8c18e0c12510dbae96fe
+      ARMSX2_CORE_HOST_SHA: 899d3c44f8f465c8da0d93c763817ffca519c00c
+      ARMSX2_CORE_RUN_ID: '37641466835'
+      RPCS3_CORE_HOST_SHA: afb33454db50236485bd5ec963a722dcb5f65610
+      RPCS3_CORE_RUN_ID: '37620034517'
+      DUSKLIGHT_CORE_HOST_SHA: 899d3c44f8f465c8da0d93c763817ffca519c00c
+      DUSKLIGHT_CORE_RUN_ID: '37641472546'
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+      BUNDLE_GEMFILE: ${{ github.workspace }}/build-utils/Gemfile.dolphin
+      SCREENSCRAPER_DEV_ID: ${{ secrets.SCREENSCRAPER_DEV_ID }}
+      SCREENSCRAPER_DEV_PASSWORD: ${{ secrets.SCREENSCRAPER_DEV_PASSWORD }}
+      DELIVERY_METRICS: ${{ runner.temp }}/delivery-timings.jsonl
+      CACHE_NAMESPACE: ${{ (inputs.benchmark == true || contains(github.event.head_commit.message, '[benchmark-build]')) && github.run_id || 'normal' }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      BUNDLE_PATH: ${{ github.workspace }}/build/ruby-gems
+      DELIVERY_MODE: cold
+    steps:
+    - name: Checkout exact candidate
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        persist-credentials: false
+    - name: Select Xcode 26.3 for NeoPlay and Google Cast
+      uses: maxim-lobanov/setup-xcode@v1
+      with:
+        xcode-version: '26.3'
+    - name: Set up Flutter 3.47.2
+      uses: subosito/flutter-action@v2
+      with:
+        flutter-version: 3.47.2
+        channel: stable
+        cache: true
+        cache-key: neostation-benchmark-sdk-${{ runner.os }}-${{ runner.arch }}-3.47.2-${{ env.CACHE_NAMESPACE }}
+        pub-cache-key: neostation-benchmark-pub-${{ runner.os }}-${{ runner.arch }}-3.47.2-${{ hashFiles('pubspec.lock') }}-${{ env.CACHE_NAMESPACE }}
+    - name: Record exact build environment and start measurement
+      run: |
+        mkdir -p build/delivery
+        python3 build-utils/delivery_benchmark.py environment
+        python3 build-utils/verify_delivery_reuse.py
+    - name: Record empty device build cache
+      id: state
+      uses: actions/cache/restore@v4
+      with:
+        path: .ci-cache
+        key: neostation-device-v1-${{ runner.os }}-${{ runner.arch }}-xcode26.3-flutter3.47.2-${{ github.sha }}-${{ env.BUILD_NUMBER }}-${{ hashFiles('pubspec.lock',
+          'build-utils/Gemfile.dolphin') }}-${{ env.CACHE_NAMESPACE }}
+    - name: Assert the benchmark device cache is empty
+      if: ${{ inputs.benchmark == true || contains(github.event.head_commit.message, '[benchmark-build]') }}
+      run: test "${{ steps.state.outputs.cache-hit }}" != true
+    - name: Resolve locked Dart dependencies
+      run: python3 build-utils/delivery_metrics.py dart_dependencies flutter pub get --enforce-lockfile
+    - name: Prepare lightweight build tools
+      shell: bash
+      run: |
+        set -euo pipefail
+        export BUNDLE_PATH="$GITHUB_WORKSPACE/build/ruby-gems"
+        echo "BUNDLE_PATH=$BUNDLE_PATH" >> "$GITHUB_ENV"
+        python3 build-utils/delivery_metrics.py ruby_dependencies bundle install
+    - name: Generate iOS host
+      shell: bash
+      run: |
+        set -euo pipefail
+        flutter config --no-enable-swift-package-manager
+        test ! -d ios
+        python3 build-utils/delivery_metrics.py host_scaffold_and_registrant python3 packages/dolphin_internal_bridge/ci/build_support.py scaffold
+    - name: Download validated Build 350 native donor
+      shell: bash
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        set -euo pipefail
+        # Artifact 10932894067 (run 36323843067) was purged on 7 October 2026.
+        # The same Build 350 IPA is published as release 0.0.1; require its
+        # exact SHA-256. Only its native Core and UI resources are used,
+        # never its JIT framework.
+        mkdir -p build/native-donor
+        gh release download 0.0.1 --repo "$GITHUB_REPOSITORY" --pattern NeoStation.ipa --dir build/native-donor
+        echo "e1017b96842ec970be3ed0cd981083ee945d069cf76e689a4ca3c81339299b46  build/native-donor/NeoStation.ipa" | shasum -a 256 -c -
+    - name: Reuse validated native runtimes
+      shell: bash
+      run: |
+        set -euo pipefail
+        # Core/resource bootstrap only. JIT comes exclusively from source below.
+        python3 build-utils/prepare_fast_native_runtime.py \
+          build/native-donor --build-number "$BUILD_NUMBER"
+    - name: Restore unchanged canonical StikJIT compilation interfaces
+      id: stik
+      uses: actions/cache@v4
+      with:
+        path: build/stikjit-current
+        key: stikjit-interfaces-v1-${{ runner.os }}-${{ runner.arch }}-xcode26.3-${{ hashFiles('build-utils/stikjit/source.json','build-utils/patch_stikjit_rpcs3.py','build-utils/patch_stikjit_compat.py','build-utils/install_patched_stikjit.py','build-utils/build_patched_stikjit.py')
+          }}-${{ env.CACHE_NAMESPACE }}
+    - name: Build canonical StikJIT from pinned sources for iOS 18 26 and 27
+      shell: bash
+      run: |
+        set -euo pipefail
+        command -v xcodegen || brew install xcodegen
+        python3 build-utils/build_patched_stikjit.py 2>&1 | tee "$RUNNER_TEMP/neoswap-stikjit-step.log"
+        python3 test/stikjit_unified_build_test.py 2>&1 | tee -a "$RUNNER_TEMP/neoswap-stikjit-step.log"
+      if: ${{ steps.stik.outputs.cache-hit != 'true' }}
+    - name: Install verified cached StikJIT interfaces
+      if: ${{ steps.stik.outputs.cache-hit == 'true' }}
+      run: python3 build-utils/install_patched_stikjit.py build/stikjit-current/StikJIT.xcframework
+    - name: Require completed exact NeoSwap Core before artifact download
+      shell: bash
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        set -euo pipefail
+        python3 - <<'PYCOREWAIT'
+        import json,os,subprocess,time
+        endpoint='repos/TarbleFR/neostation-ios/actions/runs/'+os.environ['RPCS3_CORE_RUN_ID']
+        deadline=time.monotonic()+7200
+        while True:
+            result=json.loads(subprocess.check_output(['gh','api',endpoint]))
+            assert result['head_sha']==os.environ['RPCS3_CORE_HOST_SHA'],result
+            if result['status']=='completed':
+                assert result['conclusion']=='success',result
+                print('Verified successful exact NeoSwap Core',result['id'],result['head_sha'])
+                break
+            assert time.monotonic()<deadline,'NeoSwap Core did not finish within the allowed wait'
+            print('Waiting for exact Core',result['id'],result['status'],flush=True)
+            time.sleep(30)
+        PYCOREWAIT
+    - name: Download pinned passive RPCS3 Core
+      uses: actions/download-artifact@v4
+      with:
+        name: RPCS3Core-${{ env.RPCS3_CORE_HOST_SHA }}
+        run-id: ${{ env.RPCS3_CORE_RUN_ID }}
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        path: dist/rpcs3-native
+    - name: Verify and install passive RPCS3 Core
+      shell: bash
+      run: |
+        set -euo pipefail
+        SOURCE=dist/rpcs3-native/libRPCS3Core.dylib
+        IDENTITY=dist/rpcs3-native/identity.json
+        CORE=packages/rpcs3_internal_bridge/ios/Frameworks/libRPCS3Core.dylib
+        test -s "$SOURCE"
+        test -s "$IDENTITY"
+        test -s "$CORE"
+        # The artifact's source, canonical patch, compiler recipe, binary
+        # checks and native ABI must all be from the same Core commit.
+        # RPCS3_CORE_INPUTS_BEGIN
+        git diff --exit-code "$RPCS3_CORE_HOST_SHA" "$GITHUB_SHA" -- \
+          build-utils/build_rpcs3_embedded_core.sh \
+          build-utils/materialize_rpcs3_core.py \
+          build-utils/apply_rpcs3_llvm_patch.py \
+          build-utils/rpcs3/canonical-source.json \
+          build-utils/rpcs3/embedded-core.patch \
+          build-utils/rpcs3/llvm-aarch64-ghc-emergency-spill.patch \
+          build-utils/rpcs3_core_syntax_gate.py \
+          build-utils/validate_rpcs3_embedded_core.py \
+          build-utils/validate_rpcs3_passive_dlopen.py \
+          build-utils/patch_rpcs3_build301_passive_dlopen.py \
+          packages/rpcs3_internal_bridge/ios/Classes/Rpcs3CoreABI.h \
+          packages/neo_swap/ios/Classes/NeoSwap.h \
+          packages/neo_swap/ios/Classes/NeoSwapClientStats.h \
+          packages/neo_swap/ios/Classes/NeoSwapRelay.h \
+          native/neoswap/NeoSwapClient.h \
+          test/neo_swap_core_pin_test.py \
+          test/neoswap_rpcs3_allocator_test.cpp \
+          test/neoswap_cpu_buffers_test.cpp \
+          test/rpcs3_neoswap_vulkan_buffer_test.py \
+          test/native/rpcs3_neoswap_vulkan_buffer_test.cpp \
+          test/rpcs3_neoswap_relay_test.py \
+          test/native/rpcs3_neoswap_relay_test.cpp \
+          test/rpcs3_core_syntax_gate_test.py \
+          test/rpcs3_embedded_core_validator_test.py \
+          test/rpcs3_preprocessor_balance_test.py \
+          test/rpcs3_build301_passive_dlopen_test.py \
+          test/rpcs3_atomic_startup_test.py \
+          test/rpcs3_failed_startup_test.py \
+          test/rpcs3_build264_gow3_core_test.py \
+          test/rpcs3_build351_gow3_engine_test.py \
+          test/rpcs3_build353_xitrix_v010_test.py \
+          test/rpcs3_armsx3_performance_patch_test.py \
+          test/rpcs3_build352_gow3_memory_test.py \
+          test/rpcs3_ios_ppu_compile_budget_test.cpp \
+          test/rpcs3_ppu_no_size_split_policy_test.cpp \
+          test/rpcs3_xitrix_v0101_native_test.py \
+          test/native/rpcs3_spu_analyzer_support.h \
+          test/native/rpcs3_spu_branch_analyzer_test.cpp \
+          test/rpcs3_spu_warmup_test.py \
+          test/native/rpcs3_spu_warmup_test.cpp \
+          test/native/rpcs3_vk_memory_pressure_test.cpp \
+          test/native/rpcs3_vk_conditional_render_test.cpp \
+          test/native/rpcs3_neoswap_stats_getter_test.cpp \
+          .github/workflows/rpcs3-core.yml \
+          native/neoswap-storage/StorageABI.h \
+          native/neoswap-storage/Client.h \
+          native/neoswap-storage/ShaderKey.h \
+          test/rpcs3_shader_storage_test.py \
+          test/native/rpcs3_shader_storage_client_test.cpp \
+          native/neoswap-storage/SourceABI.h \
+          native/neoswap-storage/SourceClient.h \
+          native/neoswap-storage/SourceClient.cpp \
+          native/neoswap-storage/FrameClient.h \
+          native/neoswap-storage/VideoBuffer.h \
+          test/rpcs3_video_frame_archive_test.py \
+          test/native/rpcs3_video_frame_archive_test.cpp \
+          build-utils/run_vdec_archive_validation.sh \
+          test/rpcs3_source_archive_test.py \
+          test/native/rpcs3_source_archive_client_test.cpp
+        # RPCS3_CORE_INPUTS_END
+        # The independent host broker/donation is rebuilt by this IPA job.
+        # Only the Core source, client ABI, recipe and native tests are pinned.
+        python3 test/neo_swap_core_pin_test.py
+        python3 - <<'PY'
+        import json, os, shutil, sys
+        from pathlib import Path
+        sys.path.insert(0, 'build-utils')
+        sys.path.insert(0, 'test')
+        from neo_swap_core_pin_test import validate_core_input_identity
+        from validate_rpcs3_ipa import validate_core_identity
+        from validate_rpcs3_embedded_core import validate_core
+        from validate_rpcs3_passive_dlopen import validate as validate_passive_dlopen
+
+        source = Path('dist/rpcs3-native/libRPCS3Core.dylib')
+        identity_path = Path('dist/rpcs3-native/identity.json')
+        destination = Path('packages/rpcs3_internal_bridge/ios/Frameworks/libRPCS3Core.dylib')
+        data = source.read_bytes()
+        identity = validate_core_identity(data, identity_path, os.environ['RPCS3_CORE_HOST_SHA'])
+        validate_core(data)
+        assert identity['neoswap_client_abi'] == 1, identity
+        assert identity['neoswap_client_stats_abi'] == 1, identity
+        assert identity['neoswap_relay_abi'] == 1, identity
+        assert identity['neoswap_storage_abi'] == 1, identity
+        assert identity['neoswap_source_archive_abi'] == 1, identity
+        validate_core_input_identity(identity)
+        passive = validate_passive_dlopen(data)
+        assert passive['forbiddenReachability'] is False, passive
+
+        shutil.copy2(source, destination)
+        destination.chmod(0o755)
+        assert destination.read_bytes() == data, 'RPCS3 Core installation changed artifact bytes'
+        fast_path = Path('build/fast-native/identity.json')
+        fast = json.loads(fast_path.read_text())
+        fast.update({
+            'rpcs3CoreSha256': identity['sha256'],
+            'rpcs3CoreHostCommit': identity['host_commit'],
+            'rpcs3CoreSourceCommit': identity['source_commit'],
+            'rpcs3CorePatchSha256': identity['source_patch_sha256'],
+            'rpcs3CoreAbiVersion': identity['abi_version'],
+            'rpcs3CoreRunId': int(os.environ['RPCS3_CORE_RUN_ID']),
+            'rpcs3PassiveDlopen': passive,
+        })
+        fast_path.write_text(json.dumps(fast, indent=2) + '\n')
+        shutil.copy2(identity_path, 'build/fast-native/rpcs3-core-identity.json')
+        print(json.dumps({'identity': identity, 'passiveDlopen': passive}, indent=2))
+        PY
+        file "$CORE"
+        test "$(lipo -archs "$CORE")" = arm64
+        nm -gU "$CORE" > build/rpcs3-core-exports.txt
+        python3 - <<'PY'
+        import sys
+        from pathlib import Path
+        sys.path.insert(0, 'build-utils')
+        from validate_rpcs3_ipa import REQUIRED_CORE_SYMBOLS, FORBIDDEN_CORE_SYMBOLS
+        exports = Path('build/rpcs3-core-exports.txt').read_text().splitlines()
+        symbols = {line.split()[-1] for line in exports if line.split()}
+        missing = (set(REQUIRED_CORE_SYMBOLS) | {
+            '_rpcs3_ios_set_neoswap_api', '_rpcs3_ios_get_neoswap_client_stats',
+        }) - symbols
+        forbidden = set(FORBIDDEN_CORE_SYMBOLS) & symbols
+        assert not missing, f'Missing RPCS3 Core exports: {sorted(missing)}'
+        assert not forbidden, f'Retired RPCS3 Core exports: {sorted(forbidden)}'
+        PY
+    - name: Verify retained stable Dolphin Core
+      shell: bash
+      run: |
+        set -euo pipefail
+        CORE="packages/dolphin_internal_bridge/ios/Frameworks/DolphinCore.framework/DolphinCore"
+        test -s "$CORE"
+        test -d ios/Runner/Sys
+        test -s ios/Runner/cacert.pem
+
+        # The Build 350 IPA carries the exact previously validated Dolphin
+        # runtime. Refuse it if any source defining that ABI has changed.
+        git diff --exit-code "$DOLPHIN_CORE_HOST_SHA" "$GITHUB_SHA" -- \
+          build-utils/patch_dolphin_internal_core_v2.py \
+          packages/dolphin_internal_bridge/core \
+          test/dolphin_cheat_manager_test.py \
+          test/dolphin_cheats_menu_test.py \
+          .github/workflows/dolphin-core.yml
+
+        python3 - <<'PY'
+        import hashlib
+        import json
+        import os
+        from pathlib import Path
+
+        # This is a recompiled UIKit host API, not the retained core's C ABI.
+        # Permit exactly the added navigation callback, preserving every other declaration.
+        import subprocess
+        menu_path='packages/dolphin_internal_bridge/ios/Classes/DolphinSessionMenu.h'
+        original=subprocess.check_output(['git','show',os.environ['DOLPHIN_CORE_HOST_SHA']+':'+menu_path],text=True)
+        current=Path(menu_path).read_text()
+        for callback in ('openDisplaySettings','openTextureSettings'):
+            addition='@property(nonatomic, copy, nullable) dispatch_block_t '+callback+';\n'
+            assert current.count(addition)==1
+            current=current.replace(addition,'')
+        assert current==original, 'Unexpected UIKit menu interface change'
+
+        core = Path(
+            "packages/dolphin_internal_bridge/ios/Frameworks/"
+            "DolphinCore.framework/DolphinCore"
+        )
+        actual = hashlib.sha256(core.read_bytes()).hexdigest()
+        baseline = json.loads(Path("build-utils/baselines/ios-322.json").read_text())
+        expected = baseline["nativeIdentity"]["dolphinCoreSha256"]
+        assert actual == expected, (actual, expected)
+        fast_path = Path("build/fast-native/identity.json")
+        fast = json.loads(fast_path.read_text())
+        fast["dolphinCoreSha256"] = actual
+        fast["dolphinCoreHostCommit"] = os.environ["DOLPHIN_CORE_HOST_SHA"]
+        fast["dolphinSourceRevision"] = os.environ["DOLPHIN_SHA"]
+        fast["dolphinCheatCatalogues"] = [
+            "Gecko/WiiRD", "Action Replay/local INI"
+        ]
+        fast_path.write_text(json.dumps(fast, indent=2) + "\n")
+        print(json.dumps({"sha256": actual, "baseline": expected}, indent=2))
+        PY
+
+        file packages/dolphin_internal_bridge/ios/Frameworks/DolphinCore.framework/DolphinCore
+        nm -gU packages/dolphin_internal_bridge/ios/Frameworks/DolphinCore.framework/DolphinCore \
+          > build/dolphin-native-exports.txt
+        for symbol in \
+          _neostation_dolphin_initialize \
+          _neostation_dolphin_launch \
+          _neostation_dolphin_menu_snapshot \
+          _neostation_dolphin_cheats_snapshot \
+          _neostation_dolphin_set_cheats_enabled \
+          _neostation_dolphin_set_cheat_enabled \
+          _neostation_dolphin_download_gecko_codes; do
+          grep -q " $symbol$" build/dolphin-native-exports.txt
+        done
+    - name: Require completed exact ARMSX2 2.6 Core and remove its donor bootstrap
+      shell: bash
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        set -euo pipefail
+        python3 - <<'PY'
+        import json, os, shutil, subprocess
+        endpoint='repos/TarbleFR/neostation-ios/actions/runs/'+os.environ['ARMSX2_CORE_RUN_ID']
+        result=json.loads(subprocess.check_output(['gh','api',endpoint]))
+        assert result['head_sha'] == os.environ['ARMSX2_CORE_HOST_SHA'], result
+        assert result['path'] == '.github/workflows/armsx2-core.yml', result
+        assert result['status'] == 'completed' and result['conclusion'] == 'success', result
+        shutil.rmtree('dist/armsx2')
+        PY
+    - name: Download pinned ARMSX2 2.6 Core
+      uses: actions/download-artifact@v4
+      with:
+        name: ARMSX2Core-${{ env.ARMSX2_CORE_HOST_SHA }}
+        run-id: ${{ env.ARMSX2_CORE_RUN_ID }}
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        path: dist/armsx2
+    - name: Verify pinned ARMSX2 Core identity
+      shell: bash
+      run: |
+        set -euo pipefail
+        test -f dist/armsx2/ARMSX2Core.framework/ARMSX2Core
+        test -f dist/armsx2/identity.json
+        # Refuse a stale core even when both artifacts report the same ABI.
+        git diff --exit-code "$ARMSX2_CORE_HOST_SHA" "$GITHUB_SHA" -- \
+          packages/armsx2_internal_bridge/core \
+          packages/armsx2_internal_bridge/ios/Classes/ARMSX2CoreABI.h \
+          build-utils/armsx2
+        python3 - <<'PY'
+        import hashlib, json, os
+        from pathlib import Path
+        identity=json.loads(Path('dist/armsx2/identity.json').read_text())
+        source=json.loads(Path('build-utils/armsx2/source.json').read_text())
+        assert identity['revision'] == source['revision'], identity
+        assert identity['host_commit'] == os.environ['ARMSX2_CORE_HOST_SHA'], identity
+        assert identity['architectures'] == ['arm64'], identity
+        assert identity['abi_version'] == source['abi_version'] == 6, identity
+        assert identity['release'] == source['release'] == 'iOSv2.6.0', identity
+        assert identity['shader_chains'] and identity['performance_overlays'], identity
+        assert identity['bundled_shader_presets'] == 12 and identity['bundled_shader_files'] == 28, identity
+        resources=Path('dist/armsx2/ARMSX2Core.framework/shaders')
+        shader_hashes=identity['bundled_shader_sha256']
+        assert len(shader_hashes) == identity['bundled_shader_files'], identity
+        assert len(list(resources.glob('**/*.slangp'))) == identity['bundled_shader_presets'], identity
+        for relative,expected in shader_hashes.items():
+            asset=resources/relative
+            assert asset.is_file() and hashlib.sha256(asset.read_bytes()).hexdigest() == expected, relative
+        binary=Path('dist/armsx2/ARMSX2Core.framework/ARMSX2Core')
+        assert hashlib.sha256(binary.read_bytes()).hexdigest() == identity['sha256'], identity
+        binary.chmod(0o755)
+        fast_path=Path('build/fast-native/identity.json')
+        fast=json.loads(fast_path.read_text())
+        fast.update(armsx2CoreSha256=identity['sha256'],
+                    armsx2CoreHostCommit=identity['host_commit'],
+                    armsx2SourceRevision=identity['revision'],
+                    armsx2CoreRunId=int(os.environ['ARMSX2_CORE_RUN_ID']))
+        fast_path.write_text(json.dumps(fast,indent=2)+'\n')
+        print(identity)
+        PY
+    - name: Require completed exact Dusklight 2.0.3 Core
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        set -euo pipefail
+        python3 - <<'PY'
+        import json, os, shutil, subprocess, time
+        endpoint = 'repos/TarbleFR/neostation-ios/actions/runs/' + os.environ['DUSKLIGHT_CORE_RUN_ID']
+        deadline = time.monotonic() + 3600
+        while True:
+            result = json.loads(subprocess.check_output(['gh', 'api', endpoint]))
+            assert result['head_sha'] == os.environ['DUSKLIGHT_CORE_HOST_SHA'], result
+            assert result['path'] == '.github/workflows/dusklight-core.yml', result
+            if result['status'] == 'completed':
+                assert result['conclusion'] == 'success', result
+                break
+            assert time.monotonic() < deadline, 'Pinned Dusklight Core did not complete'
+            print('Waiting for exact Dusklight Core', result['id'], result['status'], flush=True)
+            time.sleep(30)
+        # The retained donor was verified separately. Remove its complete
+        # Dusklight tree so retired resources cannot survive the update.
+        shutil.rmtree('dist/dusklight')
+        PY
+        git diff --exit-code "$DUSKLIGHT_CORE_HOST_SHA" "$GITHUB_SHA" -- \
+          native/dusklight build-utils/dusklight .github/workflows/dusklight-core.yml \
+          packages/dusklight_internal_bridge/ios/Classes/DusklightCoreABI.h
+    - name: Download pinned Dusklight 2.0.3 Core
+      uses: actions/download-artifact@v4
+      with:
+        name: NeoStation-Dusklight-Core-${{ env.DUSKLIGHT_CORE_HOST_SHA }}
+        run-id: ${{ env.DUSKLIGHT_CORE_RUN_ID }}
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        path: dist/dusklight
+    - name: Verify updated Dusklight Core identity
+      run: |
+        set -euo pipefail
+        python3 - <<'PYCORE'
+        import hashlib, json, os
+        from pathlib import Path
+        root = Path('dist/dusklight')
+        identity = json.loads((root / 'identity.json').read_text())
+        pins = json.loads(Path('build-utils/dusklight/source.json').read_text())
+        assert identity['host_commit'] == os.environ['DUSKLIGHT_CORE_HOST_SHA']
+        assert identity['source_release'] == pins['release'] == 'v2.0.3'
+        assert identity['source_commit'] == pins['commit']
+        assert identity['submodules'] == pins['submodules']
+        assert identity['sdl_commit'] == pins['sdl']['commit']
+        assert identity['abi_version'] == 7
+        assert identity['session_policy'] == 'host_frame_loop_warm_resume_rpcs3_jit_escrow'
+        canonical = Path('native/dusklight')
+        expected_sources = {
+            name: canonical / name
+            for name in json.loads((canonical / 'upstream-manifest.json').read_text())
+        }
+        expected_sources.update({
+            'neostation/' + item.name: item
+            for item in (canonical / 'core').iterdir() if item.is_file()
+        })
+        expected_sources['neostation/DusklightCoreABI.h'] = Path(
+            'packages/dusklight_internal_bridge/ios/Classes/DusklightCoreABI.h')
+        assert set(identity['canonical_sources']) == set(expected_sources)
+        for relative, source in expected_sources.items():
+            assert hashlib.sha256(source.read_bytes()).hexdigest() == identity['canonical_sources'][relative], relative
+        framework = root / 'DusklightCore.framework'
+        assert hashlib.sha256((framework / 'DusklightCore').read_bytes()).hexdigest() == identity['sha256']
+        for relative, digest in identity['resources'].items():
+            assert hashlib.sha256((framework / relative).read_bytes()).hexdigest() == digest, relative
+        fast_path = Path('build/fast-native/identity.json')
+        fast = json.loads(fast_path.read_text())
+        fast.update({
+            'dusklightCoreSha256': identity['sha256'],
+            'dusklightCoreHostCommit': identity['host_commit'],
+            'dusklightSourceRevision': identity['source_commit'],
+            'dusklightSourceRelease': identity['source_release'],
+            'dusklightCoreRun': os.environ['DUSKLIGHT_CORE_RUN_ID'],
+        })
+        fast_path.write_text(json.dumps(fast, indent=2) + '\n')
+        PYCORE
+    - name: Download validated KartPad Core candidate
+      if: ${{ env.KARTPAD_CANDIDATE == '1' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        # KartPadCore-3934ac9d (run 36322395443) was purged on 7 October 2026
+        # and its official source IPA is no longer published. The verified
+        # Build 350 donor IPA embeds that exact artifact; restore it byte for
+        # byte against the pinned identity checked again below.
+        python3 test/kartpad_donor_restore_test.py
+        python3 build-utils/restore_kartpad_donor_from_ipa.py build/native-donor/NeoStation.ipa dist/kartpad-native
+    - name: Verify KartPad Core candidate identity
+      if: ${{ env.KARTPAD_CANDIDATE == '1' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        test -f dist/kartpad-native/KartPadCore.framework/KartPadCore
+        test -f dist/kartpad-native/identity.json
+        python3 build-utils/kartpad/validate_embedded_core.py             dist/kartpad-native/KartPadCore.framework             dist/kartpad-native/identity.json
+        python3 - <<'PY'
+        import json, os
+        from pathlib import Path
+        identity=json.loads(Path('dist/kartpad-native/identity.json').read_text())
+        assert identity['host_commit'] == os.environ['KARTPAD_CORE_HOST_SHA'], identity
+        assert identity['sha256'] == '995e876715b98be8fde897a88f7b93fb2357b6c47826d99c1df0a0b05a98930c', identity
+        assert identity['runtime_sha256'] == 'ad5c00a0a508bbfcc0dc3eb1ee04a17f10919cde0b5cccd90d1d9e6a31c39eb0', identity
+        PY
+        git diff --exit-code "$KARTPAD_CORE_HOST_SHA" "$GITHUB_SHA" -- \
+          native/kartpad build-utils/kartpad packages/kartpad_internal_bridge \
+          ":(exclude)build-utils/kartpad/inspect_personal_pack.py" \
+          ":(exclude)build-utils/kartpad/migration-target.json"
+        python3 test/kartpad_personal_pack_test.py
+    - name: Prepare emulator build definitions
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 - <<'PY'
+        import json, os
+        from pathlib import Path
+        required=('SCREENSCRAPER_DEV_ID','SCREENSCRAPER_DEV_PASSWORD')
+        values={key:os.environ.get(key,'').strip() for key in required}
+        missing=[key for key,value in values.items() if not value]
+        if missing:
+            raise SystemExit('Missing build secrets: '+', '.join(missing))
+        values.update({
+            'NEOSTATION_EXPERIMENTAL_STIKJIT_MELONX':'true',
+            'NEOSTATION_MELONX_BUNDLE_ID':'com.nur.nx',
+        })
+        Path('.dart-defines.json').write_text(json.dumps(values))
+        PY
+
+        python3 build-utils/delivery_benchmark.py record-inputs
+    - name: Configure release host
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 build-utils/configure_neoswap_storage.py
+        python3 build-utils/patch_ios_video_player_audio_session.py
+        # Flutter's config-only build also invokes CocoaPods. Align its host
+        # first, then reapply after legacy host generators below.
+        python3 build-utils/configure_neoplay_ios.py --deployment-only
+        python3 build-utils/delivery_metrics.py flutter_configuration_and_first_pods flutter build ios --release --no-codesign --config-only --no-pub \
+          --build-number="$BUILD_NUMBER" \
+          --dart-define-from-file=.dart-defines.json
+        python3 packages/dolphin_internal_bridge/ci/build_support.py configure
+        python3 build-utils/configure_rpcs3_ios_v2.py
+        python3 build-utils/configure_armsx2_ios.py
+        python3 build-utils/configure_neoswap_donor.py
+        python3 build-utils/configure_neoplay_ios.py
+        dart run flutter_launcher_icons
+        bash build-utils/force_ios_fork_icon.sh
+        # Fallback PNGs are generated in ios/Runner and referenced from the same Xcode group.
+        python3 build-utils/prepare_ios_icon_fallback.py
+        bundle exec ruby build-utils/add_ios_icon_fallback_resources.rb
+        python3 build-utils/delivery_metrics.py cocoa_pods env -u BUNDLE_GEMFILE -u BUNDLE_PATH pod install --project-directory=ios
+        python3 - <<'PY'
+        import plistlib
+        from pathlib import Path
+
+        entitlements = plistlib.loads(
+            Path('ios/Runner/Runner.entitlements').read_bytes()
+        )
+        retired = {
+            'com.apple.developer.networking.networkextension',
+            'com.apple.developer.networking.vpn.api',
+        }
+        remaining = retired.intersection(entitlements)
+        if remaining:
+            raise SystemExit(
+                'Retired VPN entitlements remain: ' + ', '.join(sorted(remaining))
+            )
+        generated = (
+            Path('ios/Runner.xcodeproj/project.pbxproj').read_text(),
+            Path('ios/Podfile').read_text(),
+        )
+        markers = (
+            'NeoStationLocalTunnel',
+            'NetworkExtension.framework',
+            'com.apple.NetworkExtensions.iOS',
+            'packet-tunnel-provider',
+        )
+        found = [marker for marker in markers if any(marker in text for text in generated)]
+        if found:
+            raise SystemExit('Generated iOS host retains internal VPN markers: ' + ', '.join(found))
+        if Path('ios/NeoStationLocalTunnel').exists():
+            raise SystemExit('Generated iOS host retains the internal VPN directory')
+        print('Generated iOS host is LocalDevVPN-only.')
+        PY
+        git diff --exit-code -- pubspec.yaml pubspec.lock
+    - name: Align application and extension versions to 0.0.2
+      run: python3 build-utils/stamp_host_version.py
+    - name: Compile Release device binary with measured AOT and Xcode phases
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 build-utils/delivery_metrics.py xcode_build xcodebuild -workspace ios/Runner.xcworkspace -scheme Runner \
+          -configuration Release -sdk iphoneos \
+          -destination 'generic/platform=iOS' \
+          -derivedDataPath build/ios/DolphinDerivedData \
+          CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY='' \
+          DEVELOPMENT_TEAM='' PROVISIONING_PROFILE_SPECIFIER='' \
+          COMPILER_INDEX_STORE_ENABLE=NO \
+          PERFORMANCE_MEASUREMENT_FILE="$RUNNER_TEMP/flutter-aot-timings.json" \
+          -jobs "$(python3 -c 'import os; print(os.cpu_count())')" -showBuildTimingSummary build \
+          2>&1 | tee "$RUNNER_TEMP/neostation-fast-xcodebuild.log"
+    - name: Embed NeoPlay source identity and dependency acknowledgements
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 - <<'NEOPLAY'
+        import json, os, shutil
+        from pathlib import Path
+        app = Path('build/ios/DolphinDerivedData/Build/Products/Release-iphoneos/Runner.app')
+        assert app.is_dir()
+        identity = {'build': os.environ['BUILD_NUMBER'], 'commit': os.environ['GITHUB_SHA'], 'physicalTVValidation': False, 'physicalControllerValidation': False, 'nativeLinkage': 'static_framework', 'castSDK': '4.8.6'}
+        (app / 'NeoPlay-build-identity.json').write_text(json.dumps(identity, indent=2))
+        notices = Path('ios/Pods/Target Support Files/Pods-Runner/Pods-Runner-acknowledgements.plist')
+        assert notices.is_file(), 'CocoaPods acknowledgement inventory is missing'
+        shutil.copyfile(notices, app / 'NeoPlay-Pods-acknowledgements.plist')
+        NEOPLAY
+    - name: Embed verified RPCS3 Core and signing metadata
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 build-utils/embed_rpcs3_core_lazy.py
+        python3 build-utils/embed_rpcs3_host_entitlements.py
+        python3 build-utils/embed_neoswap_donor_entitlements.py
+    - name: Embed lazy-loaded ARMSX2 Core framework
+      shell: bash
+      run: |
+        set -euo pipefail
+        APP="build/ios/DolphinDerivedData/Build/Products/Release-iphoneos/Runner.app"
+        test -d "$APP"
+        mkdir -p "$APP/Frameworks"
+        rm -rf "$APP/Frameworks/ARMSX2Core.framework"
+        ditto dist/armsx2/ARMSX2Core.framework "$APP/Frameworks/ARMSX2Core.framework"
+        test -f "$APP/Frameworks/ARMSX2Core.framework/ARMSX2Core"
+        file "$APP/Frameworks/ARMSX2Core.framework/ARMSX2Core"
+        nm -gj "$APP/Frameworks/ARMSX2Core.framework/ARMSX2Core" > build/armsx2-exports.txt
+        grep -qx '_NeoARMSX2_GetAPI' build/armsx2-exports.txt
+    - name: Embed lazy-loaded Dusklight framework and notices
+      run: |
+        set -euo pipefail
+        APP="build/ios/DolphinDerivedData/Build/Products/Release-iphoneos/Runner.app"
+        ditto dist/dusklight/DusklightCore.framework "$APP/Frameworks/DusklightCore.framework"
+        chmod 755 "$APP/Frameworks/DusklightCore.framework/DusklightCore"
+        ditto dist/dusklight/licenses "$APP/Dusklight-Licenses"
+        cp dist/dusklight/identity.json "$APP/Dusklight-native-identity.json"
+    - name: Embed validated KartPad Core candidate
+      if: ${{ env.KARTPAD_CANDIDATE == '1' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        APP="build/ios/DolphinDerivedData/Build/Products/Release-iphoneos/Runner.app"
+        python3 build-utils/kartpad/embed_core.py             --app "$APP"             --artifact dist/kartpad-native
+    - name: Embed legal, license and source notices
+      shell: bash
+      run: |
+        set -euo pipefail
+        APP="build/ios/DolphinDerivedData/Build/Products/Release-iphoneos/Runner.app"
+        python3 build-utils/embed_legal_bundle.py \
+          --app "$APP" \
+          --build-number "$BUILD_NUMBER" \
+          --dolphin-sha "$DOLPHIN_SHA"
+    - name: Package and validate NeoStation IPA
+      shell: bash
+      run: |
+        set -euo pipefail
+        git diff --check
+        python3 packages/dolphin_internal_bridge/ci/build_support.py package
+        python3 build-utils/validate_legal_bundle_ipa.py "dist/$IPA_NAME.ipa" \
+          --build-number "$BUILD_NUMBER" --commit "$GITHUB_SHA"
+        python3 build-utils/validate_rpcs3_ipa.py \
+          --build-number "$BUILD_NUMBER" --commit "$GITHUB_SHA" \
+          --core-identity build/fast-native/rpcs3-core-identity.json \
+          --core-host-commit "$RPCS3_CORE_HOST_SHA" \
+          --core-run-id "$RPCS3_CORE_RUN_ID"
+        python3 build-utils/validate_single_ipa_distribution.py \
+          "dist/$IPA_NAME.ipa" --report dist/localdevvpn-distribution.json
+        python3 build-utils/validate_neoswap_ipa.py "dist/$IPA_NAME.ipa" \
+          --build-number "$BUILD_NUMBER" --report dist/neoswap-validation.json
+        python3 build-utils/validate_debugger_probe_ipa.py "dist/$IPA_NAME.ipa"
+        python3 build-utils/validate_cheat_bulk_ipa.py "dist/$IPA_NAME.ipa" --build-number "$BUILD_NUMBER" --report dist/cheat-bulk-validation.json
+        python3 build-utils/validate_release002_ipa.py "dist/$IPA_NAME.ipa" \
+          --build-number "$BUILD_NUMBER" --report dist/0.0.2-validation.json
+        python3 build-utils/validate_stikjit_ipa.py "dist/$IPA_NAME.ipa" \
+          --identity build/stikjit-current/identity.json \
+          --report dist/stikjit-compatibility.json
+        python3 - <<'PY'
+        import zipfile,plistlib,os
+        with zipfile.ZipFile('dist/'+os.environ['IPA_NAME']+'.ipa') as z:
+            apps={n.split('/')[1] for n in z.namelist() if n.startswith('Payload/') and len(n.split('/'))>2 and n.split('/')[1].endswith('.app')}
+            assert len(apps)==1,apps
+            root='Payload/'+apps.pop()+'/'
+            info=plistlib.loads(z.read(root+'Info.plist'))
+            assert info.get('CADisableMinimumFrameDurationOnPhone') is True, 'iPhone ProMotion opt-in missing'
+            bridge=z.read(root+'Frameworks/dolphin_internal_bridge.framework/dolphin_internal_bridge')
+            for marker in (b'DolphinFramePacing',b'DOLDisplaySettings',b'MTLUsePresentDrawable',b'ShaderCompilationMode',b'setPreferredFrameRateRange:'):
+                assert marker in bridge,marker
+        PY
+        ARMSX2_SOURCE_REVISION="$(python3 -c 'import json; print(json.load(open("build-utils/armsx2/source.json"))["revision"])')"
+        python3 build-utils/validate_armsx2_ipa.py "dist/$IPA_NAME.ipa" \
+          --build-number "$BUILD_NUMBER" \
+          --source-revision "$ARMSX2_SOURCE_REVISION"
+        python3 build-utils/validate_dusklight_ipa.py "dist/$IPA_NAME.ipa" \
+          --identity dist/dusklight/identity.json --core-host "$DUSKLIGHT_CORE_HOST_SHA" \
+          --build-number "$BUILD_NUMBER"
+        if [ "$KARTPAD_CANDIDATE" = "1" ]; then
+          python3 build-utils/validate_kartpad_ipa.py "dist/$IPA_NAME.ipa" \
+            --identity dist/kartpad-native/identity.json \
+            --core-host "$KARTPAD_CORE_HOST_SHA" \
+            --build-number "$BUILD_NUMBER"
+          cp dist/kartpad-native/identity.json dist/kartpad-core-identity.json
+        else
+          python3 build-utils/validate_kartpad_ipa.py "dist/$IPA_NAME.ipa" \
+            --build-number "$BUILD_NUMBER" --expect-absent
+        fi
+        cp build/fast-native/identity.json dist/fast-native-identity.json
+        cp build/fast-native/rpcs3-core-identity.json dist/rpcs3-core-identity.json
+        python3 build-utils/validate_neoplay_ipa.py "dist/$IPA_NAME.ipa" --build-number "$BUILD_NUMBER" --commit "$GITHUB_SHA" --report dist/neoplay-validation.json
+        shasum -a 256 dist/*.ipa | tee "dist/$IPA_NAME.sha256"
+        ls -lah dist
+    - name: Seal every executable, framework and extension for SideStore
+      run: |
+        python3 build-utils/delivery_metrics.py signature_and_ipa_export python3 build-utils/delivery_benchmark.py seal
+    - name: Finalize observed timings and artifact identity
+      if: always()
+      run: |
+        python3 build-utils/delivery_benchmark.py report
+    - name: Prepare encrypted delivery and evidence
+      run: |
+        mkdir -p build/delivery-artifact
+        cp dist/NeoStation.ipa "build/delivery-artifact/NeoStation-Build${BUILD_NUMBER}-${GITHUB_SHA}-${DELIVERY_MODE}.ipa"
+        cp build/delivery/*.json build/delivery-artifact/
+        cp docs/retroarch-rollback-2026-10-08.md build/delivery-artifact/
+        shasum -a 256 build/delivery-artifact/*.ipa > build/delivery-artifact/SHA256SUMS
+
+        python3 build-utils/delivery_metrics.py artifact_encryption python3 build-utils/delivery_cipher.py artifact build/delivery-artifact build/encrypted-delivery
+    - name: Encrypt authenticated compilation cache
+      if: ${{ success() && env.DELIVERY_MODE == 'cold' }}
+      run: python3 build-utils/delivery_metrics.py cache_save_preparation python3 build-utils/delivery_cipher.py cache-pack
+    - name: Save exact tested device build state
+      if: ${{ success() && env.DELIVERY_MODE == 'cold' }}
+      uses: actions/cache/save@v4
+      with:
+        path: .ci-cache
+        key: neostation-device-v1-${{ runner.os }}-${{ runner.arch }}-xcode26.3-flutter3.47.2-${{ github.sha }}-${{ env.BUILD_NUMBER }}-${{ hashFiles('pubspec.lock',
+          'build-utils/Gemfile.dolphin') }}-${{ env.CACHE_NAMESPACE }}
+    - name: Upload encrypted IPA and verification reports
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ env.ARTIFACT_NAME }}
+        path: build/encrypted-delivery/
+        if-no-files-found: error
+        retention-days: 14
+        compression-level: 0
+    - name: Collect diagnostic evidence
+      if: always()
+      run: |
+        mkdir -p build/delivery
+        cp "$RUNNER_TEMP/neostation-fast-xcodebuild.log" build/delivery/xcodebuild.log 2>/dev/null || true
+        cp "$RUNNER_TEMP/flutter-aot-timings.json" build/delivery/flutter-aot-timings.json 2>/dev/null || true
+
+        python3 build-utils/delivery_cipher.py artifact build/delivery build/encrypted-diagnostics
+    - name: Upload diagnostics
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ env.ARTIFACT_NAME }}-diagnostics
+        path: build/encrypted-diagnostics/
+        if-no-files-found: warn
+        retention-days: 14
+    - name: Remove temporary secrets
+      if: always()
+      shell: bash
+      run: rm -f .dart-defines.json
+  warm:
+    name: Release device build • warm
+    runs-on: macos-15
+    timeout-minutes: 60
+    needs:
+    - cold
+    env:
+      BUILD_NUMBER: ${{ inputs.build_number || '422' }}
+      IPA_NAME: NeoStation
+      ARTIFACT_NAME: NeoStation-Build-422-${{ github.sha }}-warm
+      KARTPAD_CORE_RUN_ID: ${{ inputs.kartpad_core_run_id || '36322395443' }}
+      KARTPAD_CORE_HOST_SHA: ${{ inputs.kartpad_core_host_sha || '3934ac9d333247d5374b9fb7d71f8ef49bbcd79e' }}
+      KARTPAD_CANDIDATE: '1'
+      DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
+      DOLPHIN_CORE_HOST_SHA: ae7d46f90dff64ce698b8c18e0c12510dbae96fe
+      ARMSX2_CORE_HOST_SHA: 899d3c44f8f465c8da0d93c763817ffca519c00c
+      ARMSX2_CORE_RUN_ID: '37641466835'
+      RPCS3_CORE_HOST_SHA: afb33454db50236485bd5ec963a722dcb5f65610
+      RPCS3_CORE_RUN_ID: '37620034517'
+      DUSKLIGHT_CORE_HOST_SHA: 899d3c44f8f465c8da0d93c763817ffca519c00c
+      DUSKLIGHT_CORE_RUN_ID: '37641472546'
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+      BUNDLE_GEMFILE: ${{ github.workspace }}/build-utils/Gemfile.dolphin
+      SCREENSCRAPER_DEV_ID: ${{ secrets.SCREENSCRAPER_DEV_ID }}
+      SCREENSCRAPER_DEV_PASSWORD: ${{ secrets.SCREENSCRAPER_DEV_PASSWORD }}
+      DELIVERY_METRICS: ${{ runner.temp }}/delivery-timings.jsonl
+      CACHE_NAMESPACE: ${{ (inputs.benchmark == true || contains(github.event.head_commit.message, '[benchmark-build]')) && github.run_id || 'normal' }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      BUNDLE_PATH: ${{ github.workspace }}/build/ruby-gems
+      DELIVERY_MODE: warm
+    steps:
+    - name: Checkout exact candidate
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        persist-credentials: false
+    - name: Select Xcode 26.3 for NeoPlay and Google Cast
+      uses: maxim-lobanov/setup-xcode@v1
+      with:
+        xcode-version: '26.3'
+    - name: Set up Flutter 3.47.2
+      uses: subosito/flutter-action@v2
+      with:
+        flutter-version: 3.47.2
+        channel: stable
+        cache: true
+        cache-key: neostation-benchmark-sdk-${{ runner.os }}-${{ runner.arch }}-3.47.2-${{ env.CACHE_NAMESPACE }}
+        pub-cache-key: neostation-benchmark-pub-${{ runner.os }}-${{ runner.arch }}-3.47.2-${{ hashFiles('pubspec.lock') }}-${{ env.CACHE_NAMESPACE }}
+    - name: Record exact build environment and start measurement
+      run: |
+        mkdir -p build/delivery
+        python3 build-utils/delivery_benchmark.py environment
+        python3 build-utils/verify_delivery_reuse.py
+    - name: Restore exact device build state
+      id: state
+      uses: actions/cache/restore@v4
+      with:
+        path: .ci-cache
+        key: neostation-device-v1-${{ runner.os }}-${{ runner.arch }}-xcode26.3-flutter3.47.2-${{ github.sha }}-${{ env.BUILD_NUMBER }}-${{ hashFiles('pubspec.lock',
+          'build-utils/Gemfile.dolphin') }}-${{ env.CACHE_NAMESPACE }}
+    - name: Require actual cache reuse
+      run: |
+        test "${{ steps.state.outputs.cache-hit }}" = true
+        python3 build-utils/delivery_metrics.py cache_restore_preparation python3 build-utils/delivery_cipher.py cache-unpack
+        python3 build-utils/delivery_benchmark.py check-cache
+    - name: Resolve locked Dart graph after restoring the native project
+      run: python3 build-utils/delivery_metrics.py dart_dependencies flutter pub get --enforce-lockfile
+    - name: Verify locked CocoaPods graph after cache restoration
+      run: python3 build-utils/delivery_metrics.py cocoa_pods env -u BUNDLE_GEMFILE -u BUNDLE_PATH pod install --deployment --project-directory=ios
+    - name: Prepare emulator build definitions
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 - <<'PY'
+        import json, os
+        from pathlib import Path
+        required=('SCREENSCRAPER_DEV_ID','SCREENSCRAPER_DEV_PASSWORD')
+        values={key:os.environ.get(key,'').strip() for key in required}
+        missing=[key for key,value in values.items() if not value]
+        if missing:
+            raise SystemExit('Missing build secrets: '+', '.join(missing))
+        values.update({
+            'NEOSTATION_EXPERIMENTAL_STIKJIT_MELONX':'true',
+            'NEOSTATION_MELONX_BUNDLE_ID':'com.nur.nx',
+        })
+        Path('.dart-defines.json').write_text(json.dumps(values))
+        PY
+
+        python3 build-utils/delivery_benchmark.py record-inputs
+    - name: Compile Release device binary with measured AOT and Xcode phases
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 build-utils/delivery_metrics.py xcode_build xcodebuild -workspace ios/Runner.xcworkspace -scheme Runner \
+          -configuration Release -sdk iphoneos \
+          -destination 'generic/platform=iOS' \
+          -derivedDataPath build/ios/DolphinDerivedData \
+          CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY='' \
+          DEVELOPMENT_TEAM='' PROVISIONING_PROFILE_SPECIFIER='' \
+          COMPILER_INDEX_STORE_ENABLE=NO \
+          PERFORMANCE_MEASUREMENT_FILE="$RUNNER_TEMP/flutter-aot-timings.json" \
+          -jobs "$(python3 -c 'import os; print(os.cpu_count())')" -showBuildTimingSummary build \
+          2>&1 | tee "$RUNNER_TEMP/neostation-fast-xcodebuild.log"
+    - name: Embed NeoPlay source identity and dependency acknowledgements
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 - <<'NEOPLAY'
+        import json, os, shutil
+        from pathlib import Path
+        app = Path('build/ios/DolphinDerivedData/Build/Products/Release-iphoneos/Runner.app')
+        assert app.is_dir()
+        identity = {'build': os.environ['BUILD_NUMBER'], 'commit': os.environ['GITHUB_SHA'], 'physicalTVValidation': False, 'physicalControllerValidation': False, 'nativeLinkage': 'static_framework', 'castSDK': '4.8.6'}
+        (app / 'NeoPlay-build-identity.json').write_text(json.dumps(identity, indent=2))
+        notices = Path('ios/Pods/Target Support Files/Pods-Runner/Pods-Runner-acknowledgements.plist')
+        assert notices.is_file(), 'CocoaPods acknowledgement inventory is missing'
+        shutil.copyfile(notices, app / 'NeoPlay-Pods-acknowledgements.plist')
+        NEOPLAY
+    - name: Embed verified RPCS3 Core and signing metadata
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 build-utils/embed_rpcs3_core_lazy.py
+        python3 build-utils/embed_rpcs3_host_entitlements.py
+        python3 build-utils/embed_neoswap_donor_entitlements.py
+    - name: Embed lazy-loaded ARMSX2 Core framework
+      shell: bash
+      run: |
+        set -euo pipefail
+        APP="build/ios/DolphinDerivedData/Build/Products/Release-iphoneos/Runner.app"
+        test -d "$APP"
+        mkdir -p "$APP/Frameworks"
+        rm -rf "$APP/Frameworks/ARMSX2Core.framework"
+        ditto dist/armsx2/ARMSX2Core.framework "$APP/Frameworks/ARMSX2Core.framework"
+        test -f "$APP/Frameworks/ARMSX2Core.framework/ARMSX2Core"
+        file "$APP/Frameworks/ARMSX2Core.framework/ARMSX2Core"
+        nm -gj "$APP/Frameworks/ARMSX2Core.framework/ARMSX2Core" > build/armsx2-exports.txt
+        grep -qx '_NeoARMSX2_GetAPI' build/armsx2-exports.txt
+    - name: Embed lazy-loaded Dusklight framework and notices
+      run: |
+        set -euo pipefail
+        APP="build/ios/DolphinDerivedData/Build/Products/Release-iphoneos/Runner.app"
+        ditto dist/dusklight/DusklightCore.framework "$APP/Frameworks/DusklightCore.framework"
+        chmod 755 "$APP/Frameworks/DusklightCore.framework/DusklightCore"
+        ditto dist/dusklight/licenses "$APP/Dusklight-Licenses"
+        cp dist/dusklight/identity.json "$APP/Dusklight-native-identity.json"
+    - name: Embed validated KartPad Core candidate
+      if: ${{ env.KARTPAD_CANDIDATE == '1' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        APP="build/ios/DolphinDerivedData/Build/Products/Release-iphoneos/Runner.app"
+        python3 build-utils/kartpad/embed_core.py             --app "$APP"             --artifact dist/kartpad-native
+    - name: Embed legal, license and source notices
+      shell: bash
+      run: |
+        set -euo pipefail
+        APP="build/ios/DolphinDerivedData/Build/Products/Release-iphoneos/Runner.app"
+        python3 build-utils/embed_legal_bundle.py \
+          --app "$APP" \
+          --build-number "$BUILD_NUMBER" \
+          --dolphin-sha "$DOLPHIN_SHA"
+    - name: Package and validate NeoStation IPA
+      shell: bash
+      run: |
+        set -euo pipefail
+        git diff --check
+        python3 packages/dolphin_internal_bridge/ci/build_support.py package
+        python3 build-utils/validate_legal_bundle_ipa.py "dist/$IPA_NAME.ipa" \
+          --build-number "$BUILD_NUMBER" --commit "$GITHUB_SHA"
+        python3 build-utils/validate_rpcs3_ipa.py \
+          --build-number "$BUILD_NUMBER" --commit "$GITHUB_SHA" \
+          --core-identity build/fast-native/rpcs3-core-identity.json \
+          --core-host-commit "$RPCS3_CORE_HOST_SHA" \
+          --core-run-id "$RPCS3_CORE_RUN_ID"
+        python3 build-utils/validate_single_ipa_distribution.py \
+          "dist/$IPA_NAME.ipa" --report dist/localdevvpn-distribution.json
+        python3 build-utils/validate_neoswap_ipa.py "dist/$IPA_NAME.ipa" \
+          --build-number "$BUILD_NUMBER" --report dist/neoswap-validation.json
+        python3 build-utils/validate_debugger_probe_ipa.py "dist/$IPA_NAME.ipa"
+        python3 build-utils/validate_cheat_bulk_ipa.py "dist/$IPA_NAME.ipa" --build-number "$BUILD_NUMBER" --report dist/cheat-bulk-validation.json
+        python3 build-utils/validate_release002_ipa.py "dist/$IPA_NAME.ipa" \
+          --build-number "$BUILD_NUMBER" --report dist/0.0.2-validation.json
+        python3 build-utils/validate_stikjit_ipa.py "dist/$IPA_NAME.ipa" \
+          --identity build/stikjit-current/identity.json \
+          --report dist/stikjit-compatibility.json
+        python3 - <<'PY'
+        import zipfile,plistlib,os
+        with zipfile.ZipFile('dist/'+os.environ['IPA_NAME']+'.ipa') as z:
+            apps={n.split('/')[1] for n in z.namelist() if n.startswith('Payload/') and len(n.split('/'))>2 and n.split('/')[1].endswith('.app')}
+            assert len(apps)==1,apps
+            root='Payload/'+apps.pop()+'/'
+            info=plistlib.loads(z.read(root+'Info.plist'))
+            assert info.get('CADisableMinimumFrameDurationOnPhone') is True, 'iPhone ProMotion opt-in missing'
+            bridge=z.read(root+'Frameworks/dolphin_internal_bridge.framework/dolphin_internal_bridge')
+            for marker in (b'DolphinFramePacing',b'DOLDisplaySettings',b'MTLUsePresentDrawable',b'ShaderCompilationMode',b'setPreferredFrameRateRange:'):
+                assert marker in bridge,marker
+        PY
+        ARMSX2_SOURCE_REVISION="$(python3 -c 'import json; print(json.load(open("build-utils/armsx2/source.json"))["revision"])')"
+        python3 build-utils/validate_armsx2_ipa.py "dist/$IPA_NAME.ipa" \
+          --build-number "$BUILD_NUMBER" \
+          --source-revision "$ARMSX2_SOURCE_REVISION"
+        python3 build-utils/validate_dusklight_ipa.py "dist/$IPA_NAME.ipa" \
+          --identity dist/dusklight/identity.json --core-host "$DUSKLIGHT_CORE_HOST_SHA" \
+          --build-number "$BUILD_NUMBER"
+        if [ "$KARTPAD_CANDIDATE" = "1" ]; then
+          python3 build-utils/validate_kartpad_ipa.py "dist/$IPA_NAME.ipa" \
+            --identity dist/kartpad-native/identity.json \
+            --core-host "$KARTPAD_CORE_HOST_SHA" \
+            --build-number "$BUILD_NUMBER"
+          cp dist/kartpad-native/identity.json dist/kartpad-core-identity.json
+        else
+          python3 build-utils/validate_kartpad_ipa.py "dist/$IPA_NAME.ipa" \
+            --build-number "$BUILD_NUMBER" --expect-absent
+        fi
+        cp build/fast-native/identity.json dist/fast-native-identity.json
+        cp build/fast-native/rpcs3-core-identity.json dist/rpcs3-core-identity.json
+        python3 build-utils/validate_neoplay_ipa.py "dist/$IPA_NAME.ipa" --build-number "$BUILD_NUMBER" --commit "$GITHUB_SHA" --report dist/neoplay-validation.json
+        shasum -a 256 dist/*.ipa | tee "dist/$IPA_NAME.sha256"
+        ls -lah dist
+    - name: Seal every executable, framework and extension for SideStore
+      run: |
+        python3 build-utils/delivery_metrics.py signature_and_ipa_export python3 build-utils/delivery_benchmark.py seal
+    - name: Finalize observed timings and artifact identity
+      if: always()
+      run: |
+        python3 build-utils/delivery_benchmark.py report
+    - name: Prepare encrypted delivery and evidence
+      run: |
+        mkdir -p build/delivery-artifact
+        cp dist/NeoStation.ipa "build/delivery-artifact/NeoStation-Build${BUILD_NUMBER}-${GITHUB_SHA}-${DELIVERY_MODE}.ipa"
+        cp build/delivery/*.json build/delivery-artifact/
+        cp docs/retroarch-rollback-2026-10-08.md build/delivery-artifact/
+        shasum -a 256 build/delivery-artifact/*.ipa > build/delivery-artifact/SHA256SUMS
+
+        python3 build-utils/delivery_metrics.py artifact_encryption python3 build-utils/delivery_cipher.py artifact build/delivery-artifact build/encrypted-delivery
+    - name: Encrypt authenticated compilation cache
+      if: ${{ success() && env.DELIVERY_MODE == 'cold' }}
+      run: python3 build-utils/delivery_metrics.py cache_save_preparation python3 build-utils/delivery_cipher.py cache-pack
+    - name: Save exact tested device build state
+      if: ${{ success() && env.DELIVERY_MODE == 'cold' }}
+      uses: actions/cache/save@v4
+      with:
+        path: .ci-cache
+        key: neostation-device-v1-${{ runner.os }}-${{ runner.arch }}-xcode26.3-flutter3.47.2-${{ github.sha }}-${{ env.BUILD_NUMBER }}-${{ hashFiles('pubspec.lock',
+          'build-utils/Gemfile.dolphin') }}-${{ env.CACHE_NAMESPACE }}
+    - name: Upload encrypted IPA and verification reports
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ env.ARTIFACT_NAME }}
+        path: build/encrypted-delivery/
+        if-no-files-found: error
+        retention-days: 14
+        compression-level: 0
+    - name: Collect diagnostic evidence
+      if: always()
+      run: |
+        mkdir -p build/delivery
+        cp "$RUNNER_TEMP/neostation-fast-xcodebuild.log" build/delivery/xcodebuild.log 2>/dev/null || true
+        cp "$RUNNER_TEMP/flutter-aot-timings.json" build/delivery/flutter-aot-timings.json 2>/dev/null || true
+
+        python3 build-utils/delivery_cipher.py artifact build/delivery build/encrypted-diagnostics
+    - name: Upload diagnostics
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ env.ARTIFACT_NAME }}-diagnostics
+        path: build/encrypted-diagnostics/
+        if-no-files-found: warn
+        retention-days: 14
+    - name: Remove temporary secrets
+      if: always()
+      shell: bash
+      run: rm -f .dart-defines.json
+    if: ${{ inputs.benchmark == true || contains(github.event.head_commit.message, '[benchmark-build]') }}

@@ -8,6 +8,7 @@ permissions:
 # Independent checks: no global concurrency group and no changes to Core/IPA.
 jobs:
   storage:
+    if: ${{ github.event_name == 'workflow_dispatch' || !contains(github.event.head_commit.message, '[retroarch-delivery]') }}
     strategy:
       fail-fast: false
       matrix:

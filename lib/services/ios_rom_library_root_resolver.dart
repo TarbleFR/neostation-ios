@@ -32,7 +32,7 @@ class IosRomLibraryRootResolver {
     required Iterable<String> systemFolderNames,
     int maxDepth = 2,
   }) async {
-    final rootPath = path.normalize(linkedRoot.trim());
+    final rootPath = path.normalize(linkedRoot);
     if (rootPath.isEmpty) return linkedRoot;
 
     final aliases = systemFolderNames

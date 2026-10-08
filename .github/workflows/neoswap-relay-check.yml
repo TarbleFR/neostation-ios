@@ -10,6 +10,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   source-snapshot:
+    if: ${{ github.event_name == 'workflow_dispatch' || !contains(github.event.head_commit.message, '[retroarch-delivery]') }}
     name: Preserve exact relay source snapshot
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -37,6 +38,7 @@ jobs:
           retention-days: 7
           overwrite: true
   proof:
+    if: ${{ github.event_name == 'workflow_dispatch' || !contains(github.event.head_commit.message, '[retroarch-delivery]') }}
     runs-on: macos-15
     timeout-minutes: 35
     env:

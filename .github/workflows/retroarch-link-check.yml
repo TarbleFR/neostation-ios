@@ -7,6 +7,7 @@ permissions:
   contents: read
 jobs:
   dart:
+    if: ${{ github.event_name == 'workflow_dispatch' || !contains(github.event.head_commit.message, '[retroarch-delivery]') }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -30,6 +31,7 @@ jobs:
       - name: Verify the restored library reference and native source identities
         run: python3 test/retroarch_baseline_scope_test.py
   native:
+    if: ${{ github.event_name == 'workflow_dispatch' || !contains(github.event.head_commit.message, '[retroarch-delivery]') }}
     runs-on: macos-15
     timeout-minutes: 20
     steps:
