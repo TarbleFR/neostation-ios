@@ -988,6 +988,10 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.iosEmuChangeFolder: "Изменить папку",
   AppLocale.iosEmuLinkingFailed: "Не удалось подключить папку: {error}",
   AppLocale.iosRetroarchSyncRequested: "Запрошена синхронизация библиотеки RetroArch. Она выполняется в фоновом режиме; подождите несколько секунд.",
+  AppLocale.iosRetroarchSyncing: "Синхронизация…",
+  AppLocale.iosRetroarchSyncTimedOut: "RetroArch не вернул библиотеку. Вернитесь в NeoStation и повторите попытку. Предыдущая библиотека сохранена.",
+  AppLocale.iosRetroarchSyncEmpty: "RetroArch не вернул игры. Проверьте его списки воспроизведения и повторите синхронизацию. Предыдущая библиотека сохранена.",
+  AppLocale.iosRetroarchSyncInvalid: "RetroArch вернул нечитаемую библиотеку. Предыдущая библиотека сохранена.",
   AppLocale.iosRetroarchUnavailable:
       "Не удалось связаться с RetroArch. Он установлен?",
   AppLocale.iosArmsx2SyncRequested: "Запрошена синхронизация библиотеки ARMSX2. ARMSX2 автоматически вернётся в NeoStation, когда экспорт будет готов.",

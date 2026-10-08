@@ -2,6 +2,12 @@ import 'dart:io';
 
 import 'package:flutter/services.dart';
 
+class ExternalFolderBookmark {
+  const ExternalFolderBookmark(this.path, this.previousPath);
+  final String path;
+  final String? previousPath;
+}
+
 /// Thin Dart wrapper around the native iOS folder-bookmark plugin.
 ///
 /// All methods are no-ops (return null) on platforms other than iOS, so
@@ -82,6 +88,28 @@ class ExternalFolderAccess {
     }
   }
 
+  /// Both paths come from the same persisted bookmark, before any stale
+  /// bookmark is refreshed. This permits ownership-safe path relocation.
+  static Future<ExternalFolderBookmark?> resolveBookmarkedFolderDetails({
+    String key = defaultBookmarkKey,
+  }) async {
+    if (!Platform.isIOS) return null;
+    try {
+      final details = await _channel.invokeMapMethod<String, dynamic>(
+        'resolveBookmarkedFolderDetails',
+        {'key': key},
+      );
+      final resolved = details?['path'];
+      if (resolved is! String || resolved.isEmpty) return null;
+      return ExternalFolderBookmark(
+        resolved,
+        details?['previousPath'] as String?,
+      );
+    } on PlatformException {
+      return null;
+    }
+  }
+
   /// Removes a file while the native bookmark grant is active. Native errors
   /// intentionally propagate so SQLite/UI cannot claim an unsuccessful delete.
   static Future<void> deleteGameFile(String filePath) async {
@@ -132,6 +160,22 @@ class ExternalFolderAccess {
     if (!Platform.isIOS) return null;
     try {
       return await _channel.invokeMethod<bool>('openRawUrl', {'url': url});
+    } on PlatformException {
+      return false;
+    }
+  }
+
+  /// Opens RetroArch before sending a library/game URL to its running scene.
+  /// The native handoff owns a finite background task across the app switch.
+  /// True means only that iOS accepted the functional URL, not that a game
+  /// launched or that a library callback arrived.
+  static Future<bool> openRetroArchUrl(String url) async {
+    if (!Platform.isIOS) return false;
+    try {
+      return await _channel.invokeMethod<bool>('openRetroArchUrl', {
+            'url': url,
+          }) ??
+          false;
     } on PlatformException {
       return false;
     }
@@ -206,5 +250,9 @@ class ExternalFolderAccess {
       }
       return null;
     });
+    // The listener is in place before native code drains cold-start URLs.
+    _channel
+        .invokeMethod<void>('incomingUrlReady')
+        .catchError((Object error) {});
   }
 }

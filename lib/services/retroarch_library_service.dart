@@ -4,7 +4,10 @@ import 'dart:io';
 import 'package:provider/provider.dart';
 import 'package:path/path.dart' as path;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:external_folder_access/external_folder_access.dart';
+import 'package:neostation/services/retroarch_library_protocol.dart';
+export 'package:neostation/services/retroarch_library_protocol.dart'
+    show RetroArchSyncOutcome;
 import 'package:neostation/main.dart' show rootNavigatorKey;
 import 'package:neostation/providers/sqlite_config_provider.dart';
 import 'package:neostation/services/logger_service.dart';
@@ -35,6 +38,8 @@ class RetroArchLibraryService {
   RetroArchLibraryService._();
 
   static final _log = LoggerService.instance;
+  static final _sync = RetroArchSyncController();
+  static RetroArchSyncOutcome? get lastSyncOutcome => _sync.lastOutcome;
 
   static const String _callbackScheme = 'neostation';
   static const String _prefsKey = 'retroarch_library_cache_v1';
@@ -50,17 +55,24 @@ class RetroArchLibraryService {
   /// load from disk this session.
   static Map<String, Map<String, dynamic>>? _cache;
 
-  /// Opens RetroArch and asks it to export its library. The actual data
-  /// arrives asynchronously via the `neostation://retroarch?games=...`
-  /// callback — see [handleIncomingUri], wired up in main.dart through the
-  /// app_links package. Returns whether the request URL was opened at all
-  /// (not whether RetroArch actually responded).
+  /// Waits for a real, validated library response. Opening the URL alone is
+  /// never reported as a completed sync. Failure preserves the previous cache.
   static Future<bool> requestLibrarySync() async {
-    return launchUrl(Uri.parse('retroarch://library?scheme=$_callbackScheme'));
+    await loadCachedLibrary();
+    final outcome = await _sync.request(
+      () => ExternalFolderAccess.openRetroArchUrl(
+        'retroarch://library?scheme=$_callbackScheme',
+      ),
+    );
+    await _writeDebugFile(
+      'retroarch_sync_status_debug.txt',
+      'outcome: ${outcome.name}\ncacheKeys: ${_cache?.length ?? 0}',
+    );
+    return outcome == RetroArchSyncOutcome.synced;
   }
 
   /// Call this with every incoming URI the app receives (from
-  /// app_links' uriLinkStream / getInitialAppLink). Returns `true` if the
+  /// the native external_folder_access listener). Returns `true` if the
   /// URI was RetroArch's library callback and was handled.
   static Future<bool> handleIncomingUri(Uri uri) async {
     if (uri.scheme != _callbackScheme || uri.host != 'retroarch') {
@@ -70,60 +82,24 @@ class RetroArchLibraryService {
     final gamesParam = uri.queryParameters['games'];
     if (gamesParam == null) {
       _log.w('RetroArchLibraryService: callback with no "games" param');
-      return false;
+      _sync.complete(RetroArchSyncOutcome.invalid);
+      return true;
     }
 
     try {
-      final normalized = base64Url.normalize(gamesParam);
-      final jsonBytes = base64Url.decode(normalized);
-      final decoded = jsonDecode(utf8.decode(jsonBytes));
-      if (decoded is! List) {
-        _log.e('RetroArchLibraryService: decoded payload is not a list');
-        return false;
+      final decoded = RetroArchLibraryProtocol.decode(gamesParam);
+      if (decoded.isEmpty) {
+        // RetroArch can export [] before its runloop/playlists are ready.
+        // Keep launch metadata from the last successful export in this case.
+        _log.w('RetroArch exported an empty library; previous cache retained');
+        _sync.complete(RetroArchSyncOutcome.empty);
+        return true;
       }
+      final byFilename = RetroArchLibraryProtocol.index(decoded);
 
-      final byFilename = <String, Map<String, dynamic>>{};
-      for (final entry in decoded) {
-        if (entry is! Map) continue;
-        final map = Map<String, dynamic>.from(entry);
-        final filename = (map['filename'] ?? map['titleId'])?.toString();
-        if (filename == null || filename.isEmpty) continue;
-        byFilename[filename] = map;
-        // Also index by bare basename, in case RetroArch's "filename"
-        // field turns out to be a relative/full path rather than a bare
-        // filename in practice — cheap to keep both keys.
-        byFilename[path.basename(filename)] = map;
-
-        // Libretro's "content inside an archive" convention represents a
-        // single ROM inside a zip as "archive.zip#innerfile.ext" — common
-        // for systems typically distributed as one-ROM-per-zip (GBC, GB,
-        // NES, etc). NeoStation only knows the archive's own path/name
-        // (game.romPath points at the .zip, not what's inside it), so
-        // index by the archive's basename too, or the lookup below would
-        // never match for any archived content. Systems where the whole
-        // zip itself IS the content as a unit (arcade/FBNeo romsets) don't
-        // use "#" and are unaffected — they already matched via the plain
-        // basename above.
-        final hashIndex = filename.indexOf('#');
-        if (hashIndex > 0) {
-          final archivePart = filename.substring(0, hashIndex);
-          byFilename[path.basename(archivePart)] = map;
-        }
-
-        // RetroArch's playlist "filename" for a zipped ROM sometimes uses
-        // the inner content's own extension (e.g. "Game.gb") rather than
-        // the container file's extension NeoStation actually sees on disk
-        // (e.g. "Game.zip") — same title, different extension, no "#"
-        // involved. Index by the extension-stripped stem too, as a last
-        // fallback for exactly that mismatch. Confirmed via debug logging
-        // on a real device: "4 in 1 Funpak (USA, Europe).gb" (RetroArch)
-        // vs "4 in 1 Funpak (USA, Europe).zip" (actual file).
-        final stem = path.basenameWithoutExtension(filename);
-        byFilename.putIfAbsent(stem, () => map);
-      }
-
-      _cache = byFilename;
       await _persist(byFilename);
+      _cache = byFilename;
+      _sync.complete(RetroArchSyncOutcome.synced);
       _log.i(
         'RetroArchLibraryService: synced ${decoded.length} games from RetroArch',
       );
@@ -141,7 +117,7 @@ class RetroArchLibraryService {
       // no BuildContext of its own.
       try {
         final context = rootNavigatorKey.currentContext;
-        if (context != null) {
+        if (context != null && context.mounted) {
           await Provider.of<SqliteConfigProvider>(
             context,
             listen: false,
@@ -154,7 +130,8 @@ class RetroArchLibraryService {
       return true;
     } catch (e) {
       _log.e('RetroArchLibraryService: failed to parse library callback: $e');
-      return false;
+      _sync.complete(RetroArchSyncOutcome.invalid);
+      return true;
     }
   }
 
@@ -276,12 +253,9 @@ class RetroArchLibraryService {
   }
 
   static Future<void> _persist(Map<String, Map<String, dynamic>> data) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_prefsKey, jsonEncode(data));
-    } catch (e) {
-      _log.e('RetroArchLibraryService: failed persisting library cache: $e');
-    }
+    final prefs = await SharedPreferences.getInstance();
+    final saved = await prefs.setString(_prefsKey, jsonEncode(data));
+    if (!saved) throw StateError('RetroArch library cache could not be saved');
   }
 
   /// Whether a library sync has ever completed (so the UI can prompt the
@@ -294,6 +268,7 @@ class RetroArchLibraryService {
   /// found AND the URL was opened — callers should fall back to another
   /// launch path otherwise (see GameLaunchService).
   static Future<bool> launchGameByRomPath(String romPath) async {
+    if (_cache == null) await loadCachedLibrary();
     final cache = _cache;
     if (cache == null || cache.isEmpty) {
       await _writeDebugFile(
@@ -328,7 +303,7 @@ class RetroArchLibraryService {
     );
 
     try {
-      return await launchUrl(uri);
+      return await ExternalFolderAccess.openRetroArchUrl(uri.toString());
     } catch (e) {
       _log.e('RetroArchLibraryService: failed to launch $uri: $e');
       return false;

@@ -1006,6 +1006,10 @@ const Map<String, dynamic> appLocaleIt = {
   AppLocale.iosEmuChangeFolder: "Cambia cartella",
   AppLocale.iosEmuLinkingFailed: "Collegamento non riuscito: {error}",
   AppLocale.iosRetroarchSyncRequested: "Sincronizzazione della libreria RetroArch richiesta. Avviene in background; attendi qualche secondo.",
+  AppLocale.iosRetroarchSyncing: "Sincronizzazione…",
+  AppLocale.iosRetroarchSyncTimedOut: "RetroArch non ha restituito la sua libreria. Torna a NeoStation e riprova. La libreria precedente è stata conservata.",
+  AppLocale.iosRetroarchSyncEmpty: "RetroArch non ha restituito giochi. Controlla le sue playlist e sincronizza di nuovo. La libreria precedente è stata conservata.",
+  AppLocale.iosRetroarchSyncInvalid: "RetroArch ha restituito una libreria illeggibile. La libreria precedente è stata conservata.",
   AppLocale.iosRetroarchUnavailable:
       "Impossibile raggiungere RetroArch. È installato?",
   AppLocale.iosArmsx2SyncRequested: "Sincronizzazione della libreria ARMSX2 richiesta. ARMSX2 tornerà automaticamente a NeoStation quando l’esportazione sarà pronta.",

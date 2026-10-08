@@ -988,6 +988,10 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.iosEmuChangeFolder: "Ubah folder",
   AppLocale.iosEmuLinkingFailed: "Gagal menautkan: {error}",
   AppLocale.iosRetroarchSyncRequested: "Sinkronisasi pustaka RetroArch diminta. Proses berjalan di latar belakang; tunggu beberapa detik.",
+  AppLocale.iosRetroarchSyncing: "Menyinkronkan…",
+  AppLocale.iosRetroarchSyncTimedOut: "RetroArch tidak mengembalikan pustakanya. Kembali ke NeoStation dan coba lagi. Pustaka sebelumnya tetap disimpan.",
+  AppLocale.iosRetroarchSyncEmpty: "RetroArch tidak mengembalikan game. Periksa daftar putarnya, lalu sinkronkan lagi. Pustaka sebelumnya tetap disimpan.",
+  AppLocale.iosRetroarchSyncInvalid: "RetroArch mengembalikan pustaka yang tidak dapat dibaca. Pustaka sebelumnya tetap disimpan.",
   AppLocale.iosRetroarchUnavailable:
       "Tidak dapat mengakses RetroArch. Apakah sudah terpasang?",
   AppLocale.iosArmsx2SyncRequested: "Sinkronisasi pustaka ARMSX2 diminta. ARMSX2 akan kembali ke NeoStation secara otomatis saat ekspor siap.",

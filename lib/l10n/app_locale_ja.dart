@@ -921,6 +921,10 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.iosEmuLinkingFailed: "リンクに失敗しました: {error}",
   AppLocale.iosRetroarchSyncRequested:
       "RetroArch ライブラリの同期を要求しました。バックグラウンドで実行されるため、数秒お待ちください。",
+  AppLocale.iosRetroarchSyncing: "同期中…",
+  AppLocale.iosRetroarchSyncTimedOut: "RetroArch からライブラリが返されませんでした。NeoStation に戻って再試行してください。以前のライブラリは保持されています。",
+  AppLocale.iosRetroarchSyncEmpty: "RetroArch からゲームが返されませんでした。プレイリストを確認して再同期してください。以前のライブラリは保持されています。",
+  AppLocale.iosRetroarchSyncInvalid: "RetroArch から読み取れないライブラリが返されました。以前のライブラリは保持されています。",
   AppLocale.iosRetroarchUnavailable: "RetroArch に接続できませんでした。インストールされていますか？",
   AppLocale.iosArmsx2SyncRequested:
       "ARMSX2 ライブラリの同期を要求しました。エクスポートの準備が完了すると、ARMSX2 は自動的に NeoStation に戻ります。",

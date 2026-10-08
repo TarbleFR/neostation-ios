@@ -338,8 +338,11 @@ void main() async {
   // access doesn't survive a relaunch on its own — it has to be resolved
   // and re-started every cold boot. A no-op if nothing has been linked.
   if (Platform.isIOS) {
-    ConfigService.linkedExternalFolderPath =
-        await ExternalFolderAccess.resolveBookmarkedFolder();
+    final retroArchBookmark =
+        await ExternalFolderAccess.resolveBookmarkedFolderDetails();
+    ConfigService.linkedExternalFolderPath = retroArchBookmark?.path;
+    ConfigService.linkedExternalFolderPreviousPath =
+        retroArchBookmark?.previousPath;
 
     // ARMSX2 is embedded in NeoStation. Its canonical library/data root is
     // NeoStation's own Files-visible Documents/ARMSX2 directory.

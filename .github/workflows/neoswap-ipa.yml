@@ -1,5 +1,5 @@
-name: NeoStation NeoSwap + NeoPlay private • Build 419
-run-name: NeoStation NeoSwap + NeoPlay private • Build 419 • ${{ github.sha }}
+name: NeoStation NeoSwap + NeoPlay private • Build 420
+run-name: NeoStation NeoSwap + NeoPlay private • Build 420 • ${{ github.sha }}
 
 on:
   push:
@@ -10,7 +10,7 @@ on:
       build_number:
         description: 'Candidate build number (used only for manual runs)'
         required: true
-        default: '419'
+        default: '420'
         type: string
       kartpad_core_run_id:
         description: 'Validated KartPadCore artifact workflow run ID; leave empty for a non-KartPad manual build'
@@ -29,7 +29,7 @@ permissions:
 
 # Keep candidate IPA runs separate from native validation.
 concurrency:
-  group: neostation-neoswap-neoplay-build419-${{ github.sha }}
+  group: neostation-neoswap-neoplay-build420-${{ github.sha }}
   cancel-in-progress: true
 
 jobs:
@@ -122,6 +122,7 @@ jobs:
               'cheats-media-check.yml',
               'neoswap-storage-prototype.yml',
               'neoplay-check.yml',
+              'retroarch-link-check.yml',
               # KartPad lifecycle evidence is produced at the exact candidate
               # commit: the pinned 27 September runs were purged on 7 October.
               'kartpad-simulator-lifecycle.yml',
@@ -152,13 +153,13 @@ jobs:
     # Core-only development commits validate their native engine separately,
     # not a mislabeled full NeoStation IPA.
     if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[neoswap-ipa]') }}
-    name: Neostation iOS 0.0.2 private IPA (419)
+    name: Neostation iOS 0.0.2 private IPA (420)
     runs-on: macos-15
     timeout-minutes: 210
     env:
-      BUILD_NUMBER: ${{ inputs.build_number || '419' }}
+      BUILD_NUMBER: ${{ inputs.build_number || '420' }}
       IPA_NAME: NeoStation
-      ARTIFACT_NAME: NeoStation-NeoSwap-NeoPlay-Build-419-${{ github.sha }}
+      ARTIFACT_NAME: NeoStation-NeoSwap-NeoPlay-Build-420-${{ github.sha }}
       KARTPAD_CORE_RUN_ID: ${{ inputs.kartpad_core_run_id || '36322395443' }}
       KARTPAD_CORE_HOST_SHA: ${{ inputs.kartpad_core_host_sha || '3934ac9d333247d5374b9fb7d71f8ef49bbcd79e' }}
       KARTPAD_CANDIDATE: '1'
@@ -622,6 +623,12 @@ jobs:
           flutter clean
           flutter pub get --enforce-lockfile
           flutter analyze --no-fatal-infos
+
+      - name: Require RetroArch cold-launch and library recovery regressions
+        run: |
+          flutter test test/retroarch_library_protocol_test.dart test/retroarch_library_cache_test.dart test/retroarch_folder_recovery_test.dart test/retroarch_sync_locale_test.dart test/ios_rom_library_root_resolver_test.dart test/ios_selective_rollback_test.dart test/armsx2_retroarch_routing_isolation_test.dart
+          swiftc -warnings-as-errors packages/external_folder_access/ios/Classes/RetroArchURLHandoff.swift test/retroarch_url_handoff_test.swift -o "$RUNNER_TEMP/retroarch-handoff"
+          "$RUNNER_TEMP/retroarch-handoff"
 
       - name: Run route, debugger, packaging and deletion regression tests
         shell: bash
@@ -1474,6 +1481,7 @@ jobs:
           cp dist/neoplay-validation.json build/private-test/
           cp docs/neoplay/BUILD418.md build/private-test/Notes-NeoPlay-Build418.md
           cp docs/neoswap-build419-memory.md build/private-test/Notes-NeoSwap-Build419.md
+          cp docs/retroarch-testflight-link-recovery.md build/private-test/Notes-RetroArch-Build420.md
           cp "$RUNNER_TEMP/neoswap-evidence/capacity-8GiB-macOS.json" build/private-test/
           cp -R "$RUNNER_TEMP/neoswap-evidence/donation" build/private-test/donation-evidence
           cp -R "$RUNNER_TEMP/neoswap-evidence/vulkan" build/private-test/vulkan-evidence

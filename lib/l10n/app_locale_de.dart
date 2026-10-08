@@ -1010,6 +1010,10 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.iosEmuChangeFolder: "Ordner ändern",
   AppLocale.iosEmuLinkingFailed: "Verknüpfung fehlgeschlagen: {error}",
   AppLocale.iosRetroarchSyncRequested: "Die Synchronisierung der RetroArch-Bibliothek wurde angefordert. Sie läuft im Hintergrund; bitte einige Sekunden warten.",
+  AppLocale.iosRetroarchSyncing: "Synchronisierung…",
+  AppLocale.iosRetroarchSyncTimedOut: "RetroArch hat seine Bibliothek nicht zurückgegeben. Kehre zu NeoStation zurück und versuche es erneut. Deine bisherige Bibliothek wurde behalten.",
+  AppLocale.iosRetroarchSyncEmpty: "RetroArch hat keine Spiele zurückgegeben. Prüfe seine Wiedergabelisten und synchronisiere erneut. Deine bisherige Bibliothek wurde behalten.",
+  AppLocale.iosRetroarchSyncInvalid: "RetroArch hat eine unlesbare Bibliothek zurückgegeben. Deine bisherige Bibliothek wurde behalten.",
   AppLocale.iosRetroarchUnavailable:
       "RetroArch konnte nicht erreicht werden. Ist es installiert?",
   AppLocale.iosArmsx2SyncRequested: "Die Synchronisierung der ARMSX2-Bibliothek wurde angefordert. ARMSX2 kehrt automatisch zu NeoStation zurück, sobald der Export bereit ist.",

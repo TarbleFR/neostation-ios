@@ -902,6 +902,10 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.iosEmuChangeFolder: "變更資料夾",
   AppLocale.iosEmuLinkingFailed: "連結失敗：{error}",
   AppLocale.iosRetroarchSyncRequested: "已要求同步 RetroArch 遊戲庫。同步會在背景執行，請稍候幾秒。",
+  AppLocale.iosRetroarchSyncing: "正在同步…",
+  AppLocale.iosRetroarchSyncTimedOut: "RetroArch 未傳回其遊戲庫。請返回 NeoStation 後重試。先前的遊戲庫已保留。",
+  AppLocale.iosRetroarchSyncEmpty: "RetroArch 未傳回任何遊戲。請檢查其播放清單後重新同步。先前的遊戲庫已保留。",
+  AppLocale.iosRetroarchSyncInvalid: "RetroArch 傳回了無法讀取的遊戲庫。先前的遊戲庫已保留。",
   AppLocale.iosRetroarchUnavailable: "無法連線到 RetroArch。是否已安裝？",
   AppLocale.iosArmsx2SyncRequested:
       "已要求同步 ARMSX2 遊戲庫。匯出準備完成後，ARMSX2 會自動返回 NeoStation。",

@@ -74,6 +74,7 @@ class DirectoriesSettingsContentState
 
   // iOS-only security-scoped root linking state for external emulators.
   String? _linkingFolderKey;
+  bool _syncingRetroArch = false;
 
   // Migration progress state (shown inline, no dialog).
   bool _isMigrating = false;
@@ -590,15 +591,23 @@ class DirectoriesSettingsContentState
   }
 
   Future<void> _syncWithRetroArch() async {
-    final opened = await RetroArchLibraryService.requestLibrarySync();
-    if (!mounted) return;
-    AppNotification.showNotification(
-      context,
-      opened
-          ? AppLocale.iosRetroarchSyncRequested.getString(context)
-          : AppLocale.iosRetroarchUnavailable.getString(context),
-      type: opened ? NotificationType.info : NotificationType.error,
-    );
+    if (_syncingRetroArch) return;
+    setState(() => _syncingRetroArch = true);
+    try {
+      final synced = await RetroArchLibraryService.requestLibrarySync();
+      if (!mounted) return;
+      final key = switch (RetroArchLibraryService.lastSyncOutcome) {
+        RetroArchSyncOutcome.synced => AppLocale.iosRetroarchStatusSynced,
+        RetroArchSyncOutcome.timedOut => AppLocale.iosRetroarchSyncTimedOut,
+        RetroArchSyncOutcome.empty => AppLocale.iosRetroarchSyncEmpty,
+        RetroArchSyncOutcome.invalid => AppLocale.iosRetroarchSyncInvalid,
+        _ => AppLocale.iosRetroarchUnavailable,
+      };
+      AppNotification.showNotification(context, key.getString(context),
+        type: synced ? NotificationType.success : NotificationType.error);
+    } finally {
+      if (mounted) setState(() => _syncingRetroArch = false);
+    }
   }
 
   Future<void> _syncWithMeloNX() async {
@@ -660,10 +669,12 @@ class DirectoriesSettingsContentState
       trailingAction: SizedBox(
         height: 48.r,
         child: FilledButton.icon(
-          onPressed: !isLinked ? null : _syncWithRetroArch,
+          onPressed: !isLinked || _syncingRetroArch ? null : _syncWithRetroArch,
           icon: Icon(Symbols.bolt_rounded, size: 20.r),
           label: Text(
-            hasSynced
+            _syncingRetroArch
+                ? AppLocale.iosRetroarchSyncing.getString(context)
+                : hasSynced
                 ? AppLocale.iosEmuResync.getString(context)
                 : AppLocale.iosEmuSync.getString(context),
             style: TextStyle(fontSize: 14.r),

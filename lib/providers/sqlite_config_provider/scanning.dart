@@ -166,6 +166,19 @@ extension SqliteConfigScanning on SqliteConfigProvider {
       // Reload from synchronized database during initialization
       await _loadAvailableSystems();
 
+      if (Platform.isIOS) {
+        final roots = await RetroArchFolderRecovery.reconcile(
+          _config.romFolders,
+          _availableSystems.expand((s) => <String>[s.folderName, ...s.folders]),
+        );
+        // A denied/moved iOS folder is not an empty library. Read every source
+        // before any scanner is allowed to prune stored games as missing.
+        for (final root in roots) {
+          await Directory(root).list(followLinks: false).take(1).toList();
+        }
+        _config = _config.copyWith(romFolders: roots);
+      }
+
       // Detect if we are in "Fast Scan" mode (without ROM folders)
       _isFastScan = _config.romFolders.isEmpty;
       final bool isFastScan = _isFastScan;

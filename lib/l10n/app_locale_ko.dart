@@ -929,6 +929,10 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.iosEmuLinkingFailed: "연결 실패: {error}",
   AppLocale.iosRetroarchSyncRequested:
       "RetroArch 라이브러리 동기화를 요청했습니다. 백그라운드에서 진행되므로 몇 초 기다려 주세요.",
+  AppLocale.iosRetroarchSyncing: "동기화 중…",
+  AppLocale.iosRetroarchSyncTimedOut: "RetroArch가 라이브러리를 반환하지 않았습니다. NeoStation으로 돌아가 다시 시도하세요. 이전 라이브러리는 유지됩니다.",
+  AppLocale.iosRetroarchSyncEmpty: "RetroArch가 게임을 반환하지 않았습니다. 재생 목록을 확인한 후 다시 동기화하세요. 이전 라이브러리는 유지됩니다.",
+  AppLocale.iosRetroarchSyncInvalid: "RetroArch가 읽을 수 없는 라이브러리를 반환했습니다. 이전 라이브러리는 유지됩니다.",
   AppLocale.iosRetroarchUnavailable: "RetroArch에 연결할 수 없습니다. 설치되어 있나요?",
   AppLocale.iosArmsx2SyncRequested:
       "ARMSX2 라이브러리 동기화를 요청했습니다. 내보내기가 준비되면 ARMSX2가 자동으로 NeoStation으로 돌아옵니다.",

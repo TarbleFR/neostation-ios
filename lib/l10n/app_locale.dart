@@ -1024,6 +1024,10 @@ mixin AppLocale {
   static const String iosRetroarchSyncRequested =
       'ios_retroarch_sync_requested';
   static const String iosRetroarchUnavailable = 'ios_retroarch_unavailable';
+  static const String iosRetroarchSyncing = 'ios_retroarch_syncing';
+  static const String iosRetroarchSyncTimedOut = 'ios_retroarch_sync_timed_out';
+  static const String iosRetroarchSyncEmpty = 'ios_retroarch_sync_empty';
+  static const String iosRetroarchSyncInvalid = 'ios_retroarch_sync_invalid';
   static const String iosArmsx2SyncRequested = 'ios_armsx2_sync_requested';
   static const String iosArmsx2Unavailable = 'ios_armsx2_unavailable';
   static const String iosMelonxSyncRequested = 'ios_melonx_sync_requested';

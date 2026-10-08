@@ -22,6 +22,10 @@ public class ExternalFolderAccessPlugin: NSObject, FlutterPlugin, UIDocumentPick
     private var channel: FlutterMethodChannel?
     private var audioSessionObservers: [NSObjectProtocol] = []
     private var audioSessionKnownActive = false
+    private let retroArchHandoff = RetroArchURLHandoff()
+    private var retroArchBackgroundTask = UIBackgroundTaskIdentifier.invalid
+    private var incomingUrlReady = false
+    private var pendingIncomingUrls: [String] = []
 
     /// Bookmarks are stored per-emulator so several external folders can be
     /// linked side by side (RetroArch's, ARMSX2's, ...) instead of the one
@@ -86,7 +90,14 @@ public class ExternalFolderAccessPlugin: NSObject, FlutterPlugin, UIDocumentPick
         open url: URL,
         options: [UIApplication.OpenURLOptionsKey: Any] = [:]
     ) -> Bool {
-        channel?.invokeMethod("onIncomingUrl", arguments: url.absoluteString)
+        if incomingUrlReady {
+            channel?.invokeMethod("onIncomingUrl", arguments: url.absoluteString)
+        } else {
+            // Flutter may still be restoring storage after a cold callback.
+            // Do not discard the URL before its Dart listener is installed.
+            if pendingIncomingUrls.count == 16 { pendingIncomingUrls.removeFirst() }
+            pendingIncomingUrls.append(url.absoluteString)
+        }
         return true
     }
 
@@ -102,12 +113,22 @@ public class ExternalFolderAccessPlugin: NSObject, FlutterPlugin, UIDocumentPick
             pickFolder(key: Self.bookmarkKey(from: call), result: result)
         case "resolveBookmarkedFolder":
             resolveBookmarkedFolder(key: Self.bookmarkKey(from: call), result: result)
+        case "resolveBookmarkedFolderDetails":
+            resolveBookmarkedFolder(key: Self.bookmarkKey(from: call), includeDetails: true, result: result)
         case "clearBookmark":
             clearBookmark(key: Self.bookmarkKey(from: call), result: result)
         case "openInMenu":
             openInMenu(call: call, result: result)
         case "openRawUrl":
             openRawUrl(call: call, result: result)
+        case "openRetroArchUrl":
+            openRetroArchUrl(call: call, result: result)
+        case "incomingUrlReady":
+            incomingUrlReady = true
+            let buffered = pendingIncomingUrls
+            pendingIncomingUrls.removeAll()
+            for url in buffered { channel?.invokeMethod("onIncomingUrl", arguments: url) }
+            result(nil)
         case "configureAudioSessionForSilentMode":
             configureAudioSessionForSilentMode(result: result)
         case "openJitRequest":
@@ -118,6 +139,31 @@ public class ExternalFolderAccessPlugin: NSObject, FlutterPlugin, UIDocumentPick
     }
 
     // MARK: - Pick
+
+    private func openRetroArchUrl(call: FlutterMethodCall, result: @escaping FlutterResult) {
+        guard let args = call.arguments as? [String: Any],
+              let raw = args["url"] as? String, let target = URL(string: raw),
+              target.scheme == "retroarch", ["library", "game"].contains(target.host ?? ""),
+              retroArchBackgroundTask == .invalid else {
+            result(false)
+            return
+        }
+        let app = UIApplication.shared
+        retroArchBackgroundTask = app.beginBackgroundTask(withName: "RetroArch URL handoff") { [weak self] in
+            self?.retroArchHandoff.cancel()
+        }
+        guard retroArchBackgroundTask != .invalid else { result(false); return }
+        retroArchHandoff.start(target: target,
+            open: { url, completion in app.open(url, options: [:], completionHandler: completion) },
+            schedule: { delay, action in DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: action) },
+            completion: { [weak self] opened in
+                if let self = self, self.retroArchBackgroundTask != .invalid {
+                    app.endBackgroundTask(self.retroArchBackgroundTask)
+                    self.retroArchBackgroundTask = .invalid
+                }
+                result(opened)
+            })
+    }
 
     private func pickFolder(key: String, result: @escaping FlutterResult) {
         guard let rootVC = Self.topViewController() else {
@@ -170,7 +216,7 @@ public class ExternalFolderAccessPlugin: NSObject, FlutterPlugin, UIDocumentPick
         do {
             let bookmarkData = try url.bookmarkData(
                 options: [],
-                includingResourceValuesForKeys: nil,
+                includingResourceValuesForKeys: [.pathKey],
                 relativeTo: nil
             )
             UserDefaults.standard.set(
@@ -202,7 +248,7 @@ public class ExternalFolderAccessPlugin: NSObject, FlutterPlugin, UIDocumentPick
     /// Deliberately never calls stopAccessingSecurityScopedResource() here —
     /// NeoStation needs the folder readable for as long as the app runs, and
     /// iOS releases the scope automatically when the process exits.
-    private func resolveBookmarkedFolder(key: String, result: @escaping FlutterResult) {
+    private func resolveBookmarkedFolder(key: String, includeDetails: Bool = false, result: @escaping FlutterResult) {
         guard
             let bookmarkData = UserDefaults.standard.data(
                 forKey: Self.bookmarkDefaultsKey(for: key)
@@ -214,6 +260,10 @@ public class ExternalFolderAccessPlugin: NSObject, FlutterPlugin, UIDocumentPick
 
         var isStale = false
         do {
+            // Read the original path from THIS bookmark before refreshing it.
+            // This establishes ownership; matching an arbitrary container UUID
+            // or a ROM filename from another app does not.
+            let previousPath = NSURL.resourceValues(forKeys: [.pathKey], fromBookmarkData: bookmarkData)?[.pathKey] as? String
             let url = try URL(
                 resolvingBookmarkData: bookmarkData,
                 options: [],
@@ -238,7 +288,7 @@ public class ExternalFolderAccessPlugin: NSObject, FlutterPlugin, UIDocumentPick
                 do {
                     let refreshedBookmark = try url.bookmarkData(
                         options: [],
-                        includingResourceValuesForKeys: nil,
+                        includingResourceValuesForKeys: [.pathKey],
                         relativeTo: nil
                     )
                     UserDefaults.standard.set(
@@ -252,7 +302,13 @@ public class ExternalFolderAccessPlugin: NSObject, FlutterPlugin, UIDocumentPick
                     print("ExternalFolderAccess: failed refreshing stale bookmark for \(key): \(error)")
                 }
             }
-            result(url.path)
+            if includeDetails {
+                var details: [String: Any] = ["path": url.path]
+                if let previousPath = previousPath { details["previousPath"] = previousPath }
+                result(details)
+            } else {
+                result(url.path)
+            }
         } catch {
             result(
                 FlutterError(
