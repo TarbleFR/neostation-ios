@@ -10,7 +10,7 @@ import UIKit
 
     func record(_ event: [String: Any]) {
         events.append(event)
-        let file = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("result.json")
+        let file = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("result-\(ProcessInfo.processInfo.environment["HANDOFF_CASE"] ?? "setup").json")
         try! JSONSerialization.data(withJSONObject: events, options: [.prettyPrinted, .sortedKeys]).write(to: file, options: .atomic)
     }
 
@@ -34,11 +34,6 @@ import UIKit
         let target = URL(string: env["HANDOFF_TARGET"]!)!
         let mode = env["HANDOFF_MODE"]!
         record(["event": "begin", "mode": mode, "state": app.applicationState.rawValue])
-        if mode == "authorize" {
-            // Consent setup only; production and baseline are tested later.
-            app.open(target, options: [:])
-            return
-        }
         backgroundTask = app.beginBackgroundTask(withName: "Handoff reproduction") {
             self.current.cancel(); self.legacy.cancel()
         }

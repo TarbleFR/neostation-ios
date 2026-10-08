@@ -104,38 +104,22 @@ def main():
             spec = pathlib.Path(tmp) / 'project.json'
             spec.write_text(json.dumps(project))
             run('xcodegen', 'generate', '--spec', str(spec), '--project', tmp)
-            print('Authorizing only the two fixture app links through XCTest', flush=True)
+            print('Exercising five UIKit transports through XCTest; no open result is mocked', flush=True)
             consent_log = run('xcodebuild', 'test', '-project', str(pathlib.Path(tmp) / 'HandoffConsent.xcodeproj'),
                 '-scheme', 'HandoffConsent', '-destination', 'platform=iOS Simulator,id=' + udid,
                 '-parallel-testing-enabled', 'NO', 'CODE_SIGNING_ALLOWED=YES', 'CODE_SIGN_IDENTITY=-',
-                'DEVELOPMENT_TEAM=', timeout=600)
+                'DEVELOPMENT_TEAM=', '-resultBundlePath', str(OUT.with_name('retroarch-handoff.xcresult')), timeout=600)
             print(consent_log[-2500:], flush=True)
-            evidence['fixture_links_authorized_via_ui'] = True
+            evidence['fixture_apps_driven_by_xctest'] = True
             sender = 'org.neostation.handofftest.sender'
             receiver = 'org.neostation.handofftest.receiver'
-            sender_file = pathlib.Path(run('xcrun', 'simctl', 'get_app_container', udid, sender, 'data')) / 'Documents/result.json'
-            receiver_file = pathlib.Path(run('xcrun', 'simctl', 'get_app_container', udid, receiver, 'data')) / 'Documents/received.json'
-            for mode, host, cold in [('legacy', 'library', False), ('legacy', 'game', False), ('current', 'library', False), ('current', 'game', False), ('current', 'library', True)]:
-                run('xcrun', 'simctl', 'terminate', udid, sender, check=False)
-                run('xcrun', 'simctl', 'terminate', udid, receiver, check=False)
-                sender_file.unlink(missing_ok=True); receiver_file.unlink(missing_ok=True)
-                if not cold:
-                    run('xcrun', 'simctl', 'launch', udid, receiver)
-                    time.sleep(2)
+            sender_data = pathlib.Path(run('xcrun', 'simctl', 'get_app_container', udid, sender, 'data')) / 'Documents'
+            receiver_data = pathlib.Path(run('xcrun', 'simctl', 'get_app_container', udid, receiver, 'data')) / 'Documents'
+            cases = [('legacy', 'library', False), ('legacy', 'game', False), ('current', 'library', False), ('current', 'game', False), ('current', 'library', True)]
+            for index, (mode, host, cold) in enumerate(cases):
+                sender_file = sender_data / f'result-{index}.json'
+                receiver_file = receiver_data / ('received-cold.json' if cold else f'received-{index}.json')
                 url = 'retroarch://library?scheme=neostation-handoff-test' if host == 'library' else 'retroarch://game/Unicode-%C3%A9.zip%23folder%2Fgame.gba'
-                env = dict(os.environ, SIMCTL_CHILD_HANDOFF_MODE=mode, SIMCTL_CHILD_HANDOFF_TARGET=url)
-                run('xcrun', 'simctl', 'launch', udid, sender, env=env)
-                # Poll result within a finite bound; allow the receiver's callback
-                # to finish after UIKit reports URL acceptance.
-                deadline = time.monotonic() + 20
-                events = []
-                while time.monotonic() < deadline:
-                    events = json.loads(sender_file.read_text()) if sender_file.exists() else []
-                    if any(e['event'] == 'finished' for e in events):
-                        time.sleep(2)
-                        break
-                    time.sleep(0.2)
-                run('xcrun', 'simctl', 'io', udid, 'screenshot', str(OUT.with_name(f'handoff-{mode}-{host}-{cold}.png')))
                 events = json.loads(sender_file.read_text()) if sender_file.exists() else []
                 received = json.loads(receiver_file.read_text()) if receiver_file.exists() else []
                 case = {'mode': mode, 'host': host, 'cold': cold, 'sender': events, 'receiver': received, 'delivered': url in received}

@@ -281,6 +281,35 @@ class RetroArchLibraryService {
     return cache[basename] ?? cache[romPath] ?? cache[stem];
   }
 
+  static Future<Map<String, dynamic>?> _entryForLaunchPath(
+    Map<String, Map<String, dynamic>> cache,
+    String romPath,
+  ) async {
+    final db = await SqliteService.getDatabase();
+    final hasBindings = (await db.rawQuery(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='user_retroarch_repair_v1'",
+    )).isNotEmpty;
+    if (hasBindings) {
+      final bindings = await db.query(
+        'user_retroarch_repair_v1',
+        where: 'target_path = ?',
+        whereArgs: [romPath],
+      );
+      if (bindings.isNotEmpty) {
+        // The verified full playlist path/member binding takes precedence over
+        // filename aliases. An archive's launch name can differ from its ZIP.
+        if (bindings.length != 1) {
+          throw StateError('Conflicting RetroArch launch bindings: $romPath');
+        }
+        return _entryForRomPath(
+          cache,
+          bindings.single['source_path'] as String,
+        );
+      }
+    }
+    return _entryForRomPath(cache, romPath);
+  }
+
   /// Returns true when the last TestFlight library export contains this game.
   /// This intentionally does not require the old absolute iOS container path
   /// to still exist after an emulator reinstall/update.
@@ -288,7 +317,7 @@ class RetroArchLibraryService {
     if (_cache == null) await loadCachedLibrary();
     final cache = _cache;
     if (cache == null || cache.isEmpty) return false;
-    return _entryForRomPath(cache, romPath) != null;
+    return await _entryForLaunchPath(cache, romPath) != null;
   }
 
   /// Loads the last-synced library from disk into memory, if not already
@@ -403,7 +432,7 @@ class RetroArchLibraryService {
         'No persisted RetroArch export is available. Synchronize the library.',
       );
     }
-    final entry = _entryForRomPath(cache, romPath);
+    final entry = await _entryForLaunchPath(cache, romPath);
     if (entry == null) {
       return finish(
         RetroArchLaunchStage.entryMissing,

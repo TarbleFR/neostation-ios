@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:neostation/services/retroarch_library_service.dart';
 import 'package:neostation/services/retroarch_library_importer.dart';
+import 'package:neostation/services/retroarch_folder_recovery.dart';
 
 import 'database_test_helper.dart';
 
@@ -189,6 +190,69 @@ void main() {
         openUrl: (_) async => false,
       );
       expect(retry.stage, RetroArchLaunchStage.handoffRejected);
+    },
+  );
+  test(
+    'repaired archive launch uses its full binding after relocation, not a similar filename',
+    () async {
+      final helper = DatabaseTestHelper();
+      final db = await helper.setUp();
+      addTearDown(helper.tearDown);
+      await db.insert('app_systems', {
+        'id': 'gba',
+        'folder_name': 'gba',
+        'real_name': 'Game Boy Advance',
+        'manufacturer': 'Nintendo',
+      });
+      const system = 'Nintendo - Game Boy Advance';
+      const member = 'folder/Variant A.gba';
+      const original = '/old/gba/Collection.zip';
+      const relocated = '/new/gba/Collection.zip';
+      await db.insert('user_roms', {
+        'rom_path': original,
+        'app_system_id': 'gba',
+        'filename': 'Collection.zip',
+      });
+      await db.execute(
+        'CREATE TABLE user_retroarch_repair_v1 (source_path TEXT PRIMARY KEY, target_path TEXT)',
+      );
+      await db.insert('user_retroarch_repair_v1', {
+        'source_path': RetroArchLibraryImporter.libraryPath(system, member),
+        'target_path': original,
+      });
+      await RetroArchLibraryService.handleIncomingUri(
+        Uri(
+          scheme: 'neostation',
+          host: 'retroarch',
+          queryParameters: {
+            'games': base64Url.encode(
+              utf8.encode(
+                jsonEncode([
+                  {'system': system, 'filename': member, 'gameId': 'gba.lpl:0'},
+                  {
+                    'system': system,
+                    'filename': 'Collection.gba',
+                    'gameId': 'gba.lpl:1',
+                  },
+                ]),
+              ),
+            ),
+          },
+        ),
+      );
+      await RetroArchFolderRecovery.relocate(db, '/old', '/new');
+      expect(
+        await RetroArchLibraryService.hasGameForRomPath(relocated),
+        isTrue,
+      );
+      final attempt = await RetroArchLibraryService.launchGameWithDiagnostics(
+        relocated,
+        openUrl: (url) async {
+          expect(Uri.parse(url).pathSegments, [member]);
+          return true;
+        },
+      );
+      expect(attempt.stage, RetroArchLaunchStage.handoffAccepted);
     },
   );
 }

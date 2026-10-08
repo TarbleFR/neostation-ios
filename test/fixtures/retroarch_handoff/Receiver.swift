@@ -14,7 +14,7 @@ final class ReceiverScene: UIResponder, UIWindowSceneDelegate {
         window?.makeKeyAndVisible()
     }
     func scene(_ scene: UIScene, openURLContexts contexts: Set<UIOpenURLContext>) {
-        let file = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("received.json")
+        let file = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("received-\(ProcessInfo.processInfo.environment["HANDOFF_CASE"] ?? "cold").json")
         var received = (try? JSONSerialization.jsonObject(with: Data(contentsOf: file))) as? [String] ?? []
         for context in contexts {
             received.append(context.url.absoluteString)

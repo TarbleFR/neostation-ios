@@ -54,4 +54,5 @@ jobs:
           path: |
             ${{ runner.temp }}/retroarch-uikit-evidence.*
             ${{ runner.temp }}/handoff-*.png
+            ${{ runner.temp }}/retroarch-handoff.xcresult
           if-no-files-found: warn

@@ -11,7 +11,9 @@ storage and handoff defects; the remaining device checks are required.
 - The offline `tools/retroarch_playlist_repair.py` compares original `.lpl` paths
   (including archive members) with a read-only database. It can create a separate
   backed-up candidate database and records persistent repair bindings. Repeated
-  restoration honors these bindings and bookmark relocation updates their targets.
+  restoration and archive launch honor these full-path bindings; bookmark
+  relocation updates their targets. Launch never replaces a verified binding
+  with a filename alias.
   It never changes ROM files. Conflicting systems, histories, scraper metadata,
   ambiguous names and multi-content archives are not merged.
 - Export records are retained separately from filename aliases. The external
