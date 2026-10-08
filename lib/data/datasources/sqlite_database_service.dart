@@ -275,6 +275,7 @@ class SqliteDatabaseService {
                 validExtensionsSet,
                 system.recursiveScan,
                 ignoreHiddenFiles: ignoreHiddenFiles,
+                rethrowOnFailure: preserveUnscannedSources,
               );
 
         completedScanPaths.addAll([target.dirPath, target.canonicalPath]);
@@ -1316,6 +1317,7 @@ class SqliteDatabaseService {
     Set<String> validExtensions,
     bool recursive, {
     bool ignoreHiddenFiles = true,
+    bool rethrowOnFailure = false,
   }) async {
     final entries = <RomEntry>[];
     try {
@@ -1346,7 +1348,7 @@ class SqliteDatabaseService {
       }
     } catch (e) {
       _log.e('Error scanning standard path $pathStr: $e');
-      rethrow;
+      if (rethrowOnFailure) rethrow;
     }
     return entries;
   }

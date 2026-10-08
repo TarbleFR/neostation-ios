@@ -131,6 +131,13 @@ void main() {
       );
       expect(summary.removed, 1);
       expect((await db.query('user_roms')).length, 2);
+      await db.insert('user_roms', {
+        'app_system_id': 'gba',
+        'rom_path': '${root.path}/inaccessible/retained.gba',
+        'filename': 'retained.gba',
+        'is_favorite': 1,
+        'play_time': 321,
+      });
       final failure = await SqliteDatabaseService.scanSystemRoms(
         system('gba'),
         [root.path],
@@ -140,7 +147,14 @@ void main() {
         },
       );
       expect(failure.removed, 0);
-      expect((await db.query('user_roms')).length, 2);
+      expect((await db.query('user_roms')).length, 3);
+      expect(
+        (await db.query(
+          'user_roms',
+          where: 'is_favorite = 1',
+        )).single['play_time'],
+        321,
+      );
     },
   );
 

@@ -155,7 +155,7 @@
     "build-utils/validate_neoswap_vulkan_evidence.py": "14aef7c81f5edbafb8d243cb5bbd19a8a26b8f65a25e3cd45ddd22fe263cd15e",
     "build-utils/validate_rpcs3_ipa.py": "95900f3225221ebe3edf96e607a88b6b0eb51f46e23d0457c7d2ef8c893c013f",
     "build-utils/validate_single_ipa_distribution.py": "d09c26ca0cfeea2b7d633ae7df01df104ad21a5e3ea71cd018e15539f7d5ea0f",
-    "lib/data/datasources/sqlite_database_service.dart": "c724701cb5bde9b30496efe0460325afcf9dcf1f9a73b72b0b0375a5319ff225",
+    "lib/data/datasources/sqlite_database_service.dart": "0cb871469ec8fe92bcbada2132fa417e5fbd31ef4dd51b20d620091ef2abc7b9",
     "lib/l10n/neoplay_companion_locale.dart": "1be11e87e7b52d634d5f91d7764d624e865ebf075229156d5f78d446806319ae",
     "lib/l10n/neoplay_discovery_locale.dart": "02c4dd29f1773a7f89c93c43c700a3b1a7b71f884bfe776e056f62d076330006",
     "lib/l10n/neoplay_locale.dart": "246f3bb6c655fa0a9b2298a2fdb07642a5b6db5a5a43cb83f3601bdf3e586b5e",
@@ -355,7 +355,7 @@
     "lib/l10n/app_locale_zh_hant.dart": "eab7dd28a555d7b9abef498a9474fdc4faa59505d4f03b7c8e1c863b42db9e20",
     "lib/providers/sqlite_config_provider.dart": "340e1c537772297ddd102e2d1014f3cd944ed09c0ef6743c6235a16ffef31fd5",
     "lib/providers/sqlite_config_provider/scanning.dart": "2171de0c9d4fe5c6a2c5cfc86a7b80b966553fa848939d97912638a76f730e95",
-    "lib/screens/settings_screen/new_settings_options/directories_settings_content.dart": "108573b6c6af75fc0e1f3d2370408f58b3a499705a7b8eda56dc709e52e5bee2",
+    "lib/screens/settings_screen/new_settings_options/directories_settings_content.dart": "7c11301dbfd7c504a84caf843d9925db25b430e031d9e65728851b7d58daa688",
     "lib/services/config_service.dart": "ac6aefc1d972387c0253af0c9490407f0bc2abbe4a2b7716225962aeafcee80b",
     "lib/services/retroarch_folder_recovery.dart": "b78a9641c350b4801a312affcd433d0624706525a30fd478bd9f5c6779f6b659",
     "lib/services/retroarch_library_protocol.dart": "ba1deeca3d900ff2a831acc258d77efd1a52c24314ce475101c471a21bee0f96",
@@ -861,7 +861,7 @@
     "test/retroarch_sync_locale_test.dart": "bc860d8779d46045f5f83283871863d583ab740c72a6453326600ed419feab7b",
     "test/retroarch_url_handoff_test.swift": "d07036d23b8db6695c7f282890414d9b87c6d43b801583b82e541ff847f0a429",
     "docs/neoplay/WINDOWS-0.8.0.md": "9a328557d223cf8caf9e38d048bba657d1fb99dd5c955f4ae9744585e45c7b89",
-    "test/retroarch_library_restoration_test.dart": "4c61afbf41b8f33e3c2581624a152ee4d3090bdf34455b4d36e1df8f306ccd25",
+    "test/retroarch_library_restoration_test.dart": "d10bf0dc7b353e6ba1e69b45aae08454c1dd4a62fed0d9c31c0289db57a74542",
     "test/ios_rom_library_root_resolver_test.dart": "860cafc4bf608a05493a7945d6b2b47d540747887be9a2fef0043ce8ec3b92fc"
   },
   "support_git_modes": {

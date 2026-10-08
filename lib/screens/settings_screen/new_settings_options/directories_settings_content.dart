@@ -545,6 +545,7 @@ class DirectoriesSettingsContentState
       final activePath = resolved ?? selected;
       if (!mounted) return;
 
+      await Directory(activePath).list(followLinks: false).take(1).toList();
       ConfigService.linkedExternalFolderPath = activePath;
 
       final configProvider = Provider.of<SqliteConfigProvider>(
@@ -567,6 +568,13 @@ class DirectoriesSettingsContentState
         await configProvider.scanSystems();
       } else {
         await configProvider.addRomFolder(scanRoot, scan: true);
+      }
+      if (bookmarkKey == ExternalFolderAccess.defaultBookmarkKey &&
+          !configProvider.config.romFolders.contains(scanRoot)) {
+        throw FileSystemException(
+          'RetroArch source could not be registered; library retained',
+          scanRoot,
+        );
       }
       if (configProvider.error != null) {
         throw StateError(configProvider.error!);
