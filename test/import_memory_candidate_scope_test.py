@@ -12,7 +12,7 @@ BASE = '3ccde925351b3e59985ba466e013e87a857d6ad0'
 MANIFEST_PATH = 'native/import-memory-candidate.json'
 manifest = json.loads((ROOT / MANIFEST_PATH).read_text())
 assert manifest['baseline'] == BASE
-assert manifest['target_build'] == 416
+assert manifest['target_build'] == 417
 assert manifest['swap_research']['branch'] == 'swap'
 assert manifest['swap_research']['scope'] == 'RPCS3 only'
 # Build409: relay owner 1 serves identifiable host allocations of the same
@@ -95,6 +95,17 @@ assert runtime_preparation == {
 # Additions require a review of the requested production scope. Never derive
 # this whitelist from git status or from the hash manifest itself.
 PRODUCTION_FILES = {
+    '.github/workflows/dolphin-pacing-check.yml',
+    'tools/neoplay-receiver/build-installer.mjs',
+    'tools/neoplay-receiver/build-windows.mjs',
+    'tools/neoplay-receiver/electron.mjs',
+    'tools/neoplay-receiver/l10n.mjs',
+    'tools/neoplay-receiver/link-quality.mjs',
+    'tools/neoplay-receiver/neoplay-icon.ico',
+    'tools/neoplay-receiver/neoplay-icon.png',
+    'tools/neoplay-receiver/neostation-logo.svg',
+    'tools/neoplay-receiver/quality-renderer.mjs',
+    'tools/neoplay-receiver/windows-installer.nsi',
     # Build409: pure global budget policy applied by the plugin every sample.
     'packages/neo_swap/ios/Classes/NeoSwapBudget.h',
     # RPCS3-only integrity harness shares its sole supported allocation owner.
@@ -265,6 +276,13 @@ PRODUCTION_FILES = {
     'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm',
 }
 SUPPORT_FILES = {
+    'docs/neoplay/BUILD417.md',
+    'docs/neoplay/WINDOWS-0.7.0.md',
+    'tools/neoplay-receiver/README-WINDOWS.txt',
+    'tools/neoplay-receiver/embedded-playback-smoke.mjs',
+    'tools/neoplay-receiver/test/link-quality.test.mjs',
+    'tools/neoplay-receiver/test/quality-locales.test.mjs',
+    'tools/neoplay-receiver/test/visibility.test.mjs',
     'test/neo_swap_channel_test.dart',
     'docs/neoplay/BUILD415.md',
     'docs/neoplay/BUILD416.md',
@@ -830,16 +848,16 @@ ARMSX2_PACKAGING_TEST_BUILD412_LINES = (
      "    caller=os.environ.get('GITHUB_WORKFLOW_REF','').split('@',1)[0].rsplit('/',1)[-1]\n"
      "    for name in (caller,) if caller in ('ios-ci.yml','neoswap-ipa.yml') else ('ios-ci.yml','neoswap-ipa.yml'):\n"),
 )
-# Build416: exact candidate labels and release notes; native pins and gates stay byte-identical.
-IPA_WORKFLOW_BUILD416_LINES = (
-    ('name: NeoStation NeoSwap + NeoPlay private • Build 412\n', 'name: NeoStation NeoSwap + NeoPlay private • Build 416\n'),
-    ('run-name: NeoStation NeoSwap + NeoPlay private • Build 412 • ${{ github.sha }}\n', 'run-name: NeoStation NeoSwap + NeoPlay private • Build 416 • ${{ github.sha }}\n'),
-    ("        default: '412'\n", "        default: '416'\n"),
-    ('  group: neostation-neoswap-neoplay-build412\n', '  group: neostation-neoswap-neoplay-build416\n'),
-    ('    name: Neostation iOS 0.0.2 private IPA (412)\n', '    name: Neostation iOS 0.0.2 private IPA (416)\n'),
-    ("      BUILD_NUMBER: ${{ inputs.build_number || '412' }}\n", "      BUILD_NUMBER: ${{ inputs.build_number || '416' }}\n"),
-    ('      ARTIFACT_NAME: NeoStation-NeoSwap-NeoPlay-Build-412-${{ github.sha }}\n', '      ARTIFACT_NAME: NeoStation-NeoSwap-NeoPlay-Build-416-${{ github.sha }}\n'),
-    ('          cp docs/neoplay/BUILD412.md build/private-test/Notes-NeoPlay-Build412.md\n', '          cp docs/neoplay/BUILD416.md build/private-test/Notes-NeoPlay-Build416.md\n'),
+# Build417: exact candidate labels and release notes; native pins and gates stay byte-identical.
+IPA_WORKFLOW_BUILD417_LINES = (
+    ('name: NeoStation NeoSwap + NeoPlay private • Build 412\n', 'name: NeoStation NeoSwap + NeoPlay private • Build 417\n'),
+    ('run-name: NeoStation NeoSwap + NeoPlay private • Build 412 • ${{ github.sha }}\n', 'run-name: NeoStation NeoSwap + NeoPlay private • Build 417 • ${{ github.sha }}\n'),
+    ("        default: '412'\n", "        default: '417'\n"),
+    ('  group: neostation-neoswap-neoplay-build412\n', '  group: neostation-neoswap-neoplay-build417-${{ github.sha }}\n'),
+    ('    name: Neostation iOS 0.0.2 private IPA (412)\n', '    name: Neostation iOS 0.0.2 private IPA (417)\n'),
+    ("      BUILD_NUMBER: ${{ inputs.build_number || '412' }}\n", "      BUILD_NUMBER: ${{ inputs.build_number || '417' }}\n"),
+    ('      ARTIFACT_NAME: NeoStation-NeoSwap-NeoPlay-Build-412-${{ github.sha }}\n', '      ARTIFACT_NAME: NeoStation-NeoSwap-NeoPlay-Build-417-${{ github.sha }}\n'),
+    ('          cp docs/neoplay/BUILD412.md build/private-test/Notes-NeoPlay-Build412.md\n', '          cp docs/neoplay/BUILD417.md build/private-test/Notes-NeoPlay-Build417.md\n'),
 )
 for path in ARMSX2_INTEGRATION_FILES:
     reviewed = subprocess.check_output(['git', 'show', ARMSX2_INTEGRATION_SHA + ':' + path], cwd=ROOT)
@@ -863,8 +881,8 @@ for path in ARMSX2_INTEGRATION_FILES:
         for old, new in IPA_WORKFLOW_BUILD412_PURGED_INPUT_LINES:
             assert text.count(old) == 1, 'Build412 purged-input workflow line expected once: ' + old
             text = text.replace(old, new, 1)
-        for old, new in IPA_WORKFLOW_BUILD416_LINES:
-            assert text.count(old) == 1, 'Build416 metadata expected once: ' + old
+        for old, new in IPA_WORKFLOW_BUILD417_LINES:
+            assert text.count(old) == 1, 'Build417 metadata expected once: ' + old
             text = text.replace(old, new, 1)
         reviewed = text.encode('utf-8')
     elif path == 'test/armsx2_packaging_test.py':

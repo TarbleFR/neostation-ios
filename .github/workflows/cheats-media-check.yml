@@ -6,7 +6,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: cheats-media-validation
+  group: cheats-media-validation-${{ github.sha }}
   cancel-in-progress: true
 jobs:
   test:

@@ -6,7 +6,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: dolphin-pacing-tests
+  group: dolphin-pacing-tests-${{ github.sha }}
   cancel-in-progress: true
 jobs:
   test:

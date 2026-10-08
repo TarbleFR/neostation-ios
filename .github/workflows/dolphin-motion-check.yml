@@ -6,7 +6,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: dolphin-phone-shake-tests
+  group: dolphin-phone-shake-tests-${{ github.sha }}
   cancel-in-progress: true
 jobs:
   test:

@@ -6,7 +6,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: neoplay-check-${{ github.ref }}
+  group: neoplay-check-${{ github.sha }}
   cancel-in-progress: true
 jobs:
   windows:
