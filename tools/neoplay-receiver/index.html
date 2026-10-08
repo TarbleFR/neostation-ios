@@ -53,6 +53,14 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 4
       <option value="crisp" data-i18n="crisp">Renforcée</option>
     </select>
     <div class="hint" data-i18n="qualityDescription">Le traitement améliore les contours de l'image sans inventer des détails.</div>
+    <label for="resolution-select" data-i18n="renderResolution">Résolution de rendu</label>
+    <select id="resolution-select">
+      <option value="auto" data-i18n="renderAuto">Automatique · fluide</option>
+      <option value="native" data-i18n="renderNative">Native · sans agrandissement</option>
+      <option value="qhd" data-i18n="renderQhd">2K / QHD · 2560 × 1440</option>
+      <option value="uhd" data-i18n="renderUhd">4K / UHD · 3840 × 2160</option>
+    </select>
+    <div class="hint" data-i18n="renderDescription">Les résolutions 2K/4K concernent le rendu GPU, pas la capture iPhone. Retour à une définition inférieure en cas de saccades.</div>
   </div>
   <div class="device"><div><span class="dot"></span><span data-i18n="serviceActive">Service actif</span></div><div class="sub" data-i18n="localOnly">R&eacute;seau local uniquement</div></div>
 </aside>
