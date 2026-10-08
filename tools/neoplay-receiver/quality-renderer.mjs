@@ -20,6 +20,61 @@ export function qualityScale(sourceWidth, sourceHeight, stageWidth, dpr = 1, sta
   const width = Math.max(source, Math.min(source * 2, Math.min(3840, demand)));
   return { width, height: Math.max(2, Math.round(width * sourceHeight / sourceWidth)) };
 }
+
+export const RENDER_MODES = Object.freeze(['auto', 'native', 'qhd', 'uhd']);
+export function resolutionMode(value) {
+  return RENDER_MODES.includes(value) ? value : 'auto';
+}
+// A GPU OUTPUT target, never a claim that the iPhone captured these pixels.
+// Wider iPhone sources preserve their aspect ratio inside QHD/UHD bounds.
+export function resolutionScale(sourceWidth, sourceHeight, mode, stageWidth, dpr = 1, stageHeight = Infinity, gpuMaximum = 3840) {
+  if (![sourceWidth, sourceHeight].every(v => Number.isFinite(v) && v > 0)) return {width:2,height:2};
+  const sourceW = Math.max(2, Math.floor(sourceWidth));
+  const sourceH = Math.max(2, Math.floor(sourceHeight));
+  const maximum = Number.isFinite(gpuMaximum) ? Math.max(2, Math.min(3840, Math.floor(gpuMaximum))) : 3840;
+  const selected = resolutionMode(mode);
+  if (selected === 'native' && sourceW <= maximum && sourceH <= maximum) return {width:sourceW,height:sourceH};
+  let bounds;
+  if (selected === 'qhd') bounds = {width:2560,height:1440};
+  else if (selected === 'uhd') bounds = {width:3840,height:2160};
+  else bounds = qualityScale(sourceW, sourceH, stageWidth, dpr, stageHeight);
+  const factor = Math.min(bounds.width / sourceW, bounds.height / sourceH, maximum / sourceW, maximum / sourceH);
+  const even = value => Math.max(2, Math.min(Math.floor(maximum / 2) * 2, Math.round(value / 2) * 2));
+  return { width:even(sourceW * factor), height:even(sourceH * factor) };
+}
+
+// Avoid trading playback cadence for UHD supersampling. Observe actual frame
+// drops and GPU submission cost. The H.264 sender/PCM audio remain untouched.
+export class RenderBudget {
+  constructor() { this.reset(); }
+  reset() { this.steps = 0; this.last = null; this.lastBad = -Infinity; }
+  effective(requested) {
+    const mode = resolutionMode(requested);
+    if (mode === 'uhd') return this.steps >= 2 ? 'native' : this.steps === 1 ? 'qhd' : 'uhd';
+    if (mode === 'qhd') return this.steps > 0 ? 'native' : 'qhd';
+    return mode;
+  }
+  sample({at, decoded, droppedLate, renderMs = 0, visible = true}) {
+    if (![at, decoded, droppedLate].every(Number.isFinite)) return false;
+    const current = {at, decoded, droppedLate};
+    if (!visible || !this.last) { this.last = current; return false; }
+    if (at - this.last.at < 3000) return false;
+    const frames = decoded - this.last.decoded;
+    const lost = Math.max(0, droppedLate - this.last.droppedLate);
+    this.last = current;
+    if (frames < 24) return false; // paused game/hidden window
+    if (lost > Math.max(3, frames * 0.07) || renderMs > 13) {
+      this.lastBad = at;
+      if (this.steps < 2) { this.steps++; return true; }
+      return false;
+    }
+    if (this.steps > 0 && at - this.lastBad >= 20000) {
+      this.steps--; this.lastBad = at; return true;
+    }
+    return false;
+  }
+}
+
 const vertexShader = `#version 300 es
 in vec2 a_vertex;
 out vec2 v_uv;
@@ -92,13 +147,14 @@ export function createQualityRenderer(canvas, stage) {
   canvas.addEventListener?.('webglcontextlost', lost, {passive:false});
 
   return {
-    draw(frame, preset) {
-      if (broken || gl.isContextLost() || !frame || !QUALITY_PRESETS[preset] || preset === 'original') return false;
+    draw(frame, preset, mode = 'auto') {
+      if (broken || gl.isContextLost() || !frame || !QUALITY_PRESETS[preset]) return false;
       try {
         const bounds = stage?.getBoundingClientRect?.();
         const stageWidth = bounds?.width || frame.displayWidth;
         const dpr = typeof devicePixelRatio === 'number' ? devicePixelRatio : 1;
-        const dims = qualityScale(frame.displayWidth, frame.displayHeight, stageWidth, dpr, bounds?.height);
+        const gpuMaximum = Math.min(3840, gl.getParameter(gl.MAX_TEXTURE_SIZE) || 3840, gl.getParameter(gl.MAX_RENDERBUFFER_SIZE) || 3840);
+        const dims = resolutionScale(frame.displayWidth, frame.displayHeight, mode, stageWidth, dpr, bounds?.height, gpuMaximum);
         if (canvas.width !== dims.width || canvas.height !== dims.height) {
           canvas.width = dims.width; canvas.height = dims.height;
         }
