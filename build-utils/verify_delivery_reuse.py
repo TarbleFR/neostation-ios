@@ -202,6 +202,43 @@ LIBRETRO_DELTA = {
     'test/localization_12_locale_coverage_test.py',
 }
 DELTA |= LIBRETRO_DELTA
+# Obsolete files removed on 9 October 2026 at the maintainer's request: Dart
+# code unreachable from lib/main.dart, the tests of that dead code, and build
+# files nothing references. dusklight_locale_test now checks the live Ports
+# import menu instead of the removed Dusklight-only widget.
+CLEANUP_DELTA = {
+    'build-utils/canonical-host-285.json',
+    'build-utils/generate_import_labels.py',
+    'build-utils/materialize_dolphin_isolated_v2.py',
+    'build-utils/migrations/candidate302/part0.b64',
+    'build-utils/patches/grid_title_build243.patch',
+    'build-utils/private-test-360-recipient.pem',
+    'build-utils/private-test-361-recipient.pem',
+    'build-utils/private-test-362-recipient.pem',
+    'build-utils/private-test-363-recipient.pem',
+    'build-utils/private-test-364-recipient.pem',
+    'build-utils/private-test-366-recipient.pem',
+    'build-utils/private-test-367-recipient.pem',
+    'build-utils/verify_delivery_reuse.py',
+    'lib/models/retroarch_config_model.dart',
+    'lib/services/metadata_cleanup_service.dart',
+    'lib/services/retroarch_config_service.dart',
+    'lib/services/retroarch_playlist_service.dart',
+    'lib/services/rom_folder_organizer_service.dart',
+    'lib/services/scraped_media_migration_service.dart',
+    'lib/utils/switch_save_detector.dart',
+    'lib/widgets/dusklight_internal_playlist_actions.dart',
+    'lib/widgets/info_dialog.dart',
+    'lib/widgets/selection_grid/grid_navigation.dart',
+    'lib/widgets/selection_grid/selection_grid.dart',
+    'lib/widgets/selection_grid/selection_grid_geometry.dart',
+    'test/dusklight_locale_test.dart',
+    'test/metadata_cleanup_service_test.dart',
+    'test/rom_folder_organizer_service_test.dart',
+    'test/selection_grid_cache_test.dart',
+    'test/selection_grid_test.dart',
+}
+DELTA |= CLEANUP_DELTA
 INPUT_ROOTS = ('lib/', 'packages/', 'native/', 'build-utils/', 'assets/', 'test/')
 
 def sha(data):
