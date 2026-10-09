@@ -3,27 +3,23 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('Build 243 restores the NeoStation silent-mode policy around RPCS3', () {
+  test('RPCS3 restores the NeoStation silent-mode policy when it stops', () {
     final configure = File(
       'build-utils/configure_rpcs3_ios_v2.py',
     ).readAsStringSync();
-    final transitionPatch = File(
-      'build-utils/patches/rpcs3_build243_menu_transition.patch',
+    // The Build 243 transition patch was folded into the bridge source and
+    // removed as an unused file; check the bridge itself.
+    final bridge = File(
+      'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm',
     ).readAsStringSync();
 
     expect(configure, contains('preserve_frontend_silent_mode_policy'));
     expect(configure, contains('patch_ios_video_player_audio_session.py'));
-    expect(transitionPatch, contains('previousAudioCategory'));
-    expect(transitionPatch, contains('AVAudioSessionCategoryAmbient'));
-    expect(
-      transitionPatch,
-      contains('AVAudioSessionCategoryOptionMixWithOthers'),
-    );
-    expect(
-      transitionPatch,
-      isNot(contains('setCategory:self.previousAudioCategory')),
-    );
-    expect(transitionPatch, contains('frontend audio policy restored'));
+    expect(bridge, contains('previousAudioCategory'));
+    expect(bridge, contains('AVAudioSessionCategoryAmbient'));
+    expect(bridge, contains('AVAudioSessionCategoryOptionMixWithOthers'));
+    expect(bridge, isNot(contains('setCategory:self.previousAudioCategory')));
+    expect(bridge, contains('frontend audio policy restored'));
   });
 
   test('NeoStation frontend keeps ambient audio ownership on iOS', () {

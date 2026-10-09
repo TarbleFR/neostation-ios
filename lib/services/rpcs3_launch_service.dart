@@ -12,10 +12,8 @@ import 'package:neostation/services/rpcs3_internal_service.dart';
 abstract final class Rpcs3LaunchService {
   static final LoggerService _log = LoggerService.instance;
   static String? _lastError;
-  static String? _lastErrorCode;
 
   static String? get lastError => _lastError;
-  static String? get lastErrorCode => _lastErrorCode;
 
   static String? normalizeTitleId(String? value) {
     return Rpcs3GameProfileService.normalizeSerial(value);
@@ -38,7 +36,6 @@ abstract final class Rpcs3LaunchService {
     if (titleId == null) return false;
 
     _lastError = null;
-    _lastErrorCode = null;
     _log.i(
       'RPCS3 internal launch: titleId=$titleId '
       'title=${displayTitle?.trim() ?? ''} '
@@ -56,7 +53,6 @@ abstract final class Rpcs3LaunchService {
       );
     } on Rpcs3InternalException catch (error, stackTrace) {
       _lastError = error.message;
-      _lastErrorCode = error.code;
       _log.e(
         'RPCS3 internal launch failed at ${error.code}: ${error.message}',
         error: error,
@@ -65,7 +61,6 @@ abstract final class Rpcs3LaunchService {
       return false;
     } catch (error, stackTrace) {
       _lastError = error.toString();
-      _lastErrorCode = 'unknown';
       _log.e(
         'RPCS3 internal launch failed: $error',
         error: error,

@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:external_folder_access/external_folder_access.dart';
 import 'package:flutter/foundation.dart';
 import 'package:neostation/data/datasources/sqlite_service.dart';
 import 'package:neostation/main.dart' show rootNavigatorKey;
@@ -140,7 +139,6 @@ class Rpcs3LibraryService {
 
   static bool get isLinked => linkedDataPath != null;
   static bool get hasSyncedLibrary => _syncCompleted;
-  static int get syncedGameCount => _cache?.length ?? 0;
 
   static Rpcs3LibraryGame? cachedGameForTitleId(String? titleId) {
     final normalized = titleId?.trim().toLowerCase() ?? '';
@@ -290,38 +288,6 @@ class Rpcs3LibraryService {
     } catch (error) {
       _log.e('Rpcs3LibraryService: startup cache restore failed: $error');
     }
-  }
-
-  /// Lets the user select RPCS3's folder, bookmarks it, then performs a sync.
-  /// Returns null when the picker is cancelled.
-  static Future<Rpcs3SyncResult?> linkAndSync() async {
-    if (!Platform.isIOS) return null;
-
-    final picked = await ExternalFolderAccess.pickAndBookmarkFolder(
-      key: bookmarkKey,
-    );
-    if (picked == null) return null;
-
-    // The document picker grant is temporary. Re-resolve the freshly stored
-    // RPCS3 bookmark immediately so this session owns an active
-    // security-scoped URL before discovery starts. Without this, iOS can make
-    // the first scan look empty until NeoStation is restarted.
-    final selected = await ExternalFolderAccess.resolveBookmarkedFolder(
-      key: bookmarkKey,
-    );
-    if (selected == null) {
-      throw StateError('RPCS3 Data folder could not be activated.');
-    }
-
-    final normalized = await _normalizeDataRoot(selected);
-    if (normalized == null) {
-      throw const FormatException(
-        'Select the RPCS3 Data folder shown in Files under RPCS3 > Data.',
-      );
-    }
-
-    _linkedDataPath = normalized;
-    return syncLinkedLibrary();
   }
 
   /// Synchronizes the PS3 library owned by the embedded RPCS3 Core.

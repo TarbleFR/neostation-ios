@@ -68,7 +68,9 @@ REVIEWED_RPCS3_HOST_POSTIMAGES = {
     # gow3_mlaa_bypass milestones; host_cpu_topology milestone at game boot.
     # Build412 graph: RPCS3ProcessFootprintBytes feeds the overlay's device RAM line;
     # boot milestones are mirrored before the budget filter the boot-stability test compiles.
-    'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm': '476df0044014f4104b1187d1d24b96be0182371a0dabca3a146b6658cc8fe530',
+    # 9 October 2026: the thirteen Build260 action-sheet menu methods nothing
+    # called were deleted (pure deletion); the rest of this postimage is unchanged.
+    'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm': '8036e94ece85d7f6f7654720dc7d25ba03c480faeffd5c76853ee7d35285397c',
     'packages/rpcs3_internal_bridge/ios/Classes/RPCS3PerformanceSnapshot.h': 'badde59ea1202e288e48bd8c318d61fde82b764815a83484da37db075be69c79',
 }
 APPROVED_RPCS3_MENU_FILES = frozenset({
@@ -166,7 +168,8 @@ REVIEWED_POST410_POSTIMAGES = {
     # Build412 (7 October 2026): God of War III profile adds Accurate SPU
     # Reservations false and Frame limit 30 as measured hypotheses; nothing else.
     'lib/services/rpcs3_game_profile_service.dart': '628b961602c6456cb0051cb88ddd0a4247cd48a775adbe2766a242718308bcfb',
-    'lib/services/rpcs3_internal_service.dart': '683dd34422949a3bd8345c9dcfff9f32adbb3c86e2cf0bd36916ca2bf7a7cc27',
+    # 9 October 2026: only the uncalled gameplayMode getter was deleted.
+    'lib/services/rpcs3_internal_service.dart': '939974feda45a42ca48fd9fb5040dd400c24aea4634e6d28beb82cb559ef94c2',
     # Explicit busy result and nonblocking donor acquisition. Build419 also
     # retires an entirely idle donor under the same pool mutex as acquisition.
     'native/neoswap-donation/Broker.h': 'f551f55fb5e77e5594fb0ef8e3de28331b1e8c4c308ee761cda2aaded98fb6b3',
