@@ -111,9 +111,6 @@ class GamepadNavigation {
 
   static final _log = LoggerService.instance;
 
-  /// When true, all raw input events are logged for diagnostic purposes.
-  static bool _debugLogging = false;
-
   StreamSubscription<GamepadEvent>? _subscription;
   DateTime? _lastDirectionalEventTime;
   DateTime? _lastActionEventTime;
@@ -531,13 +528,6 @@ class GamepadNavigation {
         await _ensureConnectionTypeDetected(event.gamepadId);
       }
 
-      if (_debugLogging) {
-        _log.i(
-          '[GamepadRaw] gamepad="${event.gamepadId}" key="${event.key}" '
-          'type=${event.type.name} value=${event.value.toStringAsFixed(4)}',
-        );
-      }
-
       final now = DateTime.now();
 
       // Select (View) chord modifier on Android: read the RAW key directly.
@@ -927,14 +917,6 @@ class GamepadNavigation {
         DateTime.now().difference(_activationTime!).inMilliseconds <
             _reactivationGraceMs) {
       return false;
-    }
-
-    if (_debugLogging) {
-      _log.i(
-        '[KeyboardRaw] key="${event.logicalKey.keyLabel}" '
-        'physical="${event.physicalKey.usbHidUsage.toRadixString(16)}" '
-        '${isKeyDown ? "DOWN" : "UP"}',
-      );
     }
 
     if (_isTextFieldFocused()) {

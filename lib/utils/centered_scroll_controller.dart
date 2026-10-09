@@ -32,7 +32,6 @@ class CenteredScrollController with WindowListener, WidgetsBindingObserver {
   int? _currentSelectedIndex;
   int _totalItems = 0;
   Size? _lastSize;
-  double _totalPadding = 0;
   double? _itemExtent;
   double _paddingTop = 0;
 
@@ -185,7 +184,7 @@ class CenteredScrollController with WindowListener, WidgetsBindingObserver {
       return null;
     }
     final contentHeight = scrollableHeight + viewportHeight;
-    return (contentHeight - _totalPadding) / _totalItems;
+    return contentHeight / _totalItems;
   }
 
   /// Computes the scroll offset that places the item at [index] at the configured

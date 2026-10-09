@@ -43,18 +43,6 @@ class RetroAchievementsProvider extends ChangeNotifier {
 
   static final _log = LoggerService.instance;
 
-  /// Whether a ROM scanning process for RA compatibility is active.
-  bool _isScanning = false;
-
-  /// Normalized progress of the ROM scan (0.0 to 1.0).
-  final double _scanProgress = 0.0;
-
-  /// Human-readable status message for the scan operation.
-  String _scanStatus = '';
-
-  /// Total number of ROMs identified for the scan.
-  final int _totalRoms = 0;
-
   /// Full user summary including recent activity and badges.
   RetroAchievementsUserSummary? _userSummary;
 
@@ -107,10 +95,6 @@ class RetroAchievementsProvider extends ChangeNotifier {
   String get username => _username;
   String get apiKey => _apiKey;
 
-  bool get isScanning => _isScanning;
-  double get scanProgress => _scanProgress;
-  String get scanStatus => _scanStatus;
-  int get totalRoms => _totalRoms;
 
   RetroAchievementsUserSummary? get userSummary => _userSummary;
 
