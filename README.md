@@ -17,9 +17,11 @@ Flutter library/frontend experience while adding iPhone- and iPad-specific
 native cores, JIT workflows, sideloading support, external-emulator library
 bridges and mobile-friendly game/session management.
 
-The current iOS fork can work with embedded **Dolphin/DolphiniOS, ARMSX2,
-RPCS3, Dusklight and KartPad** runtimes, alongside external **RetroArch** and
-**MeloNX** integrations. Metadata and account-facing features use services and
+The current iOS fork includes embedded **Libretro cores, Dolphin/DolphiniOS,
+ARMSX2, RPCS3, Dusklight and KartPad** runtimes, alongside optional external
+**RetroArch** and **MeloNX** integrations. **NeoStation iOS 0.0.3 (Build 427)**
+embeds 14 Libretro cores, also used by RetroArch, so supported games can launch
+directly inside NeoStation. Metadata and account-facing features use services and
 datasets such as **ScreenScraper, RetroAchievements and GameDB-PS3**.
 
 > **Modified version notice — August 2026 onward**  
@@ -38,6 +40,9 @@ providing legally obtained content required by the software they choose to use.
 
 ### Embedded runtimes
 
+- **[Libretro cores](https://www.libretro.com/)** — 14 embedded emulation cores,
+  hosted directly by NeoStation. See the supported systems below and the
+  [individual core credits](#embedded-libretro-core-credits).
 - **[DolphiniOS / Dolphin](https://github.com/OatmealDome/dolphin-ios)** —
   embedded GameCube/Wii engine with NeoStation session, touch, menu,
   RetroAchievements and JIT integration.
@@ -54,10 +59,41 @@ providing legally obtained content required by the software they choose to use.
   Kart Wii runtime integration built around KartPad/WiiCompiled, with
   NeoStation-owned library, settings and lifecycle handling.
 
+### Embedded Libretro support
+
+Starting with **0.0.3 / Build 427**, NeoStation uses its own native Libretro host
+to run the bundled cores directly within the app. These are emulator cores
+also used by RetroArch; the complete RetroArch application is not embedded.
+
+The bundled core catalog covers:
+
+- **Nintendo:** NES/Famicom, Super Nintendo, Game Boy, Game Boy Color,
+  Game Boy Advance, Nintendo DS, Nintendo 64 and Nintendo 3DS.
+- **SEGA:** Master System, Game Gear, SG-1000, Mega Drive/Genesis,
+  Mega-CD/Sega CD and 32X.
+- **Sony and arcade:** PlayStation, PSP, supported arcade systems and Neo Geo.
+
+Game compatibility and JIT requirements depend on the selected core and device.
+The included cores and their authors are listed in the
+[Libretro credits table](#embedded-libretro-core-credits).
+
+**BIOS files:** open **Files → On My iPhone/iPad → NeoStation → Libretro → System**
+and add your own BIOS files, just as you would in RetroArch's `system` folder.
+Preserve the filenames and subfolders required by each core. No BIOS files
+are included.
+
+**Planned additions:** shader support to customize the rendering as in RetroArch,
+and skins to personalize the appearance of on-screen controls.
+
+See the [0.0.3 release](https://github.com/TarbleFR/neostation-ios/releases/tag/0.0.3)
+and [release notes](docs/RELEASE_0.0.3.md) for downloads and release details.
+
 ### External app integrations
 
-- **[RetroArch](https://github.com/libretro/RetroArch)** — shared-library
-  linking, playlist/library synchronization and direct launch flows.
+- **[RetroArch](https://github.com/libretro/RetroArch)** — optional external
+  playlist/library synchronization and launch routes, including games explicitly
+  configured to use the external app. Installing RetroArch is not required to
+  use NeoStation's embedded Libretro cores.
 - **[MeloNX](https://github.com/nurtrino/MeloNX)** — Nintendo Switch library
   synchronization, media association, direct launch and JIT-oriented handoff.
 
@@ -88,8 +124,8 @@ providing legally obtained content required by the software they choose to use.
 - LocalDevVPN only when the user deliberately chooses that external route.
 - RetroArch or MeloNX only when using those external integrations.
 
-The embedded Dolphin, ARMSX2, RPCS3, Dusklight and KartPad integrations do not
-require installing a second copy of those applications.
+The embedded Libretro, Dolphin, ARMSX2, RPCS3, Dusklight and KartPad integrations
+do not require installing separate emulator applications.
 
 When upgrading from an older NeoStation build that included its own JIT tunnel,
 remove the old **NeoStation Local JIT Tunnel** profile in iOS Settings and
@@ -121,9 +157,13 @@ Create your local build environment file from `.env.example`, provide the
 required ScreenScraper values and build with the project's normal iOS release
 process. `.env` must never be committed.
 
-## Stable iOS baseline
+## Releases and historical build references
 
-The currently documented stable iOS reference is **Build 350**:
+The latest published version is **[NeoStation iOS 0.0.3 — Build 427](https://github.com/TarbleFR/neostation-ios/releases/tag/0.0.3)**.
+Its original executable source, release packaging and checks are documented in
+[the 0.0.3 source manifest](docs/RELEASE_0.0.3_SOURCE_MANIFEST.md).
+
+The **Build 350** identity below is retained as a historical native donor reference:
 
 - Packaging source: `5e6dc00b35b7bb7847c24198d9f4b08ade8ed9a0`
 - Successful workflow run:
@@ -132,9 +172,9 @@ The currently documented stable iOS reference is **Build 350**:
 - IPA SHA-256:
   `e1017b96842ec970be3ed0cd981083ee945d069cf76e689a4ca3c81339299b46`
 
-Build 350 remains the restoration point until a later experimental build is
-explicitly device-validated and promoted. A successful Actions run by itself
-does not make a build the new stable baseline.
+Current development baseline requirements are recorded in [AGENTS.md](AGENTS.md).
+A successful Actions run or a release publication does not establish that all
+games and cores have been validated on an iPhone.
 
 ## Books and manga
 
@@ -170,7 +210,7 @@ components, and preserve their license/notices.
 | **Dusklight** | [TwilitRealm/Dusklight](https://github.com/TwilitRealm/dusklight) contributors; upstream also credits the Twilight Princess decompilation community and Aurora developers. |
 | **KartPad / WiiCompiled** | [KartPad](https://github.com/chrissotraidis/kartpad) by [@chrissotraidis](https://github.com/chrissotraidis), built on [WiiCompiled](https://github.com/patchzyy/Wiicompiled) created by [@patchzyy](https://github.com/patchzyy). |
 | **MeloNX / Ryujinx** | [MeloNX](https://github.com/nurtrino/MeloNX) contributors; MeloNX describes itself as based on Ryujinx/Ryubing. |
-| **RetroArch / libretro** | [RetroArch](https://github.com/libretro/RetroArch) and libretro contributors. |
+| **RetroArch / libretro** | [RetroArch](https://github.com/libretro/RetroArch) and libretro contributors, for the Libretro API, core ecosystem and buildbot distributions used by the embedded integration; RetroArch also remains an optional external frontend. Individual emulator authors are credited below. |
 | **StikJIT** | [StikDebug/StikJIT](https://github.com/StikDebug/StikJIT) and its contributors. |
 | **ScreenScraper** | [ScreenScraper.fr](https://www.screenscraper.fr/) metadata and media service. |
 | **RetroAchievements** | [RetroAchievements](https://retroachievements.org/) project, API and community. |
@@ -185,6 +225,34 @@ package-specific license files and the upstream repositories.
 For the first public GitHub release, the exact Build 350 binary/source identity
 is recorded in
 [RELEASE_0.0.1_SOURCE_MANIFEST.md](docs/RELEASE_0.0.1_SOURCE_MANIFEST.md).
+
+### Embedded Libretro core credits
+
+NeoStation iOS thanks the original emulator authors and the Libretro port
+maintainers. The following table covers all **14 embedded cores**; Beetle PSX
+and Beetle PSX HW share an upstream project and appear in one row.
+
+| Core | Systems | Authors / projects | License reference |
+| --- | --- | --- | --- |
+| Nestopia | NES / Famicom | Nestopia contributors; libretro port contributors | [GPLv2; per-file terms apply](assets/legal/libretro/nestopia-COPYING) |
+| Snes9x | Super Nintendo | Snes9x authors and libretro port contributors | [Snes9x non-commercial license](assets/legal/libretro/snes9x-LICENSE) |
+| Gambatte | Game Boy / Game Boy Color | Gambatte and libretro contributors | [GPLv2; per-file terms apply](assets/legal/libretro/gambatte-COPYING) |
+| mGBA | Game Boy Advance | endrift and mGBA contributors | [MPL-2.0](assets/legal/libretro/mgba-LICENSE) |
+| Genesis Plus GX | Sega 8/16-bit / Mega-CD | Charles MacDonald, Eke-Eke and contributors | [Non-commercial; additional component notices](assets/legal/libretro/genesis_plus_gx-LICENSE.txt) |
+| Genesis Plus GX Wide | Sega 8/16-bit widescreen | Genesis Plus GX authors and Wide contributors | [Non-commercial; additional component notices](assets/legal/libretro/genesis_plus_gx_wide-LICENSE.txt) |
+| PicoDrive | Sega / Mega-CD / 32X | notaz and authors listed in AUTHORS | [Custom non-commercial (legacy MAME-style), not a blanket GPL grant](assets/legal/libretro/picodrive-COPYING) |
+| FinalBurn Neo | Arcade / Neo Geo | Team FBNeo, Final Burn and MAME contributors | [FBNeo non-commercial; no monetary profit or donation solicitation for projects using its source](assets/legal/libretro/fbneo-src-license.txt) |
+| DeSmuME | Nintendo DS | DeSmuME and libretro contributors | [GPLv2; per-file terms apply](assets/legal/libretro/desmume-license.txt) |
+| Mupen64Plus-Next | Nintendo 64 | Mupen64Plus, GLideN64 and libretro contributors | [GPLv2; component notices apply](assets/legal/libretro/mupen64plus_next-LICENSE) |
+| Beetle PSX / Beetle PSX HW | PlayStation | Mednafen and libretro contributors | [GPLv2; component notices apply](assets/legal/libretro/beetle_psx-COPYING) |
+| PPSSPP | PSP | Henrik Rydgård and PPSSPP contributors | [GPLv2 or later; bundled assets and dependencies retain their terms](assets/legal/libretro/ppsspp-LICENSE.TXT) |
+| Azahar | Nintendo 3DS | Azahar, Citra, Lime3DS, PabloMK7 and libretro contributors | [GPLv2 or later; component notices apply](assets/legal/libretro/azahar-LICENSE.txt) |
+
+The integration also uses **rcheevos** by the RetroAchievements contributors,
+**MoltenVK** and **Vulkan headers** by the Khronos/MoltenVK contributors, and
+**Libretro API headers** by the Libretro/RetroArch contributors. Their license
+texts are included with the
+[full Libretro credits and notices](assets/legal/libretro/LIBRETRO_CORES.md).
 
 ## GameDB attribution
 
@@ -211,6 +279,25 @@ upstream project is GPL-3.0-or-later and its authorship remains preserved.
 NeoStation's iOS-specific code and distribution notices do not relicense
 third-party components. See [LICENSE.md](LICENSE.md), [NOTICE.md](NOTICE.md) and
 [the complete legal/credits record](docs/LEGAL_AND_CREDITS.md).
+
+### Embedded Libretro cores
+
+Each embedded core retains its own copyright notices and license; NeoStation's
+GPL license does not replace those terms. The full texts, author credits and
+license-reference revisions are available in
+[`assets/legal/libretro/`](assets/legal/libretro/) and are included in the
+release's license archive and the IPA's `Legal/Libretro/` directory.
+
+Snes9x, Genesis Plus GX/Wide, PicoDrive and FinalBurn Neo have non-commercial
+conditions. FinalBurn Neo also restricts monetary profit and donation
+solicitation for projects using its source. Preserve and review the complete
+upstream terms before redistributing.
+
+The license-document snapshots do not attest the exact source revisions of
+the precompiled buildbot cores and must not be presented as complete
+Corresponding Source. See the
+[provenance limitations](assets/legal/libretro/LIBRETRO_CORES.md#source-provenance-and-known-limitation)
+and [release source manifest](docs/RELEASE_0.0.3_SOURCE_MANIFEST.md).
 
 ### StikJIT
 
