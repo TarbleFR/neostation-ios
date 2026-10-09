@@ -26,6 +26,10 @@ public class ExternalFolderAccessPlugin: NSObject, FlutterPlugin, UIDocumentPick
     private var retroArchBackgroundTask = UIBackgroundTaskIdentifier.invalid
     private var incomingUrlReady = false
     private var pendingIncomingUrls: [String] = []
+    private static let commandPortAnsweredKey = "retroarch.networkCommands.answered"
+    private var commandCancelled = false
+    private var commandProbeTask = UIBackgroundTaskIdentifier.invalid
+    private var lastRetroArchLaunchReport: String?
 
     /// Bookmarks are stored per-emulator so several external folders can be
     /// linked side by side (RetroArch's, ARMSX2's, ...) instead of the one
@@ -121,6 +125,8 @@ public class ExternalFolderAccessPlugin: NSObject, FlutterPlugin, UIDocumentPick
             openRawUrl(call: call, result: result)
         case "openRetroArchUrl":
             openRetroArchUrl(call: call, result: result)
+        case "retroArchLaunchReport":
+            result(lastRetroArchLaunchReport)
         case "incomingUrlReady":
             incomingUrlReady = true
             let buffered = pendingIncomingUrls
@@ -153,13 +159,25 @@ public class ExternalFolderAccessPlugin: NSObject, FlutterPlugin, UIDocumentPick
             fail("invalid_functional_url")
             return
         }
+        // RetroArch drops the URL that cold-launches it. Once its command port
+        // has answered, a game is opened with the harmless start route and
+        // loaded through commands; until then the functional URL is unchanged.
+        let request = (args["commandLaunch"] as? [String: Any])
+            .flatMap(RetroArchCommandRequest.init(arguments:))
+        let isGame = target.host == "game"
+        let useCommands = isGame && request != nil
+            && UserDefaults.standard.bool(forKey: Self.commandPortAnsweredKey)
         guard retroArchBackgroundTask == .invalid else { fail("handoff_already_active"); return }
         let app = UIApplication.shared
+        commandCancelled = false
         retroArchBackgroundTask = app.beginBackgroundTask(withName: "RetroArch URL handoff") { [weak self] in
+            self?.commandCancelled = true
             self?.retroArchHandoff.cancel()
+            self?.endRetroArchBackgroundTask()
         }
         guard retroArchBackgroundTask != .invalid else { fail("background_task_unavailable"); return }
-        retroArchHandoff.start(target: target,
+        lastRetroArchLaunchReport = useCommands ? "route=commands" : "route=url"
+        retroArchHandoff.start(target: useCommands ? URL(string: "retroarch://start")! : target,
             open: { url, completion in
                 NSLog("[RetroArch handoff] sending host=%@ state=%ld", url.host ?? "", app.applicationState.rawValue)
                 app.open(url, options: [:]) { accepted in
@@ -170,13 +188,93 @@ public class ExternalFolderAccessPlugin: NSObject, FlutterPlugin, UIDocumentPick
             schedule: { delay, action in DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: action) },
             isForeground: { app.applicationState == .active },
             completion: { [weak self] opened in
-                if let self = self, self.retroArchBackgroundTask != .invalid {
-                    app.endBackgroundTask(self.retroArchBackgroundTask)
-                    self.retroArchBackgroundTask = .invalid
+                guard let self = self else { return }
+                guard opened else {
+                    self.endRetroArchBackgroundTask()
+                    fail(self.retroArchHandoff.failureReason ?? "handoff_rejected")
+                    return
                 }
-                if opened { result(true) }
-                else { fail(self?.retroArchHandoff.failureReason ?? "handoff_rejected") }
+                if useCommands, let request = request {
+                    self.runCommandLaunch(request, result: result, fail: fail)
+                    return
+                }
+                self.endRetroArchBackgroundTask()
+                result(true)
+                if isGame && request != nil { self.probeCommandPort() }
             })
+    }
+
+    private func endRetroArchBackgroundTask() {
+        guard retroArchBackgroundTask != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(retroArchBackgroundTask)
+        retroArchBackgroundTask = .invalid
+    }
+
+    /// Waits for RetroArch (cold or warm) on its command port, loads the
+    /// exported entry and reports success only once a start was requested.
+    private func runCommandLaunch(_ request: RetroArchCommandRequest,
+                                  result: @escaping FlutterResult,
+                                  fail: @escaping (String) -> Void) {
+        let launcher = RetroArchCommandLaunch(
+            exchange: RetroArchUDPCommandPort.exchange(),
+            isCancelled: { [weak self] in self?.commandCancelled ?? true })
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let outcome = launcher.run(request)
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                let report = "route=commands outcome=\(outcome) " + launcher.log.joined(separator: " | ")
+                self.lastRetroArchLaunchReport = report
+                NSLog("[RetroArch commands] %@", report)
+                self.endRetroArchBackgroundTask()
+                switch outcome {
+                case .started, .loadRequested:
+                    result(true)
+                case .unavailable:
+                    // Network Commands switched off: the next launch sends the URL.
+                    UserDefaults.standard.set(false, forKey: Self.commandPortAnsweredKey)
+                    fail("network_commands_no_reply")
+                case .failed(let reason):
+                    fail("network_command_\(reason)")
+                }
+            }
+        }
+    }
+
+    /// Read-only GET_STATUS after a URL launch, while RetroArch is in front:
+    /// an answer enables the command route for the next game launches.
+    private func probeCommandPort() {
+        guard commandProbeTask == .invalid else { return }
+        commandProbeTask = UIApplication.shared.beginBackgroundTask(
+            withName: "RetroArch command port probe") { [weak self] in
+            self?.endCommandProbeTask()
+        }
+        guard commandProbeTask != .invalid else { return }
+        let exchange = RetroArchUDPCommandPort.exchange()
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let deadline = Date().addingTimeInterval(8)
+            var status: String?
+            while status == nil && Date() < deadline && self?.commandProbeTask != .invalid {
+                if let reply = exchange("GET_STATUS", 0.4), reply.hasPrefix("GET_STATUS") {
+                    status = reply.trimmingCharacters(in: .whitespacesAndNewlines)
+                } else {
+                    Thread.sleep(forTimeInterval: 0.25)
+                }
+            }
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                if status != nil {
+                    UserDefaults.standard.set(true, forKey: Self.commandPortAnsweredKey)
+                }
+                self.lastRetroArchLaunchReport = "route=url commandPort=\(status ?? "no answer")"
+                self.endCommandProbeTask()
+            }
+        }
+    }
+
+    private func endCommandProbeTask() {
+        guard commandProbeTask != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(commandProbeTask)
+        commandProbeTask = .invalid
     }
 
     private func pickFolder(key: String, result: @escaping FlutterResult) {

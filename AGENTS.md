@@ -8,6 +8,16 @@ Ces règles expriment les exigences du mainteneur du 18 septembre 2026 et s'appl
 - Travailler sur une seule version candidate clairement identifiée pendant le cycle de correction. Chaque modification crée naturellement un nouveau SHA : consigner ce SHA exact, ne pas mélanger des binaires ou des résultats de tests provenant de révisions différentes.
 - Ne jamais réutiliser le nom d'un artefact pour faire passer une autre révision pour celle déjà testée. Associer version, SHA, entrées natives et résultats de validation.
 
+## Branche réservée à Claude — consigne du 9 octobre 2026
+
+- La branche `Claude` (ancienne `experimental`, renommée à la demande du mainteneur au commit `0bf904a`, source de la Build 423) est réservée aux travaux de Claude. Claude y fait toutes ses modifications, commits, CI et builds, et ne consulte ni n'utilise aucune autre branche.
+- Les workflows déclenchés par push filtrent encore `experimental` : sur `Claude`, une build ou un contrôle se lance par `workflow_dispatch` avec `--ref Claude`.
+
+## Choix du mainteneur — lancement RetroArch, 9 octobre 2026 après-midi
+
+- La bibliothèque s'affiche ; le défaut restant est qu'un jeu lancé depuis NeoStation ouvre RetroArch sans démarrer quand RetroArch était fermé. Le mainteneur choisit la voie des commandes réseau de RetroArch (réglage « Commandes réseau » activé une fois dans RetroArch) et demande de proposer le correctif du récepteur au dépôt RetroArch, texte montré avant publication.
+- Le lien `retroarch://game/` reste la voie tant que le port de commandes n'a jamais répondu ; aucune autre voie n'envoie deux URL (mesure `37927541605` : le second lien est refusé par iOS). Les changements bibliothèque de la 424, jamais livrée, sont retirés. Voir `docs/retroarch-build425-network-launch.md`.
+
 ## Précision du mainteneur — 9 octobre 2026, 13 h
 
 - L'état fonctionnel confirmé est NeoStation Build 422 : bibliothèque visible et lancement RetroArch lorsque l'application externe reste en arrière-plan. Conserver ces sources de lancement/synchronisation ; ne pas prendre le récepteur autonome 781 pour une mise à jour NeoStation.

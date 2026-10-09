@@ -415,7 +415,7 @@ class RetroArchLibraryService {
     final details =
         'entry=${jsonEncode(entry)}\nurl=$uri\n'
         'Content, core and BIOS validation belong to external RetroArch; '
-        'this protocol provides no game-start acknowledgement.';
+        'the URL provides no game-start acknowledgement.';
     _log.i('RetroArchLaunch attempt=$attempt stage=handoffRequested $details');
     try {
       final opened =
@@ -423,16 +423,45 @@ class RetroArchLibraryService {
               (url) => ExternalFolderAccess.openRetroArchUrl(
                 url,
                 preserveErrors: true,
+                commandLaunch: commandLaunchFor(entry),
               ))(uri.toString());
       return await finish(
         opened
             ? RetroArchLaunchStage.handoffAccepted
             : RetroArchLaunchStage.handoffRejected,
-        details,
+        await _withNativeReport(details, openUrl == null),
       );
     } catch (e) {
-      return finish(RetroArchLaunchStage.handoffError, '$details\nerror=$e');
+      return finish(
+        RetroArchLaunchStage.handoffError,
+        await _withNativeReport('$details\nerror=$e', openUrl == null),
+      );
     }
+  }
+
+  /// The exported entry that RetroArch's command port can load directly:
+  /// `gameId` is "<playlist file>:<index>" in RetroArchPlaylistManager.
+  static Map<String, String>? commandLaunchFor(Map<String, dynamic> entry) {
+    final gameId = entry['gameId']?.toString() ?? '';
+    final filename = (entry['filename'] ?? entry['titleId'])?.toString() ?? '';
+    final separator = gameId.lastIndexOf(':');
+    if (filename.isEmpty ||
+        separator <= 0 ||
+        int.tryParse(gameId.substring(separator + 1)) == null) {
+      return null;
+    }
+    final coreName = entry['coreName']?.toString() ?? '';
+    return {
+      'gameId': gameId,
+      'filename': filename,
+      if (coreName.isNotEmpty) 'coreName': coreName,
+    };
+  }
+
+  static Future<String> _withNativeReport(String details, bool native) async {
+    if (!native) return details;
+    final report = await ExternalFolderAccess.retroArchLaunchReport();
+    return report == null ? details : '$details\nnative=$report';
   }
 
   /// Writes diagnostic info to a plain text file under the app's Documents

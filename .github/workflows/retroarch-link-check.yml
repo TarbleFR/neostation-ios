@@ -27,7 +27,7 @@ jobs:
       - name: Analyze modified integration sources
         run: flutter analyze --no-fatal-infos lib/services/retroarch_library_service.dart lib/services/retroarch_library_protocol.dart lib/providers/sqlite_config_provider.dart lib/screens/settings_screen/new_settings_options/directories_settings_content.dart packages/external_folder_access/lib/external_folder_access.dart test/retroarch_library_protocol_test.dart test/retroarch_library_cache_test.dart test/retroarch_launch_diagnostics_test.dart test/retroarch_sync_locale_test.dart
       - name: Exercise callback, direct launch, unchanged library rows and twelve locales
-        run: flutter test test/retroarch_library_protocol_test.dart test/retroarch_library_cache_test.dart test/retroarch_launch_diagnostics_test.dart test/retroarch_sync_locale_test.dart test/ios_selective_rollback_test.dart test/armsx2_retroarch_routing_isolation_test.dart test/rom_scan_symlink_alias_test.dart test/rom_scan_emulator_default_test.dart
+        run: flutter test test/retroarch_library_protocol_test.dart test/retroarch_library_cache_test.dart test/retroarch_launch_diagnostics_test.dart test/retroarch_sync_locale_test.dart test/ios_selective_rollback_test.dart test/armsx2_retroarch_routing_isolation_test.dart test/rom_scan_symlink_alias_test.dart test/rom_scan_emulator_default_test.dart test/retroarch_command_launch_entry_test.dart
       - name: Verify the restored library reference and native source identities
         run: python3 test/retroarch_baseline_scope_test.py
   native:
@@ -42,4 +42,7 @@ jobs:
         run: |
           swiftc -warnings-as-errors packages/external_folder_access/ios/Classes/RetroArchURLHandoff.swift test/retroarch_url_handoff_test.swift -o "$RUNNER_TEMP/retroarch-handoff"
           "$RUNNER_TEMP/retroarch-handoff"
-          xcrun swiftc -parse -target arm64-apple-ios17.0 -sdk "$(xcrun --sdk iphoneos --show-sdk-path)" packages/external_folder_access/ios/Classes/ExternalFolderAccessPlugin.swift packages/external_folder_access/ios/Classes/RetroArchURLHandoff.swift
+          swiftc -warnings-as-errors packages/external_folder_access/ios/Classes/RetroArchCommandLaunch.swift test/retroarch_command_launch_test.swift -o "$RUNNER_TEMP/retroarch-commands"
+          "$RUNNER_TEMP/retroarch-commands"
+          xcrun swiftc -typecheck -target arm64-apple-ios17.0 -sdk "$(xcrun --sdk iphoneos --show-sdk-path)" packages/external_folder_access/ios/Classes/RetroArchCommandLaunch.swift
+          xcrun swiftc -parse -target arm64-apple-ios17.0 -sdk "$(xcrun --sdk iphoneos --show-sdk-path)" packages/external_folder_access/ios/Classes/ExternalFolderAccessPlugin.swift packages/external_folder_access/ios/Classes/RetroArchURLHandoff.swift packages/external_folder_access/ios/Classes/RetroArchCommandLaunch.swift
