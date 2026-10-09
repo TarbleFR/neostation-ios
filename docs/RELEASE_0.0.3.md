@@ -1,39 +1,28 @@
 # NeoStation iOS 0.0.3 — Build 427
 
-Les cœurs d’émulation **Libretro**, également utilisés par RetroArch, sont
-maintenant **embarqués directement dans NeoStation iOS**. Pour les systèmes
-pris en charge, vos jeux se lancent dans NeoStation sans ouvrir l’application RetroArch.
+**Libretro emulation cores**, also used by RetroArch, are now **embedded directly in NeoStation iOS**. For supported systems, your games launch inside NeoStation without opening the RetroArch app.
 
-- **BIOS :** ouvrez **Fichiers → Sur mon iPhone/iPad → NeoStation → Libretro → System**
-  et ajoutez vos BIOS, comme vous le faisiez dans le dossier `system` de RetroArch.
-  Conservez les noms et sous-dossiers attendus par chaque cœur. Aucun BIOS n’est fourni.
-- **NeoPlay / AirPlay :** la diffusion est fonctionnelle. Le récepteur Windows
-  **NeoPlay 0.8.0** est disponible avec cette release. Installez-le sur votre PC
-  et connectez l’iPhone/iPad au même réseau local.
-- **NeoSwap :** le système de Swap est toujours en travaux.
-- **Crédits et licences :** les notices des 14 cœurs Libretro et de leurs
-  bibliothèques de support ont été ajoutées au dossier de licences.
+- **BIOS files:** open **Files → On My iPhone/iPad → NeoStation → Libretro → System** and add your BIOS files, just as you did in RetroArch’s `system` folder. Keep the filenames and subfolders required by each core. No BIOS files are included.
+- **NeoPlay / AirPlay:** streaming is working. The **NeoPlay 0.8.0** Windows receiver is included with this release. Install it on your PC and connect your iPhone/iPad to the same local network.
+- **NeoSwap:** the swap system is still a work in progress.
+- **Credits and licenses:** notices for all 14 Libretro cores and their support libraries have been added to the license bundle.
 
-Merci aux équipes Libretro, RetroArch et à tous les auteurs des émulateurs
-pour leur travail, ainsi qu’à la communauté NeoStation pour ses retours.
+## Coming next
 
-## Téléchargements
+More additions are planned for future updates, including **shader support** to customize how your games look, as in RetroArch, and **skins** to personalize the appearance of the on-screen controls.
 
-- `NeoStation-0.0.3.ipa` — version iOS/iPadOS, build interne 427, à signer avec votre outil habituel.
-- `NeoPlay-Setup-0.8.0.exe` — installateur Windows.
-- `NeoStation-0.0.3-Licenses-and-Notices.zip` — licences et crédits.
-- `NeoStation-0.0.3-Source-Manifest.md` et les archives source — provenance.
-- `NeoStation-0.0.3-SHA256SUMS.txt` — empreintes des fichiers.
+Thank you to the Libretro and RetroArch teams, all emulator developers, and the NeoStation community for their work, support, and feedback!
 
-## Informations de version
+## Downloads
 
-Basée sur le build 427 (`6bfc9dd`). Les moteurs et le code de l’application
-sont conservés ; le paquet est mis à jour pour afficher 0.0.3 et inclure les
-notices, puis sa signature de préparation est renouvelée. Les essais de
-compilation du build d’origine ne constituent pas une validation de tous les
-jeux et de tous les cœurs sur iPhone.
+- `NeoStation-0.0.3.ipa` — iOS/iPadOS app, internal build 427. Sign it using your usual sideloading tool.
+- `NeoPlay-Setup-0.8.0.exe` — Windows installer.
+- `NeoStation-0.0.3-Licenses-and-Notices.zip` — licenses and credits.
+- `NeoStation-0.0.3-Source-Manifest.md` and the source archives — source and build provenance.
+- `NeoStation-0.0.3-SHA256SUMS.txt` — file checksums.
 
-Les composants restent soumis à leurs licences respectives. Les conditions
-non commerciales et les limites de traçabilité des sources précompilées sont
-détaillées dans les documents joints ; leur ajout n’est pas une certification
-de conformité juridique.
+## Release information
+
+Based on build 427 (`6bfc9dd`). The emulator cores and compiled application code are preserved. The package has been updated to display version 0.0.3 and include the notices, then sealed again with ad hoc signatures. Successful build checks do not establish that every game and core has been tested on an iPhone.
+
+Each component remains subject to its own license. Non-commercial conditions and limitations in tracing the exact sources of precompiled binaries are documented in the accompanying files. Adding these notices is not a certification of legal compliance.
