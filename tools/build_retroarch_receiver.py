@@ -149,7 +149,28 @@ def prepare():
         raise ValueError("Unexpected RetroArch source revision")
     if run("git", "rev-parse", "HEAD", cwd=INFO).strip() != INFO_REVISION:
         raise ValueError("Unexpected official core-info revision")
-    measure("prebuilt_core_dependencies", cores)
+    data = measure("prebuilt_core_dependencies", cores)
+    # Validate every official download before including it. A directory label
+    # is insufficient evidence of the Mach-O platform. Never retag macOS code
+    # as iOS or weaken the final IPA checks.
+    sys.path.insert(0, str(ROOT / "packages/dolphin_internal_bridge/ci"))
+    from verify_ipa import macho
+    included, excluded = [], []
+    for record in data["cores"]:
+        image = macho((DEPS / record["file"]).read_bytes())
+        compatible = (image["platform"] == 2 and image["minimumOS"] is not None
+                      and tuple(map(int, image["minimumOS"].split("."))) <= (18, 0, 0))
+        if compatible:
+            included.append(record)
+        elif record["core"] in REQUIRED:
+            raise ValueError("Required core is incompatible with physical iOS 18: " + record["core"])
+        else:
+            excluded.append({**record, "platform": image["platform"],
+                             "minimumOS": image["minimumOS"], "reason": "incompatible physical iOS platform or minimum OS"})
+    report = json.loads((OUT / "prebuilt-cores.json").read_text())
+    save("prebuilt-cores.json", {**report, "cores": included,
+         "downloadedCoreCount": len(data["cores"]), "excludedIncompatibleCores": excluded})
+    print("Validated", len(included), "physical iOS cores; explicitly excluded", [r["core"] for r in excluded])
     patch = ROOT / "docs/upstream/retroarch-initial-scene-url.patch"
     run("git", "apply", "--check", patch, cwd=SOURCE)
     run("git", "apply", patch, cwd=SOURCE)
@@ -185,7 +206,7 @@ def prepare():
 def pack():
     output = Path(os.environ["BUILT_PRODUCTS_DIR"]) / os.environ["FRAMEWORKS_FOLDER_PATH"]
     output.mkdir(parents=True, exist_ok=True)
-    data = json.loads((DEPS / "manifest.json").read_text())
+    data = json.loads((OUT / "prebuilt-cores.json").read_text())
     for record in data["cores"]:
         source = DEPS / record["file"]
         if sha(source.read_bytes()) != record["sha256"]:
@@ -245,13 +266,13 @@ def seal():
                 raise ValueError("Incompatible device image: " + name + " " + repr(image["platform"]))
             images[name] = payload_fingerprint(path.read_bytes())
             structures[name] = {key: image[key] for key in ("platform", "minimumOS", "dependencies")}
-    records = json.loads((DEPS / "manifest.json").read_text())["cores"]
+    records = json.loads((OUT / "prebuilt-cores.json").read_text())["cores"]
     for record in records:
         name = Path(record["file"]).stem.removesuffix("_ios").replace("_", ".")
         relative = "Frameworks/" + name + ".framework/" + name
         if images.get(relative) != payload_fingerprint((DEPS / record["file"]).read_bytes()):
             raise ValueError("Core instructions or ABI changed: " + name)
-    measure("signature_and_ipa_export", lambda: sign(app, OUT / "signature.json"))
+    measure("nested_signatures", lambda: sign(app, OUT / "signature.json"))
     if any(payload_fingerprint((app / name).read_bytes()) != value for name, value in images.items()):
         raise ValueError("Signing altered code, data or ABI")
     ipa = OUT / ("RetroArch-Receiver-Build" + BUILD + ".ipa")
@@ -283,4 +304,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("operation", choices=("verify", "prepare", "pack", "seal"))
     args = parser.parse_args()
-    globals()[args.operation]()
+    if args.operation == "seal":
+        measure("signature_and_ipa_export", seal)
+    else:
+        globals()[args.operation]()
