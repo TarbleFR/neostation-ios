@@ -33,3 +33,20 @@ Les tests déjà réussis ont prouvé la réception des trois URL prises en char
 Le workflow consigne les durées réellement observées de téléchargement/réutilisation des cœurs, d'archive native et de signature. Il ne substitue pas ces durées à la comparaison NeoStation 422, déjà mesurée sur deux runners comparables : 11 min 25 s sans cache appareil, 7 min 13 s avec cache. Aucun nouveau gain n'est présumé.
 
 Premier run `37916992483`, commit `ad9f8f736a700df727269aba4ae2a63722897ef6` : compilation et archive réussies en 275,227 s, après 50,322 s de récupération des cœurs. Le contrôle final a refusé `hatarib`, fourni dans le répertoire iOS mais marqué macOS dans son Mach-O. Aucune IPA installable n'a été produite par ce run. Le contrôle est conservé : les cœurs incompatibles optionnels sont désormais identifiés et écartés avant l'archive ; un cœur obligatoire incompatible bloque la livraison. Leur liste complète accompagne le candidat. Les 13 cœurs liés explicitement dans les playlists ont été examinés séparément et sont tous ARM64 iOS avec un minimum d'iOS inférieur à 18.
+
+## Livraison réellement produite
+
+Run réussi : https://github.com/TarbleFR/neostation-ios/actions/runs/37918345079, commit de construction `560472630fb1064134d6feca27d6f7cb4e0efb64`. Le commit de compte rendu suivant ne change ni les sources produit, ni le patch, ni le script de construction et ne déclenche pas de nouvelle compilation.
+
+- Fichier : `RetroArch-Receiver-Build781.ipa`.
+- Taille : 190 470 031 octets (181,646 MiB).
+- SHA-256 : `6d3b5dc86a39ef48398df83d56cddced0e01072b6f7a58d5c7bb3acbc877da11`.
+- Identité : `com.libretro.RetroArchiOS11`, version `1.22.2`, build privé `781`, iOS 18 minimum, iPhoneOS ARM64.
+- 126 cœurs précompilés inclus ; 129 exécutables/frameworks/extensions scellés et vérifiés. Les instructions, données et métadonnées ABI des cœurs inclus sont conservées. Les 13 liaisons de cœur présentes explicitement dans les playlists sont couvertes.
+- `hatarib` est exclu parce que son binaire déclare macOS ; `kronos` et `tic80` sont absents du répertoire de téléchargement. Ces limitations sont consignées, sans substitution silencieuse de moteur. Cela ne prouve pas la couverture de tous les jeux des playlists `DETECT`.
+- La structure du ZIP, son SHA-256, les versions, la présence des signatures et les plateformes/minimums iOS ont été contrôlés également après récupération. La classe `RetroArchSceneDelegate` est présente dans la liste de classes Objective-C du binaire réel ; les symboles externes de cette classe sont normalement supprimés dans ce Release.
+- Les signatures ad hoc sont valides, notamment après extraction de l'IPA finale sur macOS. La signature Apple et le provisioning doivent être appliqués par SideStore. Aucune installation ni exécution de jeu sur iPhone n'est attestée pour ce candidat.
+
+Durées du run final : 4 min 42 s pour le job ; restauration des cœurs 6 s ; vérification/réutilisation de leurs bytes 0,614 s ; archive native 200,180 s ; signatures seules 9,664 s ; signature, export et vérification de l'IPA 40,142 s ; chiffrement et upload 5 s. Environnement : macOS 15.7.9, Xcode 26.3 (17C529), SDK iOS 26.2, 3 CPU, 7 GiB de RAM. Le premier run n'a pas produit d'IPA et sa sélection de cœurs différait : ces deux runs ne constituent pas une comparaison complète de livraisons signées à entrées identiques. Aucun gain causal de cache natif n'est revendiqué.
+
+La comparaison NeoStation 422 préalablement mesurée reste disponible dans le run https://github.com/TarbleFR/neostation-ios/actions/runs/37847695065 : 11 min 25 s sans cache de compilation appareil, 7 min 13 s avec ce cache, moteurs précompilés réutilisés dans les deux cas. Les timestamps de ces deux jobs ont été reconsultés ; les tests et compilations historiques n'ont pas été rejoués.
