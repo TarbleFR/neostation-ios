@@ -175,7 +175,8 @@ abstract final class LibretroCoreCatalog {
       displayName: 'Beetle PSX HW',
       extensions: {'cue', 'toc', 'm3u', 'ccd', 'exe', 'pbp', 'chd', 'bin'},
       biosAnyOf: ['scph5500.bin', 'scph5501.bin', 'scph5502.bin'],
-      preferredHardwareContext: LibretroHardwareContext.vulkan,
+      // The iOS build links OpenGLES; its Vulkan renderer stays available.
+      preferredHardwareContext: LibretroHardwareContext.openGLES3,
       noJitOverrides: {'beetle_psx_hw_cpu_dynarec': 'disabled'},
       settings: [
         LibretroCuratedSetting(

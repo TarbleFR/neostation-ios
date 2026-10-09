@@ -73,8 +73,8 @@ static void ClearLogin(void) {
   _Atomic bool _loadStarted;
   _Atomic bool _gameReady;
   _Atomic bool _shutdown;
-  _Atomic unsigned _total;
-  _Atomic unsigned _unlocked;
+  _Atomic unsigned _totalAchievements;
+  _Atomic unsigned _unlockedAchievements;
 }
 
 + (BOOL)enabled {
@@ -234,8 +234,8 @@ static void PasswordLogin(int result, const char *message, rc_client_t *client, 
   rc_client_user_game_summary_t summary;
   memset(&summary, 0, sizeof(summary));
   rc_client_get_user_game_summary(_client, &summary);
-  atomic_store(&_total, summary.num_core_achievements);
-  atomic_store(&_unlocked, summary.num_unlocked_achievements);
+  atomic_store(&_totalAchievements, summary.num_core_achievements);
+  atomic_store(&_unlockedAchievements, summary.num_unlocked_achievements);
 }
 
 - (BOOL)loggedIn {
@@ -255,11 +255,11 @@ static void PasswordLogin(int result, const char *message, rc_client_t *client, 
 }
 
 - (unsigned)totalCount {
-  return atomic_load(&_total);
+  return atomic_load(&_totalAchievements);
 }
 
 - (unsigned)unlockedCount {
-  return atomic_load(&_unlocked);
+  return atomic_load(&_unlockedAchievements);
 }
 
 - (void)prepareMemory {
@@ -307,8 +307,8 @@ static void PasswordLogin(int result, const char *message, rc_client_t *client, 
   ClearLogin();
   atomic_store(&_gameReady, false);
   atomic_store(&_loadStarted, false);
-  atomic_store(&_total, 0);
-  atomic_store(&_unlocked, 0);
+  atomic_store(&_totalAchievements, 0);
+  atomic_store(&_unlockedAchievements, 0);
 }
 
 - (void)doFrame {
