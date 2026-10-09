@@ -19,4 +19,9 @@ assert "if (widget.embedded) return button" in dolphin
 assert "if (widget.embedded) return button" in rpcs3
 assert "Overlay.of(context, rootOverlay: true)" in rpcs3
 assert "_rpcs3FirmwareReady &&" in screen
+libretro = (root / "lib/widgets/libretro_internal_playlist_actions.dart").read_text()
+assert "_buildEmbeddedLibretroImportAction" in screen
+assert "_buildLibretroImportAction()" in screen
+assert "if (widget.embedded) return button" in libretro
+assert screen.count("embedded: true") >= 3
 print("Integrated import tab contract: OK")

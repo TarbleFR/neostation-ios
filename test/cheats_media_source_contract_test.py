@@ -11,7 +11,9 @@ for locale in ('en','fr','de','es','it','pt','ru','id','ja','ko','zh','zh_Hant')
     assert '@"'+locale+'": @{' in labels,locale
 manager=(root/'lib/services/game_launch_manager.dart').read_text()
 original=subprocess.check_output(['git','show','d3e558fad05feeb0838b4d3d80fc854546eaf0a4:lib/services/game_launch_manager.dart'],cwd=root,text=True)
-assert manager.replace("    'ios_dolphin_internal',\n    'ios_rpcs3_internal',\n",'')==original, 'unrelated lifecycle regression'
+# The embedded libretro engine (requested 9 Oct 2026) adds one in-process
+# executable; it is polled through EmbeddedIOSSessionStatus like RPCS3.
+assert manager.replace("    'ios_dolphin_internal',\n    'ios_rpcs3_internal',\n    'ios_libretro_internal',\n",'')==original, 'unrelated lifecycle regression'
 for file in ('lib/screens/game_screen/my_games_list.dart','lib/screens/secondary_screen/secondary_screen.dart','lib/widgets/shaders/shader_gif_widget.dart'):
     data=(root/file).read_text();assert 'FrontendMediaGate.instance.register' in data,file
     assert 'FrontendMediaGate.instance.unregister' in data,file

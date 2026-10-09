@@ -27,6 +27,9 @@ import 'package:neostation/services/dolphin_internal_v2_service.dart';
 import 'package:neostation/widgets/rpcs3_internal_playlist_actions.dart';
 import 'package:neostation/widgets/armsx2_internal_playlist_actions.dart';
 import 'package:neostation/widgets/ports_internal_playlist_actions.dart';
+import 'package:neostation/widgets/libretro_internal_playlist_actions.dart';
+import 'package:neostation/services/libretro_internal_service.dart';
+import 'package:neostation/services/config_service.dart';
 
 // DOLPHIN_ISOLATION_END: playlist_import
 import '../../services/game_service.dart';
@@ -120,6 +123,8 @@ class _SystemGamesListState extends State<SystemGamesList> {
       Platform.isIOS && widget.system.folderName.toLowerCase() == 'ps2';
   bool get _isPortsLibrary =>
       Platform.isIOS && widget.system.folderName.toLowerCase() == 'ports';
+  bool get _isLibretroLibrary =>
+      LibretroInternalService.handlesSystem(widget.system.folderName);
   int _selectedGameIndex = 0;
   late GamepadNavigation
   _gamepadNav; // Unified controller/keyboard input handler.
@@ -756,6 +761,32 @@ class _SystemGamesListState extends State<SystemGamesList> {
                   );
                 },
               ),
+            // LIBRETRO_INTERNAL_BEGIN: playlist_actions
+            if (!_isGameLaunching && _isLibretroLibrary)
+              Consumer<SqliteConfigProvider>(
+                builder: (context, config, child) {
+                  final mode = config.config.gameViewMode;
+                  if (!_isLoading &&
+                      _games.isNotEmpty &&
+                      _selectedGame != null &&
+                      mode != 'grid' &&
+                      mode != 'carousel') {
+                    return const SizedBox.shrink();
+                  }
+                  return Positioned(
+                    top: 8.r,
+                    right: 10.r,
+                    child: SafeArea(
+                      child: Material(
+                        color: Theme.of(context).colorScheme.tertiaryFixed,
+                        borderRadius: BorderRadius.circular(10.r),
+                        child: _buildLibretroImportAction(),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            // LIBRETRO_INTERNAL_END: playlist_actions
             // RPCS3_INTERNAL_BEGIN: playlist_actions
             if (!_isGameLaunching && _isRpcs3Library)
               Consumer<SqliteConfigProvider>(
@@ -909,6 +940,43 @@ class _SystemGamesListState extends State<SystemGamesList> {
       if (mounted) await _loadGames();
     },
   );
+
+  // LIBRETRO_INTERNAL_BEGIN: import_action_builder
+  /// Imported games go to NeoStation's own Files-visible `roms` folder,
+  /// registered as a library folder, so they join this very playlist.
+  Future<void> _refreshLibretroLibrary() async {
+    if (!mounted) return;
+    final provider = context.read<SqliteConfigProvider>();
+    final romsFolder = await ConfigService.getDefaultIOSRomsFolder();
+    if (!provider.config.romFolders.contains(romsFolder)) {
+      await provider.addRomFolder(romsFolder, scan: false);
+    }
+    await provider.rescanSystemSilent(widget.system);
+    if (mounted) await _loadGames();
+  }
+
+  void _libretroInteraction(bool active) {
+    if (!mounted) return;
+    if (active) {
+      _gamepadNav.deactivate();
+    } else {
+      _gamepadNav.activate();
+    }
+  }
+
+  Widget _buildLibretroImportAction() => LibretroInternalPlaylistActions(
+    systemFolder: widget.system.folderName,
+    onInteractionChanged: _libretroInteraction,
+    onLibraryChanged: _refreshLibretroLibrary,
+  );
+
+  Widget _buildEmbeddedLibretroImportAction() => LibretroInternalPlaylistActions(
+    embedded: true,
+    systemFolder: widget.system.folderName,
+    onInteractionChanged: _libretroInteraction,
+    onLibraryChanged: _refreshLibretroLibrary,
+  );
+  // LIBRETRO_INTERNAL_END: import_action_builder
 
   Future<void> _scrapeImportedPortGames(List<String> paths) async {
     try {
@@ -1750,6 +1818,8 @@ class _SystemGamesListState extends State<SystemGamesList> {
           ? _buildEmbeddedPortsImportAction()
           : _isRpcs3Library && _rpcs3FirmwareReady
           ? _buildEmbeddedRpcs3ImportAction()
+          : _isLibretroLibrary
+          ? _buildEmbeddedLibretroImportAction()
           : null,
       // DOLPHIN_ISOLATION_END: import_action_in_tabs
       game: _selectedGame!,

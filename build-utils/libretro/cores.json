@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "buildbot": "https://buildbot.libretro.com/nightly/apple/ios-arm64/latest/",
+  "maximumCoreMinimumOS": "18.0",
+  "retroarchRevision": "df16ef193cbe385b87e8a1cf27b66da35bf3c0e0",
+  "moltenVK": {
+    "path": "pkg/apple/Frameworks/MoltenVK.xcframework/ios-arm64/MoltenVK.framework",
+    "files": {
+      "MoltenVK": "38de4212de99f7f6772f07406d6d0d37d5b81f95e714668ff3850422750cf70c",
+      "Info.plist": "05eb0d9852588c605b7b0908f5baae00b17f08d9fc0b2303e8ca60e05917d58a"
+    }
+  },
+  "systemAssets": [
+    {
+      "name": "PPSSPP",
+      "url": "https://buildbot.libretro.com/assets/system/PPSSPP.zip",
+      "required": "PPSSPP/ppge_atlas.zim"
+    }
+  ],
+  "cores": [
+    {"id": "nestopia", "license": "GPLv2", "source": "https://github.com/libretro/nestopia"},
+    {"id": "snes9x", "license": "Non-commercial", "source": "https://github.com/libretro/snes9x"},
+    {"id": "gambatte", "license": "GPLv2", "source": "https://github.com/libretro/gambatte-libretro"},
+    {"id": "mgba", "license": "MPLv2.0", "source": "https://github.com/libretro/mgba"},
+    {"id": "genesis_plus_gx", "license": "Non-commercial", "source": "https://github.com/libretro/Genesis-Plus-GX"},
+    {"id": "genesis_plus_gx_wide", "license": "Non-commercial", "source": "https://github.com/libretro/Genesis-Plus-GX-Wide"},
+    {"id": "picodrive", "license": "MAME", "source": "https://github.com/libretro/picodrive"},
+    {"id": "fbneo", "license": "Non-commercial", "source": "https://github.com/libretro/FBNeo"},
+    {"id": "desmume", "license": "GPLv2", "source": "https://github.com/libretro/desmume"},
+    {"id": "mupen64plus_next", "license": "GPLv2", "source": "https://github.com/libretro/mupen64plus-libretro-nx"},
+    {"id": "mednafen_psx_hw", "license": "GPLv2", "source": "https://github.com/libretro/beetle-psx-libretro"},
+    {"id": "mednafen_psx", "license": "GPLv2", "source": "https://github.com/libretro/beetle-psx-libretro"},
+    {"id": "ppsspp", "license": "GPLv2", "source": "https://github.com/hrydgard/ppsspp"},
+    {"id": "azahar", "license": "GPLv2+", "source": "https://github.com/azahar-emu/azahar"}
+  ]
+}

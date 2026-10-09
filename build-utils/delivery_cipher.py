@@ -18,7 +18,7 @@ CACHE_PATHS=['ios','build/ios/DolphinDerivedData','build/stikjit-current',
  'packages/dolphin_internal_bridge/ios/Frameworks','packages/dolphin_internal_bridge/ios/TouchResources',
  'packages/stikjit_bridge/ios/Frameworks','packages/dolphin_jit_helper/ios/Frameworks',
  'packages/rpcs3_internal_bridge/ios/Frameworks','dist/armsx2','dist/dusklight',
- 'dist/kartpad-native','dist/rpcs3-native']
+ 'dist/kartpad-native','dist/rpcs3-native','dist/libretro']
 
 def run(*args,**kwargs):
     subprocess.run([str(x) for x in args],check=True,**kwargs)

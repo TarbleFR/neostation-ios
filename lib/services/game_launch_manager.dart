@@ -70,6 +70,7 @@ class GameLaunchManager extends ChangeNotifier with WidgetsBindingObserver {
     'ios_armsx2_internal',
     'ios_dolphin_internal',
     'ios_rpcs3_internal',
+    'ios_libretro_internal',
   };
   String? _activeEmulatorExe;
 

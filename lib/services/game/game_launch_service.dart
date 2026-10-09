@@ -6,6 +6,7 @@ import 'package:neostation/l10n/rpcs3_library_locale.dart';
 import 'package:neostation/l10n/dusklight_locale.dart';
 import 'package:neostation/l10n/dolphin_import_locale.dart';
 import 'package:neostation/l10n/ports_locale.dart';
+import 'package:neostation/l10n/libretro_locale.dart';
 import 'package:path/path.dart' as path;
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
@@ -15,6 +16,7 @@ import 'package:neostation/services/armsx2_folder_service.dart';
 import 'package:neostation/services/melonx_library_service.dart';
 import 'package:neostation/services/rpcs3_library_service.dart';
 import 'package:neostation/services/rpcs3_launch_service.dart';
+import 'package:neostation/services/libretro_internal_service.dart';
 // DOLPHIN_ISOLATION_BEGIN: launcher_import
 import '../dolphin_internal_v2_service.dart';
 import '../dusklight_internal_service.dart';
@@ -339,6 +341,39 @@ class GameLaunchService {
             titleId,
           );
         }
+
+        // LIBRETRO_INTERNAL_BEGIN: embedded_route
+        // Systems whose libretro core ships with NeoStation run inside the
+        // app, with no RetroArch deep link. A game switched to the RetroArch
+        // app, or known only from RetroArch's exported library, keeps the
+        // external route below. A failure here returns its real error and
+        // never falls through to RetroArch.
+        if (LibretroInternalService.handlesSystem(system.folderName)) {
+          final locale = Localizations.localeOf(context);
+          if (await LibretroInternalService.shouldLaunchEmbedded(system, game)) {
+            final outcome = await LibretroInternalService.launch(
+              system: system,
+              game: game,
+              locale: locale,
+            );
+            if (!context.mounted) return GameLaunchResult.failure('', '');
+            if (!outcome.success) {
+              return GameLaunchResult.failure(
+                LibretroLocale.launchError(locale, outcome.errorCode),
+                outcome.technicalDetails,
+              );
+            }
+            GameSessionManager.registerGameLaunch(
+              system,
+              game,
+              'ios_libretro_internal',
+            );
+            await FavoritesService.recordGamePlayed(game);
+            return GameLaunchResult.success();
+          }
+          if (!context.mounted) return GameLaunchResult.failure('', '');
+        }
+        // LIBRETRO_INTERNAL_END: embedded_route
 
         GameSessionManager.registerGameLaunch(
           system,

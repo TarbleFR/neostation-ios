@@ -35,7 +35,7 @@ def main():
     for name in (
         "rpcs3_ui_locale.dart","armsx2_ui_locale.dart","library_feature_locale.dart",
         "secondary_ui_locale.dart","ios_roms_help_locale.dart","ra_ui_locale.dart",
-        "dolphin_import_locale.dart"
+        "dolphin_import_locale.dart","libretro_locale.dart"
     ):
         require_locales(L10N / name)
 

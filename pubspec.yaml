@@ -17,6 +17,7 @@ workspace:
   - packages/dusklight_internal_bridge
   - packages/kartpad_internal_bridge
   - packages/neoplay_bridge
+  - packages/libretro_internal_bridge
 
 version: 0.0.2+399
 environment:
@@ -50,7 +51,9 @@ dependencies:
     path: packages/kartpad_internal_bridge
   neoplay_bridge:
     path: packages/neoplay_bridge
-    
+  libretro_internal_bridge:
+    path: packages/libretro_internal_bridge
+
   file_picker: 12.0.0-beta.3
   device_info_plus: ^13.2.0
   package_info_plus: ^10.2.1

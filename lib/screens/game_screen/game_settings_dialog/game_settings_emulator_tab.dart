@@ -17,6 +17,9 @@ import 'package:neostation/widgets/settings_rows.dart';
 // DOLPHIN_ISOLATION_BEGIN: emulator_identity_imports
 import 'package:neostation/services/dolphin_internal_v2_service.dart';
 // DOLPHIN_ISOLATION_END: emulator_identity_imports
+import 'package:neostation/l10n/libretro_locale.dart';
+import 'package:neostation/services/libretro_core_catalog.dart';
+import 'package:neostation/services/libretro_internal_service.dart';
 
 /// Per-game emulator override tab for [GameSettingsDialog].
 ///
@@ -67,6 +70,107 @@ class GameSettingsEmulatorTabState extends State<GameSettingsEmulatorTab> {
   }
   // DOLPHIN_ISOLATION_END: emulator_identity_gate
 
+  // LIBRETRO_INTERNAL_BEGIN: core_choice
+  /// Systems run by the embedded libretro engine offer their bundled cores
+  /// and the RetroArch app; the choice is stored per game.
+  bool get _isLibretroSystem =>
+      LibretroInternalService.handlesSystem(_systemFolder);
+  List<String> _libretroChoices = const <String>[];
+  String? _libretroChoice;
+
+  Future<void> _loadLibretroChoices() async {
+    final cores = LibretroCoreCatalog.coresFor(_systemFolder)
+        .map((core) => core.id)
+        .toList();
+    final choice = await LibretroInternalService.coreChoiceFor(
+      _systemFolder,
+      widget.game.romname,
+    );
+    if (!mounted) return;
+    setState(() {
+      _libretroChoices = <String>[
+        ...cores,
+        LibretroInternalService.retroArchChoice,
+      ];
+      _libretroChoice = choice;
+    });
+  }
+
+  Future<void> _setLibretroChoice(int index) async {
+    if (index < 0 || index >= _libretroChoices.length) return;
+    final stored = index == 0 ? null : _libretroChoices[index];
+    setState(() {
+      _selectedIndex = index;
+      _libretroChoice = stored;
+    });
+    try {
+      await LibretroInternalService.setCoreChoice(
+        _systemFolder,
+        widget.game.romname,
+        stored,
+      );
+      widget.onGameUpdated?.call();
+    } catch (e) {
+      _log.e('Libretro core choice persistence failed: $e');
+    }
+  }
+
+  String _libretroLabel(BuildContext context, int index) {
+    final id = _libretroChoices[index];
+    if (id == LibretroInternalService.retroArchChoice) {
+      return LibretroLocale.text(context, 'externalRetroArch');
+    }
+    final name = LibretroCoreCatalog.cores[id]?.displayName ?? id;
+    return index == 0
+        ? LibretroLocale.formatContext(context, 'coreDefault', {'core': name})
+        : name;
+  }
+
+  bool _libretroActive(int index) {
+    if (index == 0) {
+      return _libretroChoice == null ||
+          !_libretroChoices.contains(_libretroChoice);
+    }
+    return _libretroChoices[index] == _libretroChoice;
+  }
+
+  Widget _buildLibretroChoices(BuildContext context) {
+    return SingleChildScrollView(
+      controller: _scrollController,
+      padding: EdgeInsets.all(12.r),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: EdgeInsets.only(left: 4.r, bottom: 4.r),
+            child: Text(
+              LibretroLocale.text(context, 'engineSection'),
+              style: TextStyle(
+                fontSize: 11.r,
+                fontWeight: FontWeight.w600,
+                color: Theme.of(
+                  context,
+                ).colorScheme.onSurface.withValues(alpha: 0.6),
+              ),
+            ),
+          ),
+          for (var index = 0; index < _libretroChoices.length; index++)
+            EmulatorRow(
+              key: _itemKey(index),
+              isSelected: _selectedIndex == index,
+              label: _libretroLabel(context, index),
+              isActive: _libretroActive(index),
+              onTap: () {
+                SfxService().playNavSound();
+                _setLibretroChoice(index);
+              },
+            ),
+        ],
+      ),
+    );
+  }
+  // LIBRETRO_INTERNAL_END: core_choice
+
   List<CoreEmulatorModel> _availableEmulators = [];
   int _selectedIndex = 0;
 
@@ -86,6 +190,7 @@ class GameSettingsEmulatorTabState extends State<GameSettingsEmulatorTab> {
       : _activeEmulatorId as String?;
 
   int get _totalItems {
+    if (_isLibretroSystem) return _libretroChoices.length;
     if (_availableEmulators.isEmpty) return 0;
     // iOS exposes exactly one supported external emulator app per system
     // (RetroArch, MeloNX or ARMSX2). Do not add the desktop-style
@@ -111,6 +216,10 @@ class GameSettingsEmulatorTabState extends State<GameSettingsEmulatorTab> {
     // DOLPHIN_ISOLATION_BEGIN: embedded_emulator_availability
     if (_iosEmbeddedEngineName != null) return;
     // DOLPHIN_ISOLATION_END: embedded_emulator_availability
+    if (_isLibretroSystem) {
+      await _loadLibretroChoices();
+      return;
+    }
     final emulators = await loadEmulatorsForSystem(widget.system);
     if (mounted) setState(() => _availableEmulators = emulators);
   }
@@ -133,6 +242,11 @@ class GameSettingsEmulatorTabState extends State<GameSettingsEmulatorTab> {
 
   void trigger() {
     if (_totalItems == 0) return;
+
+    if (_isLibretroSystem) {
+      _setLibretroChoice(_selectedIndex);
+      return;
+    }
 
     if (Platform.isIOS) {
       final emulator = _availableEmulators[_selectedIndex];
@@ -209,6 +323,7 @@ class GameSettingsEmulatorTabState extends State<GameSettingsEmulatorTab> {
       );
     }
     // DOLPHIN_ISOLATION_END: embedded_emulator_label
+    if (_isLibretroSystem) return _buildLibretroChoices(context);
     if (_availableEmulators.isEmpty) {
       return Center(
         child: Text(

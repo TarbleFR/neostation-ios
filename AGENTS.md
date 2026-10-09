@@ -19,6 +19,13 @@ Ces règles expriment les exigences du mainteneur du 18 septembre 2026 et s'appl
 - Exigence : l'utilisateur ne fait aucune manipulation (ni réglage RetroArch, ni raccourci) ; il lance simplement son jeu depuis NeoStation. La voie des commandes réseau de RetroArch, désactivées par défaut, est donc écartée. Les essais 424 et 425 ont été annulés avant toute IPA et retirés ; les sources produit restent celles de la 423.
 - Démontré : `RetroArchSceneDelegate` ignore l'URL qui démarre RetroArch (de `630b36bd` à `master` `df16ef1`) ; iOS refuse un second lien envoyé dans le même passage au premier plan (run `37927541605`) ; commandes réseau et serveur MCP de RetroArch sont désactivés par défaut. Aucun changement de NeoStation seul ne démarre le jeu à froid sans réglage : le correctif appartient au récepteur RetroArch (`docs/upstream/retroarch-initial-scene-url.patch`).
 
+## Décision du mainteneur — moteur libretro intégré, 9 octobre 2026 soir
+
+- Le mainteneur demande toutes les phases de `docs/retroarch-integre-architecture.md` jusqu'à une IPA de test, avant toute validation des licences. Les licences des cœurs (dont snes9x, genesis_plus_gx, genesis_plus_gx_wide, fbneo et picodrive) seront revues après les tests sur iPhone.
+- Le moteur est le pont `packages/libretro_internal_bridge` : hôte libretro natif, session plein écran, menu en jeu, sauvegardes, états, triches et RetroAchievements. Les cœurs officiels du buildbot sont empaquetés par `.github/workflows/libretro-cores.yml` (artefact `LibretroCores-<sha>`), copiés après `xcodebuild` et chargés seulement au lancement d'un jeu.
+- Aucun des dix fichiers de bibliothèque verrouillés sur la Build 419 n'est modifié : les jeux importés vont dans `Documents/roms/<système>`, enregistré comme dossier de bibliothèque, et les ROM des dossiers déjà liés sont lues sur place.
+- La route `retroarch://` reste pour les systèmes sans cœur intégré, pour les jeux connus seulement de la bibliothèque RetroArch et pour les jeux réglés sur « Application RetroArch (externe) ».
+
 ## Précision du mainteneur — 9 octobre 2026, 13 h
 
 - L'état fonctionnel confirmé est NeoStation Build 422 : bibliothèque visible et lancement RetroArch lorsque l'application externe reste en arrière-plan. Conserver ces sources de lancement/synchronisation ; ne pas prendre le récepteur autonome 781 pour une mise à jour NeoStation.

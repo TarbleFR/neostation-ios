@@ -35,7 +35,7 @@ void main(){
   gate.unregister('late');await gate.hold('next');expect(stopped,1);
   gate.release('next');
  });
- for(final entry in {'ios_dolphin_internal':'neostation/dolphin_internal','ios_rpcs3_internal':'neostation/rpcs3_internal'}.entries){
+ for(final entry in {'ios_dolphin_internal':'neostation/dolphin_internal','ios_rpcs3_internal':'neostation/rpcs3_internal','ios_libretro_internal':'neostation/libretro_internal'}.entries){
   test(entry.key + ': failed probes never imply exit',() async {
    final channel=MethodChannel(entry.value);bool value=true;bool failure=false;
    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(channel,(call)async{

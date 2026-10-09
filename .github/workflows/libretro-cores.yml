@@ -1,0 +1,41 @@
+name: Libretro cores for NeoStation iOS
+'on':
+  push:
+    branches:
+    - Claude
+    paths:
+    - .github/workflows/libretro-cores.yml
+    - build-utils/libretro/**
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: libretro-cores-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  cores:
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        persist-credentials: false
+    - name: Download, verify and package the official iOS cores
+      run: python3 build-utils/libretro/build_cores.py dist/libretro
+    - name: Show the packaged identity
+      run: |
+        python3 - <<'PY'
+        import json
+        identity = json.load(open('dist/libretro/identity.json'))
+        for core in identity['cores']:
+            print(core['id'], core['archive'], core['bytes'], core['minimumOS'], core['dependencies'])
+        print('MoltenVK', identity['moltenVK'])
+        print('files', len(identity['files']))
+        PY
+        du -sh dist/libretro
+    - uses: actions/upload-artifact@v4
+      with:
+        name: LibretroCores-${{ github.sha }}
+        path: dist/libretro/
+        if-no-files-found: error
+        retention-days: 14

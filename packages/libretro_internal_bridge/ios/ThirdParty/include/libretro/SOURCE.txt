@@ -1,0 +1,3 @@
+Upstream source: https://github.com/libretro/RetroArch (libretro-common/include)
+Pinned revision/tag: df16ef193cbe385b87e8a1cf27b66da35bf3c0e0
+License: MIT (header notice)
