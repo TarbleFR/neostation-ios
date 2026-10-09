@@ -155,7 +155,7 @@ class ExternalFolderAccess {
       return await _channel.invokeMethod<bool>('openRetroArchUrl', {
             'url': url,
             'reportErrors': preserveErrors,
-            if (commandLaunch != null) 'commandLaunch': commandLaunch,
+            'commandLaunch': ?commandLaunch,
           }) ??
           false;
     } on PlatformException {

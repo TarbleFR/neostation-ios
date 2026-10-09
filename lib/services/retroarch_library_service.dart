@@ -440,7 +440,7 @@ class RetroArchLibraryService {
   }
 
   /// The exported entry that RetroArch's command port can load directly:
-  /// `gameId` is "<playlist file>:<index>" in RetroArchPlaylistManager.
+  /// `gameId` is `<playlist file>:<index>` in RetroArchPlaylistManager.
   static Map<String, String>? commandLaunchFor(Map<String, dynamic> entry) {
     final gameId = entry['gameId']?.toString() ?? '';
     final filename = (entry['filename'] ?? entry['titleId'])?.toString() ?? '';
