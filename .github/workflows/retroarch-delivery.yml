@@ -948,8 +948,6 @@ jobs:
       run: rm -f .dart-defines.json
   warm:
     name: Release device build • warm
-    # A second, cache-restored IPA is only a benchmark; a delivery builds once.
-    if: ${{ inputs.benchmark == true || contains(github.event.head_commit.message, '[benchmark-build]') }}
     runs-on: macos-15
     timeout-minutes: 60
     needs:
