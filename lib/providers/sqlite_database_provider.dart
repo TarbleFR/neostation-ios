@@ -24,9 +24,6 @@ class SqliteDatabaseProvider extends ChangeNotifier {
   /// Metadata for all supported systems.
   List<SystemModel> _availableSystems = [];
 
-  /// Whether a data retrieval or scanning task is in progress.
-  bool _isLoading = false;
-
   /// Last error message encountered during database operations.
   String? _error;
 
@@ -49,20 +46,20 @@ class SqliteDatabaseProvider extends ChangeNotifier {
     if (availableSystems != null) _availableSystems = availableSystems;
 
     try {
-      _setLoading(true);
+      notifyListeners();
       await loadDatabase();
       _initialized = true;
     } catch (e) {
       _error = 'Error initializing database provider: $e';
       _log.e('$_error');
     } finally {
-      _setLoading(false);
+      notifyListeners();
     }
   }
 
   /// Performs a full reload of all systems and their games from the SQLite database.
   Future<void> loadDatabase() async {
-    _setLoading(true);
+    notifyListeners();
     _error = null;
 
     try {
@@ -73,7 +70,7 @@ class SqliteDatabaseProvider extends ChangeNotifier {
       _error = 'Error loading database: $e';
       _log.e('$_error');
     } finally {
-      _setLoading(false);
+      notifyListeners();
     }
   }
 
@@ -99,7 +96,7 @@ class SqliteDatabaseProvider extends ChangeNotifier {
   /// Updates the local database and triggers specialized scrapers (e.g., Steam)
   /// if applicable.
   Future<ScanSummary> scanSystemRoms(SystemModel system) async {
-    _setLoading(true);
+    notifyListeners();
     _error = null;
 
     try {
@@ -126,7 +123,7 @@ class SqliteDatabaseProvider extends ChangeNotifier {
         systemName: system.realName,
       );
     } finally {
-      _setLoading(false);
+      notifyListeners();
     }
   }
 
@@ -285,10 +282,5 @@ class SqliteDatabaseProvider extends ChangeNotifier {
         .expand((games) => games)
         .where((game) => game.lastPlayed != null)
         .length;
-  }
-
-  void _setLoading(bool loading) {
-    _isLoading = loading;
-    notifyListeners();
   }
 }
