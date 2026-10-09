@@ -1,0 +1,95 @@
+name: RetroArch corrected receiver • private SideStore candidate
+run-name: RetroArch receiver 781 • ${{ github.sha }}
+'on':
+  push:
+    branches: [experimental]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: retroarch-receiver-ipa-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  receiver:
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[retroarch-receiver-ipa]') }}
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+      RECEIVER_PACKER: ${{ github.workspace }}/tools/build_retroarch_receiver.py
+      DELIVERY_METRICS: ${{ github.workspace }}/receiver-delivery/timings.jsonl
+    steps:
+    - name: Checkout exact NeoStation delivery tools
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        persist-credentials: false
+    - uses: maxim-lobanov/setup-xcode@v1
+      with:
+        xcode-version: '26.3'
+    - name: Reuse unchanged successful receiver and NeoStation checks
+      run: python3 tools/build_retroarch_receiver.py verify
+    - name: Checkout pinned public RetroArch source
+      uses: actions/checkout@v4
+      with:
+        repository: libretro/RetroArch
+        ref: a7363feb909391c3217b91c30e81547e8208d6d5
+        path: receiver-source
+        persist-credentials: false
+    - name: Checkout pinned official core metadata
+      uses: actions/checkout@v4
+      with:
+        repository: libretro/libretro-core-info
+        ref: 5a74858ab2f7a50cebb5a6330895bc38899531c0
+        path: receiver-info
+        persist-credentials: false
+    - name: Restore immutable prebuilt core bytes
+      id: cores
+      uses: actions/cache/restore@v4
+      with:
+        path: .receiver-deps
+        key: retroarch-prebuilt-ios-arm64-v1-20261009-a7363feb-5a74858a
+    - name: Apply reviewed receiver correction and prepare hashed dependencies
+      run: python3 tools/build_retroarch_receiver.py prepare
+    - name: Save official prebuilt dependencies without any emulator compilation
+      if: ${{ steps.cores.outputs.cache-hit != 'true' }}
+      uses: actions/cache/save@v4
+      with:
+        path: .receiver-deps
+        key: retroarch-prebuilt-ios-arm64-v1-20261009-a7363feb-5a74858a
+    - name: Archive Release application for physical ARM64 iPhone
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 build-utils/delivery_metrics.py native_archive xcodebuild \
+          -project receiver-source/pkg/apple/RetroArch_iOS13.xcodeproj \
+          -scheme 'RetroArch iOS Release' -configuration Release \
+          -sdk iphoneos -destination 'generic/platform=iOS' \
+          -derivedDataPath receiver-build/DerivedData \
+          -archivePath receiver-build/RetroArch.xcarchive \
+          ARCHS=arm64 CURRENT_PROJECT_VERSION=781 MARKETING_VERSION=1.22.2 \
+          IOS_BUNDLE_IDENTIFIER=com.libretro.RetroArchiOS11 \
+          RA_IPHONEOS_DEPLOYMENT_TARGET=18.0 IPHONEOS_DEPLOYMENT_TARGET=18.0 \
+          CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=- \
+          DEVELOPMENT_TEAM='' PROVISIONING_PROFILE_SPECIFIER='' \
+          CODE_SIGN_ENTITLEMENTS='' IOS_CODE_SIGN_ENTITLEMENTS='' \
+          COMPILER_INDEX_STORE_ENABLE=NO ENABLE_USER_SCRIPT_SANDBOXING=NO \
+          -jobs "$(sysctl -n hw.ncpu)" -showBuildTimingSummary archive \
+          2>&1 | tee receiver-delivery/xcodebuild.log
+    - name: Seal all nested code, validate unchanged cores and verify final IPA
+      run: python3 tools/build_retroarch_receiver.py seal
+    - name: Encrypt candidate and diagnostic evidence for its owner
+      if: always()
+      run: |
+        mkdir -p receiver-delivery
+        python3 build-utils/delivery_cipher.py artifact receiver-delivery receiver-encrypted
+    - uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: RetroArch-Receiver-781-${{ github.sha }}
+        path: receiver-encrypted/
+        if-no-files-found: error
+        retention-days: 14
+        compression-level: 0
