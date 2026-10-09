@@ -293,6 +293,9 @@ UNUSED_CODE_DELTA = {
     'lib/widgets/game_view_mode_dropdown.dart',
     'packages/dolphin_internal_bridge/lib/dolphin_internal_bridge.dart',
     'packages/dolphin_internal_bridge/ios/Classes/TouchController/TCWiiPad.swift',
+    'lib/models/emulator_model.dart',
+    'lib/models/system_model.dart',
+    'lib/services/stikjit_melonx_service.dart',
 }
 DELTA |= UNUSED_CODE_DELTA
 INPUT_ROOTS = ('lib/', 'packages/', 'native/', 'build-utils/', 'assets/', 'test/')

@@ -35,7 +35,6 @@ class SqliteDatabaseProvider extends ChangeNotifier {
 
   // Getters
   Map<String, List<DatabaseGameModel>> get database => _database;
-  bool get isLoading => _isLoading;
   String? get error => _error;
   bool get initialized => _initialized;
 
@@ -290,12 +289,6 @@ class SqliteDatabaseProvider extends ChangeNotifier {
 
   void _setLoading(bool loading) {
     _isLoading = loading;
-    notifyListeners();
-  }
-
-  /// Resets the current error state.
-  void clearError() {
-    _error = null;
     notifyListeners();
   }
 }

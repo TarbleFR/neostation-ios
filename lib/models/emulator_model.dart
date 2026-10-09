@@ -121,10 +121,6 @@ class EmulatorModel {
     return possiblePaths[platform] ?? [];
   }
 
-  /// Indicates if the emulator is detected and the specified path physically exists.
-  bool get isAvailable =>
-      detected && path.isNotEmpty && File(path).existsSync();
-
   /// Returns a new instance with the specified properties updated.
   EmulatorModel copyWith({
     String? name,

@@ -51,9 +51,6 @@ class GamepadMappingDetector {
   /// Cache of detected mappings per gamepad ID to avoid redundant detection logic.
   final Map<String, GamepadMapping> _mappingCache = {};
 
-  /// Statistical tracker for button events, useful for debugging or profile fine-tuning.
-  final Map<String, Map<String, int>> _buttonEventCounts = {};
-
   /// Retrieves the optimal [GamepadMapping] for the given gamepad.
   ///
   /// Uses [systemInfo] (e.g., VID/PID) to refine the detection process.
@@ -328,11 +325,5 @@ class GamepadMappingDetector {
       buttonMapping: {},
       analogMapping: {},
     );
-  }
-
-  /// Clears internal mapping and statistical caches.
-  void clearCache() {
-    _mappingCache.clear();
-    _buttonEventCounts.clear();
   }
 }

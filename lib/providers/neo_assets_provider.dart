@@ -38,11 +38,6 @@ class NeoAssetsProvider extends ChangeNotifier {
   double get downloadProgress => _downloadProgress;
   bool get hasActiveTheme => _activeThemeFolder.isNotEmpty;
 
-  /// Returns the currently active [NeoAssetsTheme] metadata.
-  NeoAssetsTheme? get activeTheme => _themes.isEmpty
-      ? null
-      : _themes.where((t) => t.folder == _activeThemeFolder).firstOrNull;
-
   /// Initializes the theme cache directory and loads the active theme from the database.
   Future<void> init() async {
     if (_initialized) return;

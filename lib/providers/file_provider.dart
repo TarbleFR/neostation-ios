@@ -73,7 +73,6 @@ class FileProvider extends ChangeNotifier {
 
   // Getters
   String? get userDataPath => _userDataPath;
-  String? get mediaPath => _mediaPath;
   bool get isInitialized => _isInitialized;
 
   /// Resolves physical filesystem paths based on the current operating system.
@@ -304,35 +303,6 @@ class FileProvider extends ChangeNotifier {
       return await file.exists();
     } catch (e) {
       _log.e('Error checking file existence $filePath: $e');
-      return false;
-    }
-  }
-
-  /// Retrieves the file size in bytes.
-  Future<int> getFileSize(String filePath) async {
-    try {
-      final file = File(filePath);
-      if (await file.exists()) {
-        return await file.length();
-      }
-      return 0;
-    } catch (e) {
-      _log.e('Error getting file size $filePath: $e');
-      return 0;
-    }
-  }
-
-  /// Deletes a file from the filesystem if it exists.
-  Future<bool> deleteFile(String filePath) async {
-    try {
-      final file = File(filePath);
-      if (await file.exists()) {
-        await file.delete();
-        return true;
-      }
-      return false;
-    } catch (e) {
-      _log.e('Error deleting file $filePath: $e');
       return false;
     }
   }

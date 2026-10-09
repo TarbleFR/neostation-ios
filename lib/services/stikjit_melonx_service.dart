@@ -20,8 +20,6 @@ class StikJitMeloNxService {
   static final _log = LoggerService.instance;
   static String? _lastError;
 
-  static String? get lastError => _lastError;
-
   static const bool isExperimentalEnabled = bool.fromEnvironment(
     'NEOSTATION_EXPERIMENTAL_STIKJIT_MELONX',
     defaultValue: false,

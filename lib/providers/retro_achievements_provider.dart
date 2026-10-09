@@ -95,7 +95,6 @@ class RetroAchievementsProvider extends ChangeNotifier {
   String get username => _username;
   String get apiKey => _apiKey;
 
-
   RetroAchievementsUserSummary? get userSummary => _userSummary;
 
   RetroAchievementsGOTW? get gotw => _gotw;
@@ -514,12 +513,6 @@ class RetroAchievementsProvider extends ChangeNotifier {
 
   void _setLoading(bool loading) {
     _isLoading = loading;
-    notifyListeners();
-  }
-
-  /// Resets the current error state.
-  void clearError() {
-    _error = null;
     notifyListeners();
   }
 

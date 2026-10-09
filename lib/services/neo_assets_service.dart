@@ -391,11 +391,6 @@ class NeoAssetsService {
     return merged;
   }
 
-  /// Clears the in-memory theme list cache.
-  static void clearCache() {
-    _cachedThemes = null;
-  }
-
   /// Base URL for a System Art pack. The default catalog lives in
   /// neostation-assets; curated external packs can keep their assets at
   /// the original source.
