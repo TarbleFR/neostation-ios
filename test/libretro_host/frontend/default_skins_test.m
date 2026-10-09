@@ -5,7 +5,9 @@
 // the safe area, no two controls overlapping, no control on the game in
 // portrait nor on a DS / 3DS screen, the touch-screen item exactly over the
 // bottom screen, every input known to the console's input map and every
-// button of the console present.
+// button of the console present. Also: the portrait game area sized for the
+// core's real picture (vertical arcade games), and every DS / 3DS control
+// dragged or pinched onto the touch screen keeping its touch area off it.
 #import <Foundation/Foundation.h>
 
 #import "LibretroDefaultSkins.h"
@@ -480,6 +482,182 @@ static void TestStyle(void) {
         @"iPad: larger controls, capped");
 }
 
+static BOOL Near(LibretroRect a, LibretroRect b) { return LibretroRectEqualToRect(a, b, 1e-6); }
+
+/// Same items (identifier, frame, hit frame), screens and panel.
+static BOOL SameLayout(LibretroSkinRepresentation *a, LibretroSkinRepresentation *b) {
+  if (a.items.count != b.items.count || a.screens.count != b.screens.count) return NO;
+  for (NSUInteger index = 0; index < a.items.count; index++) {
+    LibretroSkinItem *first = a.items[index], *second = b.items[index];
+    if (![first.identifier isEqualToString:second.identifier] || !Same(first.frame, second.frame) ||
+        !Same(first.hitFrame, second.hitFrame)) {
+      return NO;
+    }
+  }
+  for (NSUInteger index = 0; index < a.screens.count; index++) {
+    if (!Same(a.screens[index].outputFrame, b.screens[index].outputFrame)) return NO;
+  }
+  return Same(a.panelFrame, b.panelFrame);
+}
+
+static LibretroSkinRepresentation *WithCoreAspect(NSString *console, LibretroSkinOrientation orientation, LibretroSize view,
+                                                  LibretroInsets insets, double coreAspect) {
+  return [LibretroDefaultSkins representationForConsole:console
+                                            orientation:orientation
+                                               viewSize:view
+                                             safeInsets:insets
+                                                   iPad:MIN(view.w, view.h) >= 600
+                                            arrangement:nil
+                                                swapped:NO
+                                                regions:nil
+                                             coreAspect:coreAspect];
+}
+
+static void TestCoreAspect(void) {
+  // iPhone 15 portrait, FBNeo vertical shooter (3:4 after rotation).
+  LibretroSize phone = {393, 852};
+  LibretroInsets notch = {59, 0, 34, 0};
+  LibretroSkinRepresentation *console = WithCoreAspect(@"arcade", LibretroSkinOrientationPortrait, phone, notch, 0);
+  LibretroSkinRepresentation *vertical = WithCoreAspect(@"arcade", LibretroSkinOrientationPortrait, phone, notch, 0.75);
+  CHECK(console.screens.count == 1 && Near(console.screens[0].outputFrame, LibretroRectMake(0, 59, 393, 294.75)),
+        @"arcade portrait without core aspect: the console's 4:3 area %@", Describe(console.screens[0].outputFrame));
+  CHECK(vertical.screens.count == 1 && Near(vertical.screens[0].outputFrame, LibretroRectMake(0, 59, 393, 524)),
+        @"vertical game (3:4): the game area is as tall as the picture needs %@",
+        Describe(vertical.screens[0].outputFrame));
+  int before = failures;
+  CheckRepresentation(@"arcade", vertical, LibretroSkinOrientationPortrait, phone, notch, YES, @"arcade 3:4 portrait");
+  CHECK(failures == before, @"the controls still fit below the taller game area");
+  LibretroSkinRepresentation *legacy = [LibretroDefaultSkins representationForConsole:@"arcade"
+                                                                          orientation:LibretroSkinOrientationPortrait
+                                                                             viewSize:phone
+                                                                           safeInsets:notch
+                                                                                 iPad:NO
+                                                                          arrangement:nil
+                                                                              swapped:NO
+                                                                              regions:nil];
+  CHECK(SameLayout(legacy, console), @"the method without core aspect is core aspect 0");
+  CHECK(SameLayout(WithCoreAspect(@"arcade", LibretroSkinOrientationPortrait, phone, notch, 16.0 / 9.0), console) &&
+            SameLayout(WithCoreAspect(@"arcade", LibretroSkinOrientationPortrait, phone, notch, NAN), console) &&
+            SameLayout(WithCoreAspect(@"arcade", LibretroSkinOrientationPortrait, phone, notch, -1), console),
+        @"a wider picture or an invalid aspect keeps the console's area");
+  LibretroSkinRepresentation *narrow = WithCoreAspect(@"arcade", LibretroSkinOrientationPortrait, phone, notch, 0.4);
+  before = failures;
+  CheckRepresentation(@"arcade", narrow, LibretroSkinOrientationPortrait, phone, notch, YES, @"arcade 0.4 portrait");
+  CHECK(failures == before && narrow.screens[0].outputFrame.h > 524 && narrow.screens[0].outputFrame.h < 852 - 59 - 34,
+        @"a very narrow picture takes the room left above the controls, no more %@",
+        Describe(narrow.screens[0].outputFrame));
+  LibretroSize wide = {852, 393};
+  LibretroInsets landscape = {0, 59, 21, 59};
+  CHECK(SameLayout(WithCoreAspect(@"nds", LibretroSkinOrientationPortrait, phone, notch, 0.75),
+                   WithCoreAspect(@"nds", LibretroSkinOrientationPortrait, phone, notch, 0)) &&
+            SameLayout(WithCoreAspect(@"arcade", LibretroSkinOrientationLandscape, wide, landscape, 0.75),
+                       WithCoreAspect(@"arcade", LibretroSkinOrientationLandscape, wide, landscape, 0)),
+        @"dual-screen consoles and landscape ignore the core aspect");
+
+  // Every single-screen console and size keeps every invariant, and the
+  // game area never shrinks.
+  NSArray<NSArray<NSNumber *> *> *sizes =
+      @[ @[ @320, @568 ], @[ @390, @844 ], @[ @430, @932 ], @[ @820, @1180 ], @[ @1032, @1376 ], @[ @700, @900 ] ];
+  for (NSString *name in [LibretroDefaultSkins consoles]) {
+    if ([LibretroDefaultSkins isDualScreenConsole:name]) continue;
+    before = failures;
+    int layouts = 0;
+    for (NSArray<NSNumber *> *size in sizes) {
+      LibretroSize view = {size[0].doubleValue, size[1].doubleValue};
+      for (int real = 0; real < 2; real++) {
+        LibretroInsets insets = InsetsFor(view.w, view.h, real == 1);
+        LibretroSkinRepresentation *reference = WithCoreAspect(name, LibretroSkinOrientationPortrait, view, insets, 0);
+        for (NSNumber *aspect in @[ @0.4, @0.75, @1.0, @1.5 ]) {
+          LibretroSkinRepresentation *rep =
+              WithCoreAspect(name, LibretroSkinOrientationPortrait, view, insets, aspect.doubleValue);
+          NSString *tag = [NSString stringWithFormat:@"%@ portrait %gx%g insets=%d core aspect %@", name, view.w, view.h,
+                                                     real, aspect];
+          CheckRepresentation(name, rep, LibretroSkinOrientationPortrait, view, insets, YES, tag);
+          if (rep.screens.count == 1 && reference.screens.count == 1 &&
+              rep.screens[0].outputFrame.h < reference.screens[0].outputFrame.h - kTolerance) {
+            Fail(tag, @"game area smaller than the console's");
+          }
+          layouts++;
+        }
+      }
+    }
+    CHECK(failures == before, @"%@: %d portrait layouts sized for the core's picture keep every control in place", name,
+          layouts);
+  }
+}
+
+/// Every control of the DS / 3DS default skins, dragged onto the touch
+/// screen at its size and pinched to 2x there, is pushed off it with its
+/// whole touch area (hit frame), and stays inside the view.
+static void TestEditedControlsOffTouchScreen(void) {
+  NSArray<NSArray<NSNumber *> *> *sizes = @[ @[ @320, @568 ], @[ @390, @844 ], @[ @820, @1180 ] ];
+  for (NSString *console in @[ @"nds", @"3ds" ]) {
+    int before = failures;
+    int edits = 0;
+    for (NSArray<NSNumber *> *size in sizes) {
+      for (int rotated = 0; rotated < 2; rotated++) {
+        double width = rotated ? size[1].doubleValue : size[0].doubleValue;
+        double height = rotated ? size[0].doubleValue : size[1].doubleValue;
+        LibretroSize view = {width, height};
+        LibretroRect bounds = LibretroRectMake(0, 0, width, height);
+        LibretroSkinOrientation orientation =
+            width > height ? LibretroSkinOrientationLandscape : LibretroSkinOrientationPortrait;
+        LibretroInsets insets = InsetsFor(width, height, YES);
+        for (NSString *arrangement in [LibretroDefaultSkins arrangementsForConsole:console orientation:orientation]) {
+          for (int swapped = 0; swapped < 2; swapped++) {
+            LibretroSkinRepresentation *rep = [LibretroDefaultSkins representationForConsole:console
+                                                                                 orientation:orientation
+                                                                                    viewSize:view
+                                                                                  safeInsets:insets
+                                                                                        iPad:MIN(width, height) >= 600
+                                                                                 arrangement:arrangement
+                                                                                     swapped:swapped == 1
+                                                                                     regions:nil];
+            NSMutableArray<LibretroSkinScreen *> *touchScreens = [NSMutableArray array];
+            for (LibretroSkinScreen *screen in rep.screens) {
+              if (screen.touchScreen) [touchScreens addObject:screen];
+            }
+            for (LibretroSkinItem *item in rep.items) {
+              if (!item.movable || item.kind == LibretroSkinItemKindTouchScreen) continue;
+              for (LibretroSkinScreen *screen in touchScreens) {
+                for (NSNumber *scale in @[ @1, @2 ]) {
+                  LibretroRect target = screen.outputFrame;
+                  double dx = (target.x + target.w / 2 - (item.frame.x + item.frame.w / 2)) / width;
+                  double dy = (target.y + target.h / 2 - (item.frame.y + item.frame.h / 2)) / height;
+                  NSDictionary<NSString *, NSNumber *> *clamped =
+                      [LibretroSkinLayout clampOverride:@{@"dx" : @(dx), @"dy" : @(dy), @"scale" : scale}
+                                                forItem:item
+                                         representation:rep
+                                               viewSize:view
+                                             safeInsets:insets];
+                  LibretroSkinLayoutResult *layout = [LibretroSkinLayout layoutRepresentation:rep
+                                                                                     viewSize:view
+                                                                                   safeInsets:insets
+                                                                                    overrides:@{item.identifier : clamped}];
+                  NSString *tag = [NSString stringWithFormat:@"%@ %gx%g %@%@ %@ x%@", console, width, height, arrangement,
+                                                             swapped ? @" swapped" : @"", item.identifier, scale];
+                  for (LibretroLaidOutItem *laidOut in layout.items) {
+                    if (![laidOut.item.identifier isEqualToString:item.identifier]) continue;
+                    if (!Inside(laidOut.frame, bounds)) Fail(tag, [@"moved outside the view " stringByAppendingString:Describe(laidOut.frame)]);
+                    for (LibretroLaidOutScreen *laidScreen in layout.screens) {
+                      if (laidScreen.touchScreen && Overlaps(laidOut.hitFrame, laidScreen.container)) {
+                        Fail(tag, [NSString stringWithFormat:@"touch area %@ over the touch screen %@",
+                                                             Describe(laidOut.hitFrame), Describe(laidScreen.container)]);
+                      }
+                    }
+                  }
+                  edits++;
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    CHECK(failures == before, @"%@: %d controls dragged onto the touch screen keep their touch area off it", console, edits);
+  }
+}
+
 int main(int argc, const char *argv[]) {
   @autoreleasepool {
     TestCatalog();
@@ -487,6 +665,8 @@ int main(int argc, const char *argv[]) {
     TestStyle();
     TestEveryLayout();
     TestMismatchedOrientation();
+    TestCoreAspect();
+    TestEditedControlsOffTouchScreen();
   }
   printf("%s: %d failure(s)\n", failures == 0 ? "default_skins_test passed" : "default_skins_test FAILED", failures);
   return failures == 0 ? 0 : 1;

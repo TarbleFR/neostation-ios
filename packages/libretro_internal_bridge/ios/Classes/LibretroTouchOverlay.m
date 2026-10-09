@@ -68,6 +68,7 @@ static double LibretroOverlayNumber(id value, double fallback) {
   NSMapTable<UITouch *, LibretroTouchTrack *> *_tracks;
   NSSet<NSNumber *> *_activeActions;
   NSSet<NSString *> *_pressedItems;
+  NSDictionary<NSString *, NSValue *> *_stickVectors;
   // Layout editing.
   NSMutableArray<UITouch *> *_editTouches;
   NSString *_selectedItem;
@@ -95,6 +96,7 @@ static double LibretroOverlayNumber(id value, double fallback) {
     _tracks = [NSMapTable strongToStrongObjectsMapTable];
     _activeActions = [NSSet set];
     _pressedItems = [NSSet set];
+    _stickVectors = @{};
     _editTouches = [NSMutableArray array];
     _editBases = [NSMutableDictionary dictionary];
     _touchScreenMappings = @[];
@@ -137,6 +139,9 @@ static double LibretroOverlayNumber(id value, double fallback) {
       track.items = items;
     }
   }
+  // A held stylus follows the touch screen to its new place (or is
+  // released); with published mappings this waits for the next ones.
+  [self reresolvePointerTracks];
   [self publish];
 }
 
@@ -149,10 +154,11 @@ static double LibretroOverlayNumber(id value, double fallback) {
 - (void)setEditing:(BOOL)editing {
   if (_editing == editing) return;
   _editing = editing;
-  // Game input stops while the layout is edited, and editing gestures end
-  // with the mode.
+  // Game input stops while the layout is edited, and editing gestures and
+  // the selection end with the mode.
   [self clearTracks];
   [self resetEditingGestures];
+  _selectedItem = nil;
   [_editBases removeAllObjects];
   _editObstacleItems = nil;
   _editScreens = nil;
@@ -160,12 +166,23 @@ static double LibretroOverlayNumber(id value, double fallback) {
   [self publish];
 }
 
+- (void)clearEditSelection {
+  _selectedItem = nil;
+  [self resetEditingGestures];
+  // Original frames are taken again from the next layout (the overrides
+  // the caller sets after a Reset).
+  [_editBases removeAllObjects];
+}
+
 - (void)setEditOverrides:(NSDictionary<NSString *, NSDictionary *> *)editOverrides {
   _editOverrides = [editOverrides isKindOfClass:[NSDictionary class]] ? [editOverrides copy] : nil;
 }
 
 - (void)setTouchScreenMappings:(NSArray<NSValue *> *)touchScreenMappings {
-  _touchScreenMappings = [touchScreenMappings isKindOfClass:[NSArray class]] ? [touchScreenMappings copy] : @[];
+  NSArray<NSValue *> *mappings = [touchScreenMappings isKindOfClass:[NSArray class]] ? [touchScreenMappings copy] : @[];
+  if (_touchScreenMappings != nil && [mappings isEqualToArray:_touchScreenMappings]) return;
+  _touchScreenMappings = mappings;
+  [self reresolvePointerTracks];
 }
 
 #pragma mark - Inputs
@@ -255,6 +272,7 @@ static double LibretroOverlayNumber(id value, double fallback) {
   memset(&state, 0, sizeof(state));
   NSMutableSet<NSNumber *> *actions = [NSMutableSet set];
   NSMutableSet<NSString *> *pressed = [NSMutableSet set];
+  NSMutableDictionary<NSString *, NSValue *> *vectors = [NSMutableDictionary dictionary];
   BOOL controls = !self.editing && !self.controlsDisabled;
   if (controls) {
     for (UITouch *touch in _tracks) {
@@ -285,7 +303,13 @@ static double LibretroOverlayNumber(id value, double fallback) {
         case LibretroTouchModeStick:
           if (track.bound != nil) {
             [self applyStick:track.bound point:point state:&state actions:actions];
-            if (track.bound.item.identifier.length > 0) [pressed addObject:track.bound.item.identifier];
+            NSString *identifier = track.bound.item.identifier;
+            if (identifier.length > 0) {
+              [pressed addObject:identifier];
+              double stickX = 0, stickY = 0;
+              LibretroStickVector(track.bound.frame, point.x, point.y, &stickX, &stickY);
+              vectors[identifier] = [NSValue valueWithCGPoint:CGPointMake(stickX, stickY)];
+            }
           }
           break;
         case LibretroTouchModePointer:
@@ -299,6 +323,10 @@ static double LibretroOverlayNumber(id value, double fallback) {
   if (![pressed isEqualToSet:_pressedItems]) {
     _pressedItems = [pressed copy];
     if (self.pressedItemsChanged != nil) self.pressedItemsChanged(_pressedItems);
+  }
+  if (![vectors isEqualToDictionary:_stickVectors]) {
+    _stickVectors = [vectors copy];
+    if (self.stickVectorsChanged != nil) self.stickVectorsChanged(_stickVectors);
   }
 
   NSSet<NSNumber *> *previous = _activeActions;
@@ -395,6 +423,51 @@ static double LibretroOverlayNumber(id value, double fallback) {
   [_input setPointerX:x y:y pressed:YES];
 }
 
+/// After the touch screens moved (new mappings or layout): a held pointer
+/// keeps its mapping while that screen is still drawn at the same place,
+/// follows the touch screen now under the finger, or is released.
+- (void)reresolvePointerTracks {
+  NSArray<NSValue *> *mappings = nil;
+  for (UITouch *touch in _tracks) {
+    LibretroTouchTrack *track = [_tracks objectForKey:touch];
+    if (track.mode != LibretroTouchModePointer) continue;
+    if (mappings == nil) mappings = [self pointerMappings];
+    CGPoint point = track.location;
+    LibretroScreenMapping resolved;
+    memset(&resolved, 0, sizeof(resolved));
+    if (![LibretroSkinLayout resolvePointerMapping:track.mapping
+                                               atX:point.x
+                                                 y:point.y
+                                          mappings:mappings
+                                            result:&resolved]) {
+      // No touch screen under the finger any more (screens swapped).
+      [_input setPointerX:track.pointerX y:track.pointerY pressed:NO];
+      track.mode = LibretroTouchModeIgnored;
+      continue;
+    }
+    track.mapping = resolved;
+    [self movePointer:track point:point];
+  }
+}
+
+/// Where the touch screens are really drawn (NSValue of LibretroRect): the
+/// presenter's mappings, else the laid-out containers.
+- (NSArray<NSValue *> *)touchAreas {
+  NSMutableArray<NSValue *> *areas = [NSMutableArray array];
+  for (NSValue *value in [self pointerMappings]) {
+    LibretroScreenMapping mapping;
+    [value getValue:&mapping size:sizeof(mapping)];
+    LibretroRect output = mapping.output;
+    [areas addObject:[NSValue valueWithBytes:&output objCType:@encode(LibretroRect)]];
+  }
+  return areas;
+}
+
+- (NSArray<LibretroLaidOutItem *> *)itemsAtPoint:(CGPoint)point {
+  if (_layout == nil) return @[];
+  return [LibretroSkinLayout itemsAtX:point.x y:point.y inLayout:_layout touchAreas:[self touchAreas]];
+}
+
 #pragma mark - Game touches
 
 /// Items a sliding finger may press: buttons and D-pads (sticks and the
@@ -411,8 +484,8 @@ static NSArray<LibretroLaidOutItem *> *LibretroOverlaySlidable(NSArray<LibretroL
 - (LibretroTouchTrack *)trackForPoint:(CGPoint)point {
   LibretroTouchTrack *track = [LibretroTouchTrack new];
   track.location = point;
-  NSArray<LibretroLaidOutItem *> *hits =
-      _layout != nil ? [LibretroSkinLayout itemsAtX:point.x y:point.y inLayout:_layout] : @[];
+  // On the drawn touch screen, controls answer only inside their frames.
+  NSArray<LibretroLaidOutItem *> *hits = [self itemsAtPoint:point];
   BOOL touchItemOnly = hits.count > 0;
   for (LibretroLaidOutItem *laidOut in hits) {
     if (laidOut.item.kind != LibretroSkinItemKindTouchScreen) touchItemOnly = NO;
@@ -468,9 +541,7 @@ static NSArray<LibretroLaidOutItem *> *LibretroOverlaySlidable(NSArray<LibretroL
         [self movePointer:track point:point];
         break;
       case LibretroTouchModeFree:
-        track.items = _layout != nil
-                          ? LibretroOverlaySlidable([LibretroSkinLayout itemsAtX:point.x y:point.y inLayout:_layout])
-                          : @[];
+        track.items = LibretroOverlaySlidable([self itemsAtPoint:point]);
         changed = YES;
         break;
       case LibretroTouchModeDPad:
@@ -592,11 +663,19 @@ static NSArray<LibretroLaidOutItem *> *LibretroOverlaySlidable(NSArray<LibretroL
     if (target == nil || !target.item.movable) return NO;
     LibretroRect frame = target.frame;
     double width = frame.w / scale, height = frame.h / scale;
-    double centerX = frame.x + frame.w / 2 - dx * size.width;
-    double centerY = frame.y + frame.h / 2 - dy * size.height;
+    double offsetX = dx * size.width, offsetY = dy * size.height;
+    double centerX = frame.x + frame.w / 2 - offsetX;
+    double centerY = frame.y + frame.h / 2 - offsetY;
     base = [target.item copy];
     base.frame = LibretroRectMake(centerX - width / 2, centerY - height / 2, width, height);
-    base.hitFrame = base.frame;
+    // The real touch area, override undone the same way (it moves and
+    // scales around the frame centre): the clamp keeps it off the touch
+    // screen too.
+    LibretroRect hit = target.hitFrame;
+    base.hitFrame = hit.w > 0 && hit.h > 0 ? LibretroRectMake(centerX + (hit.x - offsetX - centerX) / scale,
+                                                              centerY + (hit.y - offsetY - centerY) / scale,
+                                                              hit.w / scale, hit.h / scale)
+                                           : base.frame;
     base.assetFrame = base.frame;
     _editBases[identifier] = base;
   }
@@ -650,15 +729,22 @@ static NSArray<LibretroLaidOutItem *> *LibretroOverlaySlidable(NSArray<LibretroL
   UIEdgeInsets safe = self.safeAreaInsets;
   LibretroInsets insets = {safe.top, safe.left, safe.bottom, safe.right};
   NSDictionary<NSString *, NSNumber *> *proposed = @{@"dx" : @(dx), @"dy" : @(dy), @"scale" : @(scale)};
-  NSDictionary<NSString *, NSNumber *> *clamped =
-      [LibretroSkinLayout clampOverride:proposed
-                                forItem:_editBaseItem
-                         representation:_editRepresentation
-                               viewSize:(LibretroSize){size.width, size.height}
-                             safeInsets:insets];
   NSMutableDictionary<NSString *, NSDictionary *> *overrides =
       _editOverrides != nil ? [_editOverrides mutableCopy] : [NSMutableDictionary dictionary];
   NSDictionary *previous = overrides[_editItem];
+  if (![previous isKindOfClass:[NSDictionary class]]) previous = nil;
+  BOOL fitted = NO;
+  NSDictionary<NSString *, NSNumber *> *clamped =
+      [LibretroSkinLayout clampOverride:proposed
+                               previous:previous
+                                forItem:_editBaseItem
+                         representation:_editRepresentation
+                               viewSize:(LibretroSize){size.width, size.height}
+                             safeInsets:insets
+                                 fitted:&fitted];
+  // Nowhere to put it (a pinch too large for the room beside the touch
+  // screen): the item keeps its last valid place and size.
+  if (!fitted) return;
   if ([previous isEqual:clamped]) return;
   overrides[_editItem] = clamped;
   _editOverrides = [overrides copy];

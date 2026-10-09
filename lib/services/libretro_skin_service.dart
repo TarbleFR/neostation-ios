@@ -31,6 +31,10 @@ abstract final class LibretroSkinMessages {
   static const String download = 'skinErrorDownload';
   static const String notDirect = 'catalogNotDirect';
 
+  /// A `.zip` holding several `.deltaskin`/`.manicskin` files: the user
+  /// extracts it and imports the skins one at a time.
+  static const String pack = 'skinErrorPack';
+
   /// Generic refusal when no specific message applies.
   static const String importFailed = 'skinsImportFailed';
 
@@ -362,27 +366,42 @@ class LibretroSkinService {
     }
   }
 
-  /// Replaces the installed skin with the same identifier: the old skin is
-  /// forgotten and deleted (its control remaps and layouts no longer match),
-  /// and its skin selections move to the new skin.
+  /// Replaces the installed skin with the same identifier. The new skin is
+  /// installed first, in its own directory (its id always differs from the
+  /// old one), and the skin selections naming the old skin move to it; only
+  /// then is the old skin forgotten and deleted (its control remaps and
+  /// layouts no longer match). When the new skin cannot be installed, or a
+  /// selection cannot be moved, the new skin is taken back out and the old
+  /// skin keeps its files and its selections.
   Future<LibretroSkinImportResult> replace(LibretroSkinNeedsReplaceConfirmation confirmation) async {
     final staging = Directory(confirmation._stagingPath);
+    final previous = confirmation.existing;
     try {
       if (!await staging.exists()) {
         return const LibretroSkinImportFailed(LibretroSkinMessages.importFailed);
       }
-      final selections = await _selectionsNaming(confirmation.existing);
-      await delete(confirmation.existing.id);
+      final selections = await _selectionsNaming(previous);
       final installed = await _install(staging, confirmation.skin);
-      for (final selection in selections) {
-        if (!installed.consoles.contains(selection.console)) continue;
-        await LibretroInternalBridge.setFrontendSetting(
-          directory: frontendDirectory,
-          console: selection.console,
-          game: selection.game,
-          key: selection.key,
-          value: installed.id,
-        );
+      final moved = <_SkinSelection>[];
+      try {
+        for (final selection in selections) {
+          if (!installed.consoles.contains(selection.console)) continue;
+          if (!await _storeSelection(selection, installed.id)) {
+            throw StateError('Skin selection not stored: ${selection.console} ${selection.game ?? '-'} '
+                '${selection.key}');
+          }
+          moved.add(selection);
+        }
+      } catch (_) {
+        await _withdraw(installed, moved, previous.id);
+        rethrow;
+      }
+      try {
+        await delete(previous.id);
+      } catch (error) {
+        // The new skin is installed and selected; the old one stays listed
+        // on the skin page, where it can still be deleted.
+        _log.w('Libretro replaced skin ${previous.id} not removed: $error');
       }
       return LibretroSkinImported(installed);
     } catch (error) {
@@ -391,6 +410,33 @@ class LibretroSkinService {
       return LibretroSkinImportFailed(LibretroSkinMessages.importFailed, technicalDetails: '$error');
     }
   }
+
+  /// Undoes a replacement that failed after the new skin was installed: the
+  /// selections already moved name the previous skin again, then the new
+  /// skin is forgotten and deleted.
+  Future<void> _withdraw(LibretroInstalledSkin installed, List<_SkinSelection> moved, String previousId) async {
+    for (final selection in moved) {
+      try {
+        await _storeSelection(selection, previousId);
+      } catch (error) {
+        _log.w('Libretro skin selection not restored for ${selection.console}: $error');
+      }
+    }
+    try {
+      await delete(installed.id);
+    } catch (error) {
+      _log.w('Libretro skin ${installed.id} not removed after a failed replacement: $error');
+    }
+  }
+
+  Future<bool> _storeSelection(_SkinSelection selection, String skinId) =>
+      LibretroInternalBridge.setFrontendSetting(
+        directory: frontendDirectory,
+        console: selection.console,
+        game: selection.game,
+        key: selection.key,
+        value: skinId,
+      );
 
   /// Cancels a pending replacement.
   Future<void> discard(LibretroSkinNeedsReplaceConfirmation confirmation) =>
@@ -644,6 +690,10 @@ class _PlannedEntry {
 
 const LibretroSkinImportFailed _corrupt = LibretroSkinImportFailed(LibretroSkinMessages.corrupt);
 const LibretroSkinImportFailed _unsafe = LibretroSkinImportFailed(LibretroSkinMessages.unsafe);
+const LibretroSkinImportFailed _archiveTooLarge = LibretroSkinImportFailed(
+  LibretroSkinMessages.tooLarge,
+  parameters: <String, Object>{'limit': LibretroSkinService.maxArchiveBytes ~/ (1024 * 1024)},
+);
 
 /// Runs in a background isolate: checks the archive, then writes the skin
 /// files into `stagingPath` (info.json at its root). Nothing is written
@@ -652,98 +702,125 @@ _UnpackOutcome _unpackArchive(String archivePath, String stagingPath) {
   try {
     final archive = File(archivePath);
     if (archive.lengthSync() > LibretroSkinService.maxArchiveBytes) {
-      return const _UnpackOutcome.failure(LibretroSkinImportFailed(
-        LibretroSkinMessages.tooLarge,
-        parameters: <String, Object>{'limit': LibretroSkinService.maxArchiveBytes ~/ (1024 * 1024)},
-      ));
+      return const _UnpackOutcome.failure(_archiveTooLarge);
     }
-    final bytes = archive.readAsBytesSync();
-    if (!LibretroSkinService.isZipSignature(bytes)) {
-      return const _UnpackOutcome.failure(LibretroSkinImportFailed(LibretroSkinMessages.notArchive));
-    }
-    final digest = sha256.convert(bytes).toString();
-    final headers = (ZipDirectory()..read(InputMemoryStream(bytes))).fileHeaders;
-    if (headers.isEmpty) return const _UnpackOutcome.failure(_corrupt);
-    if (headers.length > LibretroSkinService.maxEntries) {
-      return const _UnpackOutcome.failure(LibretroSkinImportFailed(
-        LibretroSkinMessages.tooManyFiles,
-        parameters: <String, Object>{'limit': LibretroSkinService.maxEntries},
-      ));
-    }
-
-    const expandedTooLarge = LibretroSkinImportFailed(
-      LibretroSkinMessages.expandedTooLarge,
-      parameters: <String, Object>{'limit': LibretroSkinService.maxExpandedBytes ~/ (1024 * 1024)},
-    );
-    final kept = <_PlannedEntry>[];
-    var expanded = 0;
-    var compressed = 0;
-    for (final header in headers) {
-      final name = header.filename;
-      if (name.isEmpty || name.contains('\\') || name.startsWith('/') || RegExp(r'^[A-Za-z]:').hasMatch(name)) {
-        return const _UnpackOutcome.failure(_unsafe);
-      }
-      final segments = name.split('/').where((part) => part.isNotEmpty && part != '.').toList();
-      if (segments.contains('..')) return const _UnpackOutcome.failure(_unsafe);
-      // Unix file type in the high word of the external attributes.
-      if (((header.externalFileAttributes >> 16) & 0xF000) == 0xA000) {
-        return const _UnpackOutcome.failure(_unsafe);
-      }
-      if (segments.isEmpty || name.endsWith('/')) continue;
-      if (segments.first == '__MACOSX' || segments.last.startsWith('._') || segments.last == '.DS_Store') {
-        continue;
-      }
-      // Encrypted entries and compression methods other than store and
-      // deflate cannot come from a skin editor.
-      if ((header.generalPurposeBitFlag & 0x1) != 0 ||
-          (header.compressionMethod != 0 && header.compressionMethod != 8)) {
-        return const _UnpackOutcome.failure(_corrupt);
-      }
-      final size = header.uncompressedSize;
-      expanded += size;
-      compressed += header.compressedSize;
-      if (expanded > LibretroSkinService.maxExpandedBytes) return const _UnpackOutcome.failure(expandedTooLarge);
-      if (size > LibretroSkinService.compressionRatioFloor &&
-          size > header.compressedSize * LibretroSkinService.maxCompressionRatio) {
-        return const _UnpackOutcome.failure(expandedTooLarge);
-      }
-      final file = header.file;
-      if (file == null) return const _UnpackOutcome.failure(_corrupt);
-      kept.add(_PlannedEntry(segments, header.compressionMethod, size, file.getRawContent));
-    }
-    if (expanded > LibretroSkinService.compressionRatioFloor &&
-        expanded > compressed * LibretroSkinService.maxCompressionRatio) {
-      return const _UnpackOutcome.failure(expandedTooLarge);
-    }
-
-    final prefix = _skinRoot(kept);
-    if (prefix == null) {
-      return const _UnpackOutcome.failure(LibretroSkinImportFailed(LibretroSkinMessages.infoMissing));
-    }
-    final seen = <String>{};
-    for (final entry in kept) {
-      final relative = entry.segments.sublist(prefix.length);
-      if (!seen.add(relative.join('/').toLowerCase())) return const _UnpackOutcome.failure(_corrupt);
-    }
-
-    Directory(stagingPath).createSync(recursive: true);
-    for (final entry in kept) {
-      final target = path.joinAll(<String>[stagingPath, ...entry.segments.sublist(prefix.length)]);
-      if (!path.isWithin(stagingPath, target)) return const _UnpackOutcome.failure(_unsafe);
-      final content = _expand(entry);
-      if (_pngTooLarge(content)) {
-        return const _UnpackOutcome.failure(LibretroSkinImportFailed(LibretroSkinMessages.imageTooLarge));
-      }
-      final output = File(target);
-      output.parent.createSync(recursive: true);
-      output.writeAsBytesSync(content, flush: true);
-    }
-    return _UnpackOutcome.success(digest);
+    return _unpackBytes(archive.readAsBytesSync(), stagingPath, unwrap: true);
   } on _Refusal catch (refusal) {
     return _UnpackOutcome.failure(refusal.failure);
   } catch (_) {
     return const _UnpackOutcome.failure(_corrupt);
   }
+}
+
+/// Checks a skin archive held in memory, then writes its files into
+/// `stagingPath`. With [unwrap], an archive without info.json that wraps
+/// exactly one `.deltaskin` or `.manicskin` file (a skin published as a
+/// `.zip`) opens that skin archive in turn, once, under the same limits and
+/// checks; the skin id then comes from the wrapped archive, as if it had been
+/// imported directly. Several wrapped skins are refused as a pack.
+_UnpackOutcome _unpackBytes(Uint8List bytes, String stagingPath, {required bool unwrap}) {
+  if (!LibretroSkinService.isZipSignature(bytes)) {
+    return const _UnpackOutcome.failure(LibretroSkinImportFailed(LibretroSkinMessages.notArchive));
+  }
+  final digest = sha256.convert(bytes).toString();
+  final headers = (ZipDirectory()..read(InputMemoryStream(bytes))).fileHeaders;
+  if (headers.isEmpty) return const _UnpackOutcome.failure(_corrupt);
+  if (headers.length > LibretroSkinService.maxEntries) {
+    return const _UnpackOutcome.failure(LibretroSkinImportFailed(
+      LibretroSkinMessages.tooManyFiles,
+      parameters: <String, Object>{'limit': LibretroSkinService.maxEntries},
+    ));
+  }
+
+  const expandedTooLarge = LibretroSkinImportFailed(
+    LibretroSkinMessages.expandedTooLarge,
+    parameters: <String, Object>{'limit': LibretroSkinService.maxExpandedBytes ~/ (1024 * 1024)},
+  );
+  final kept = <_PlannedEntry>[];
+  var expanded = 0;
+  var compressed = 0;
+  for (final header in headers) {
+    final name = header.filename;
+    if (name.isEmpty || name.contains('\\') || name.startsWith('/') || RegExp(r'^[A-Za-z]:').hasMatch(name)) {
+      return const _UnpackOutcome.failure(_unsafe);
+    }
+    final segments = name.split('/').where((part) => part.isNotEmpty && part != '.').toList();
+    if (segments.contains('..')) return const _UnpackOutcome.failure(_unsafe);
+    // Unix file type in the high word of the external attributes.
+    if (((header.externalFileAttributes >> 16) & 0xF000) == 0xA000) {
+      return const _UnpackOutcome.failure(_unsafe);
+    }
+    if (segments.isEmpty || name.endsWith('/')) continue;
+    if (segments.first == '__MACOSX' || segments.last.startsWith('._') || segments.last == '.DS_Store') {
+      continue;
+    }
+    // Encrypted entries and compression methods other than store and
+    // deflate cannot come from a skin editor.
+    if ((header.generalPurposeBitFlag & 0x1) != 0 ||
+        (header.compressionMethod != 0 && header.compressionMethod != 8)) {
+      return const _UnpackOutcome.failure(_corrupt);
+    }
+    final size = header.uncompressedSize;
+    expanded += size;
+    compressed += header.compressedSize;
+    if (expanded > LibretroSkinService.maxExpandedBytes) return const _UnpackOutcome.failure(expandedTooLarge);
+    if (size > LibretroSkinService.compressionRatioFloor &&
+        size > header.compressedSize * LibretroSkinService.maxCompressionRatio) {
+      return const _UnpackOutcome.failure(expandedTooLarge);
+    }
+    final file = header.file;
+    if (file == null) return const _UnpackOutcome.failure(_corrupt);
+    kept.add(_PlannedEntry(segments, header.compressionMethod, size, file.getRawContent));
+  }
+  if (expanded > LibretroSkinService.compressionRatioFloor &&
+      expanded > compressed * LibretroSkinService.maxCompressionRatio) {
+    return const _UnpackOutcome.failure(expandedTooLarge);
+  }
+
+  final prefix = _skinRoot(kept);
+  if (prefix == null) {
+    final wrapped = unwrap ? kept.where(_isWrappedSkin).toList() : const <_PlannedEntry>[];
+    if (wrapped.length > 1) {
+      return const _UnpackOutcome.failure(LibretroSkinImportFailed(LibretroSkinMessages.pack));
+    }
+    if (wrapped.length == 1) {
+      final inner = wrapped.single;
+      if (inner.size > LibretroSkinService.maxArchiveBytes) return const _UnpackOutcome.failure(_archiveTooLarge);
+      return _unpackBytes(_expand(inner), stagingPath, unwrap: false);
+    }
+    return const _UnpackOutcome.failure(LibretroSkinImportFailed(LibretroSkinMessages.infoMissing));
+  }
+  final seen = <String>{};
+  for (final entry in kept) {
+    final relative = entry.segments.sublist(prefix.length);
+    // NeoStation writes its own metadata file at the skin root: an archive
+    // never provides it (as a file, or as a folder that would make the
+    // metadata write fail).
+    if (relative.first.toLowerCase() == LibretroSkinService.metadataFileName) {
+      return const _UnpackOutcome.failure(_unsafe);
+    }
+    if (!seen.add(relative.join('/').toLowerCase())) return const _UnpackOutcome.failure(_corrupt);
+  }
+
+  Directory(stagingPath).createSync(recursive: true);
+  for (final entry in kept) {
+    final target = path.joinAll(<String>[stagingPath, ...entry.segments.sublist(prefix.length)]);
+    if (!path.isWithin(stagingPath, target)) return const _UnpackOutcome.failure(_unsafe);
+    final content = _expand(entry);
+    if (_pngTooLarge(content)) {
+      return const _UnpackOutcome.failure(LibretroSkinImportFailed(LibretroSkinMessages.imageTooLarge));
+    }
+    final output = File(target);
+    output.parent.createSync(recursive: true);
+    output.writeAsBytesSync(content, flush: true);
+  }
+  return _UnpackOutcome.success(digest);
+}
+
+/// A `.deltaskin` or `.manicskin` file inside a `.zip`.
+bool _isWrappedSkin(_PlannedEntry entry) {
+  final name = entry.segments.last.toLowerCase();
+  return name.endsWith('.deltaskin') || name.endsWith('.manicskin');
 }
 
 /// Segments to strip so that info.json sits at the skin root: none when it

@@ -965,14 +965,14 @@ class _SystemGamesListState extends State<SystemGamesList> {
   }
 
   Widget _buildLibretroImportAction() => LibretroInternalPlaylistActions(
-    systemFolder: widget.system.folderName,
+    system: widget.system,
     onInteractionChanged: _libretroInteraction,
     onLibraryChanged: _refreshLibretroLibrary,
   );
 
   Widget _buildEmbeddedLibretroImportAction() => LibretroInternalPlaylistActions(
     embedded: true,
-    systemFolder: widget.system.folderName,
+    system: widget.system,
     onInteractionChanged: _libretroInteraction,
     onLibraryChanged: _refreshLibretroLibrary,
   );

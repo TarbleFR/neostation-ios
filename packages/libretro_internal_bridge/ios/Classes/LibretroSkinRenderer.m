@@ -6,6 +6,7 @@
 #import <QuartzCore/QuartzCore.h>
 
 #include <math.h>
+#include <string.h>
 #include <sys/stat.h>
 
 /// Memory cache budget of rasterised skin images (bytes).
@@ -357,17 +358,10 @@ static CGFloat LibretroSkinLabelFontSize(NSString *label, LibretroSkinItemShape 
   return MAX(base, 5);
 }
 
-/// Knob of a thumbstick, centred on the (possibly moved and scaled) frame.
-static CGRect LibretroSkinKnobRect(LibretroLaidOutItem *laidOut) {
-  CGRect frame = LibretroSkinCGRect(laidOut.frame);
-  LibretroSkinItem *item = laidOut.item;
-  double factor = item.frame.w > 0 && isfinite(item.frame.w) ? laidOut.frame.w / item.frame.w : 1;
-  double width = item.thumbstickSize.w * factor, height = item.thumbstickSize.h * factor;
-  if (!(width > 0) || !(height > 0) || !isfinite(width) || !isfinite(height)) {
-    width = frame.size.width * 0.5;
-    height = frame.size.height * 0.5;
-  }
-  return CGRectMake(CGRectGetMidX(frame) - width / 2, CGRectGetMidY(frame) - height / 2, width, height);
+/// Knob of a thumbstick on the (possibly moved and scaled) frame, moved by
+/// the stick `vector` (x, y in -1...1; centred for CGPointZero).
+static CGRect LibretroSkinKnobRect(LibretroLaidOutItem *laidOut, CGPoint vector) {
+  return LibretroSkinCGRect([LibretroSkinLayout knobFrameForItem:laidOut stickX:vector.x stickY:vector.y]);
 }
 
 static BOOL LibretroSkinIsVector(LibretroSkinItem *item) {
@@ -442,6 +436,7 @@ static CAShapeLayer *LibretroSkinShapeLayer(CGFloat scale) {
   CGFloat _scale;
   BOOL _controlsHidden;
   NSSet<NSString *> *_pressed;
+  NSDictionary<NSString *, NSValue *> *_stickVectors;
   BOOL _editing;
   NSString *_selectedItem;
 }
@@ -452,6 +447,7 @@ static CAShapeLayer *LibretroSkinShapeLayer(CGFloat scale) {
     _cacheDirectory = [cacheDirectory isKindOfClass:[NSString class]] ? [cacheDirectory copy] : @"";
     _items = [NSMutableArray array];
     _pressed = [NSSet set];
+    _stickVectors = @{};
     _opacity = 1;
     _scale = 2;
     self.userInteractionEnabled = NO;
@@ -655,7 +651,7 @@ static CAShapeLayer *LibretroSkinShapeLayer(CGFloat scale) {
     layers.arrows.fillColor = color.CGColor;
   }
   if (layers.knob != nil) {
-    CGRect knob = LibretroSkinKnobRect(laidOut);
+    CGRect knob = LibretroSkinKnobRect(laidOut, [self stickVectorForIdentifier:layers.identifier]);
     layers.knob.contentsScale = scale;
     layers.knob.frame = knob;
     CGPathRef path = LibretroSkinCreateShapePath(LibretroSkinItemShapeCircle, knob.size);
@@ -687,7 +683,7 @@ static CAShapeLayer *LibretroSkinShapeLayer(CGFloat scale) {
                     force:!_editing];
   }
   if (layers.knobImage != nil) {
-    CGRect knob = LibretroSkinKnobRect(laidOut);
+    CGRect knob = LibretroSkinKnobRect(laidOut, [self stickVectorForIdentifier:layers.identifier]);
     layers.knobImage.frame = knob;
     [self loadImageAtPath:item.thumbstickAssetPath points:knob.size layer:layers.knobImage mask:nil force:!_editing];
   }
@@ -752,6 +748,43 @@ static CAShapeLayer *LibretroSkinShapeLayer(CGFloat scale) {
     layers.highlightImage.hidden = !down;
   }
   [CATransaction commit];
+}
+
+- (void)setStickVectors:(NSDictionary<NSString *, NSValue *> *)vectors {
+  NSDictionary<NSString *, NSValue *> *next = [vectors isKindOfClass:[NSDictionary class]] ? [vectors copy] : @{};
+  if ([next isEqualToDictionary:_stickVectors]) return;
+  NSDictionary<NSString *, NSValue *> *previous = _stickVectors;
+  _stickVectors = next;
+  [CATransaction begin];
+  [CATransaction setDisableActions:YES];
+  for (LibretroSkinItemLayers *layers in _items) {
+    if (layers.knob == nil && layers.knobImage == nil) continue;
+    if (next[layers.identifier] == nil && previous[layers.identifier] == nil) continue;
+    [self positionKnobOfLayers:layers];
+  }
+  [CATransaction commit];
+}
+
+/// Deflection of a thumbstick item (CGPointZero when released or editing).
+- (CGPoint)stickVectorForIdentifier:(NSString *)identifier {
+  if (_editing || identifier.length == 0) return CGPointZero;
+  id value = _stickVectors[identifier];
+  if (![value isKindOfClass:[NSValue class]] || strcmp([(NSValue *)value objCType], @encode(CGPoint)) != 0) {
+    return CGPointZero;
+  }
+  CGPoint vector = [(NSValue *)value CGPointValue];
+  if (!isfinite(vector.x) || !isfinite(vector.y)) return CGPointZero;
+  return vector;
+}
+
+/// Moves the knob layers with the stick: same size, only the position
+/// changes (no new path or image).
+- (void)positionKnobOfLayers:(LibretroSkinItemLayers *)layers {
+  CGRect knob = LibretroSkinKnobRect(layers.laidOut, [self stickVectorForIdentifier:layers.identifier]);
+  if (CGRectIsEmpty(knob)) return;
+  CGPoint center = CGPointMake(CGRectGetMidX(knob), CGRectGetMidY(knob));
+  layers.knob.position = center;
+  layers.knobImage.position = center;
 }
 
 - (void)setEditing:(BOOL)editing selectedItem:(NSString *)itemIdentifier {
@@ -869,7 +902,7 @@ static void LibretroSkinDrawVectorItem(CGContextRef context, LibretroLaidOutItem
   }
   CGContextRestoreGState(context);
   if (item.kind == LibretroSkinItemKindThumbstick) {
-    CGRect knob = LibretroSkinKnobRect(laidOut);
+    CGRect knob = LibretroSkinKnobRect(laidOut, CGPointZero);
     UIColor *color = LibretroSkinLighterColor(item.fillColor, 0.3);
     CGContextSetFillColorWithColor(context, color.CGColor);
     CGContextFillEllipseInRect(context, knob);
@@ -944,7 +977,7 @@ static void LibretroSkinDrawVectorItem(CGContextRef context, LibretroLaidOutItem
           UIImage *image = LibretroSkinLoadImage(item.assetPath, width, height, key, cache);
           if (image != nil) images[item.identifier] = image;
         }
-        CGRect knob = LibretroSkinKnobRect(laidOut);
+        CGRect knob = LibretroSkinKnobRect(laidOut, CGPointZero);
         if (item.kind == LibretroSkinItemKindThumbstick && item.thumbstickAssetPath.length > 0 &&
             LibretroSkinPixelSize(knob.size, pixelScale, &width, &height)) {
           NSString *key = LibretroSkinCacheKey(item.thumbstickAssetPath, width, height);
@@ -997,7 +1030,7 @@ static void LibretroSkinDrawVectorItem(CGContextRef context, LibretroLaidOutItem
             [image drawInRect:assetFrame];
           }
           UIImage *knob = item.identifier.length > 0 ? knobs[item.identifier] : nil;
-          if (knob != nil) [knob drawInRect:LibretroSkinKnobRect(laidOut)];
+          if (knob != nil) [knob drawInRect:LibretroSkinKnobRect(laidOut, CGPointZero)];
         }
         UIGraphicsPopContext();
         CGImageRef rendered = CGBitmapContextCreateImage(context);

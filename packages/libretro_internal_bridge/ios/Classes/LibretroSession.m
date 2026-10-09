@@ -2,6 +2,7 @@
 
 #import "LibretroAchievements.h"
 #import "LibretroAudioOutput.h"
+#import "LibretroChromeLayout.h"
 #import "LibretroCoreHost.h"
 #import "LibretroCoreOptions.h"
 #import "LibretroDefaultSkins.h"
@@ -121,6 +122,9 @@ static void LibretroRestoreAppOrientations(UIViewController *presenter) {
   BOOL _editingControls;
   BOOL _fastForwardHeld;
   _Atomic bool _redrawPending;
+  // Picture aspect the current layout was made for (pictureLayoutAspect).
+  double _laidOutPictureAspect;
+  _Atomic bool _pictureCheckPending;
 }
 
 - (instancetype)initWithConfiguration:(LibretroSessionConfiguration *)configuration {
@@ -381,6 +385,38 @@ static void LibretroRestoreAppOrientations(UIViewController *presenter) {
   if (aspect <= 0 && geometry.base_height > 0) aspect = (float)geometry.base_width / (float)geometry.base_height;
   _presenter.aspectRatio = aspect;
   _vulkan.aspectRatio = aspect;
+  [self pictureGeometryChanged];
+}
+
+/// Emulation thread: the core's aspect or rotation changed. The default
+/// skin is laid out again on the main thread when the picture it was sized
+/// for changed (coalesced: some cores send their geometry at every frame).
+- (void)pictureGeometryChanged {
+  if (atomic_exchange(&_pictureCheckPending, true)) return;
+  __weak LibretroSession *weakSelf = self;
+  dispatch_async(dispatch_get_main_queue(), ^{
+    LibretroSession *session = weakSelf;
+    if (session == nil) return;
+    atomic_store(&session->_pictureCheckPending, false);
+    if (session->_controller == nil) return;
+    if (fabs([session pictureLayoutAspect] - session->_laidOutPictureAspect) < 1e-4) return;
+    [session->_controller setNeedsSkinLayout];
+  });
+}
+
+/// Main thread. The legacy Vulkan picture is aspect-fitted over the whole
+/// view whatever the skin says: in portrait the default skin's opaque panel
+/// would hide most of it, so the game stays in landscape, where the
+/// controls are beside the picture (see adaptToLegacyPicture:viewSize:).
+- (void)keepLandscapeForLegacyPicture {
+  LibretroGameViewController *controller = _controller;
+  if (controller == nil) return;
+  UIInterfaceOrientationMask landscape = UIInterfaceOrientationMaskLandscape;
+  // The app's own mask is landscape: the two always have orientations in common.
+  LibretroOrientationSetGameMask(landscape);
+  controller.allowedOrientations = landscape;
+  UIViewController *root = controller.view.window.rootViewController;
+  if (root != nil && root != controller) [root setNeedsUpdateOfSupportedInterfaceOrientations];
 }
 
 - (NSDictionary<NSString *, id> *)loadContent {
@@ -439,6 +475,7 @@ static void LibretroRestoreAppOrientations(UIViewController *presenter) {
           LibretroSession *session = weakSelf;
           if (session == nil) return;
           session->_screensAndShadersAvailable = NO;
+          [session keepLandscapeForLegacyPicture];
           [session->_controller setNeedsSkinLayout];
         });
       }
@@ -661,6 +698,7 @@ static void LibretroRestoreAppOrientations(UIViewController *presenter) {
 
 - (void)coreHost:(LibretroCoreHost *)host rotationChanged:(unsigned)rotation {
   _presenter.rotation = rotation;
+  [self pictureGeometryChanged];
 }
 
 - (void)coreHost:(LibretroCoreHost *)host message:(NSString *)message durationMilliseconds:(unsigned)duration {
@@ -828,6 +866,38 @@ static void LibretroRestoreAppOrientations(UIViewController *presenter) {
   return SettingDictionary([self consoleGeometryEntry][@"regions"]);
 }
 
+/// Display aspect of the whole picture as the screen format shows it: the
+/// fixed ratio chosen (4:3, 16:9, 16:10), else the core's after rotation
+/// (Original, Stretch); 0 while the core has given none. The default
+/// single-screen skins size their portrait game area with it, so a
+/// vertical arcade game gets a tall area. Main thread.
+- (double)displayedPictureAspect {
+  switch (LibretroScreenFormatFromIdentifier(SettingString([self settingValue:LibretroSettingScreenFormat]))) {
+    case LibretroScreenFormat4x3:
+      return 4.0 / 3.0;
+    case LibretroScreenFormat16x9:
+      return 16.0 / 9.0;
+    case LibretroScreenFormat16x10:
+      return 16.0 / 10.0;
+    case LibretroScreenFormatOriginal:
+    case LibretroScreenFormatStretch:
+      break;
+  }
+  LibretroMetalPresenter *presenter = _presenter;
+  if (presenter == nil) return 0;
+  return LibretroSourceAspect(presenter.aspectRatio, LibretroRectUnit, presenter.rotation);
+}
+
+/// The picture aspect a layout depends on: the core's own aspect for the
+/// legacy Vulkan picture (fitted by the renderer, without format or
+/// rotation), the displayed aspect for single-screen consoles, none for the
+/// DS / 3DS screens (their shapes are fixed). Main thread.
+- (double)pictureLayoutAspect {
+  if (!_screensAndShadersAvailable) return _presenter != nil ? (double)_presenter.aspectRatio : 0;
+  if ([LibretroDefaultSkins isDualScreenConsole:_console]) return 0;
+  return [self displayedPictureAspect];
+}
+
 /// Console pixels of the whole core picture ({0, 0} when unknown, arcade).
 - (LibretroSize)consoleNominalSize {
   NSArray *size = [self consoleGeometryEntry][@"size"];
@@ -890,13 +960,15 @@ static void LibretroRestoreAppOrientations(UIViewController *presenter) {
 }
 
 /// NeoStation's skin generated for the view: DS / 3DS arrangement and
-/// swap from the settings, screen regions from the core catalog.
+/// swap from the settings, screen regions from the core catalog, portrait
+/// game area of single-screen consoles from the displayed picture aspect.
 - (LibretroSkinRepresentation *)defaultRepresentationForOrientation:(LibretroSkinOrientation)orientation
                                                            viewSize:(LibretroSize)size
                                                          safeInsets:(LibretroInsets)insets
                                                                iPad:(BOOL)iPad {
   NSString *arrangement = nil;
-  if ([LibretroDefaultSkins isDualScreenConsole:_console]) {
+  BOOL dual = [LibretroDefaultSkins isDualScreenConsole:_console];
+  if (dual) {
     NSString *key = orientation == LibretroSkinOrientationPortrait ? LibretroSettingArrangementPortrait
                                                                     : LibretroSettingArrangementLandscape;
     NSString *stored = SettingString([self settingValue:key]);
@@ -905,14 +977,57 @@ static void LibretroRestoreAppOrientations(UIViewController *presenter) {
       arrangement = stored;
     }
   }
-  return [LibretroDefaultSkins representationForConsole:_console
-                                            orientation:orientation
-                                               viewSize:size
-                                             safeInsets:insets
-                                                   iPad:iPad
-                                            arrangement:arrangement
-                                                swapped:[self screensSwapped]
-                                                regions:[self consoleRegions]];
+  LibretroSkinRepresentation *representation =
+      [LibretroDefaultSkins representationForConsole:_console
+                                         orientation:orientation
+                                            viewSize:size
+                                          safeInsets:insets
+                                                iPad:iPad
+                                         arrangement:arrangement
+                                             swapped:[self screensSwapped]
+                                             regions:[self consoleRegions]
+                                          coreAspect:dual ? 0 : [self displayedPictureAspect]];
+  if (!_screensAndShadersAvailable) [self adaptToLegacyPicture:representation viewSize:size];
+  return representation;
+}
+
+/// Legacy Vulkan presentation (frames cannot reach Metal): the renderer
+/// draws the whole picture aspect-fitted over the full view, whatever the
+/// skin says (LibretroVulkanRenderer). The default skin then shows one
+/// "full" screen exactly there, which is the touch screen of the DS / 3DS
+/// (as touchScreenMappings reports it), and no opaque panel that would hide
+/// it. The game is also kept in landscape (keepLandscapeForLegacyPicture),
+/// where the controls stand beside the picture.
+- (void)adaptToLegacyPicture:(LibretroSkinRepresentation *)representation viewSize:(LibretroSize)size {
+  double aspect = _presenter != nil ? (double)_presenter.aspectRatio : 0;
+  LibretroRect picture = LibretroRectAspectFit(LibretroRectMake(0, 0, size.w, size.h), aspect);
+  BOOL touch = _inputMap.hasTouchScreen;
+  LibretroSkinScreen *screen = [LibretroSkinScreen new];
+  screen.role = @"full";
+  screen.source = LibretroRectUnit;
+  screen.outputFrame = picture;
+  screen.hasOutputFrame = YES;
+  screen.touchScreen = touch;
+  representation.screens = @[ screen ];
+  NSMutableArray<LibretroSkinItem *> *items = [NSMutableArray array];
+  for (LibretroSkinItem *item in representation.items) {
+    if (item.kind != LibretroSkinItemKindTouchScreen) [items addObject:item];
+  }
+  if (touch) {
+    LibretroSkinItem *touchItem = [LibretroSkinItem new];
+    touchItem.identifier = @"touchScreen";
+    touchItem.kind = LibretroSkinItemKindTouchScreen;
+    touchItem.shape = LibretroSkinItemShapeNone;
+    touchItem.inputs = @[ @"touchScreen" ];
+    touchItem.frame = picture;
+    touchItem.hitFrame = picture;
+    touchItem.assetFrame = picture;
+    touchItem.movable = NO;
+    [items addObject:touchItem];
+  }
+  representation.items = items;
+  representation.panelColor = 0;
+  representation.panelFrame = LibretroRectMake(0, 0, 0, 0);
 }
 
 /// View size and safe insets for an orientation: the current ones, or
@@ -945,6 +1060,7 @@ static void LibretroRestoreAppOrientations(UIViewController *presenter) {
   _viewSize = size;
   _safeInsets = insets;
   _iPad = iPad;
+  _laidOutPictureAspect = [self pictureLayoutAspect];
   LibretroSkin *skin = [self selectedSkinForOrientation:orientation];
   LibretroSkinRepresentation *representation = nil;
   if (skin != _defaultSkin) {
@@ -1207,6 +1323,22 @@ static void LibretroRestoreAppOrientations(UIViewController *presenter) {
   // game view keeps the orientation while editing).
   NSString *layoutKey =
       LibretroSettingLayoutKey(self.currentSkin.installedIdentifier, LibretroSkinOrientationName(_currentOrientation));
+  // Edited and reset from the chosen scope's own value: at console scope
+  // the console's layout, never this game's, so Done keeps the console's
+  // other entries and copies nothing from the game.
+  LibretroFrontendStore *store = _store;
+  NSString *console = [_console copy] ?: @"";
+  LibretroControlsOverridesProvider startingOverrides = ^NSDictionary<NSString *, NSDictionary *> * {
+    return [LibretroChromeLayout controlsEditorOverridesForKey:layoutKey
+                                                         store:store
+                                                       console:console
+                                                     scopeGame:scopeGame];
+  };
+  // This game's own layout keeps applying to it over a console-wide edit.
+  BOOL gameKeepsLayout = scopeGame == nil && [LibretroChromeLayout game:[self gameScopeKey]
+                                                     hasOwnLayoutForKey:layoutKey
+                                                                  store:store
+                                                                console:console];
   __weak LibretroSession *weakSelf = self;
   dispatch_block_t start = ^{
     LibretroSession *session = weakSelf;
@@ -1215,12 +1347,14 @@ static void LibretroRestoreAppOrientations(UIViewController *presenter) {
     [view beginEditingControlsWithDoneTitle:[session text:@"controlsEditDone"]
                                  resetTitle:[session text:@"controlsReset"]
                                        hint:[session text:@"controlsEditHint"]
+                          startingOverrides:startingOverrides
                                    finished:^{
                                      [weakSelf finishControlsEditingWithKey:layoutKey game:scopeGame];
                                    }
                                       reset:^{
                                         [weakSelf resetControlsLayoutWithKey:layoutKey game:scopeGame];
                                       }];
+    if (gameKeepsLayout) [session showStatus:[session text:@"controlsGameLayoutApplies"]];
   };
   // The menu closes without resuming: the game stays paused while editing.
   UINavigationController *menu = _menu;
@@ -1245,6 +1379,19 @@ static void LibretroRestoreAppOrientations(UIViewController *presenter) {
   }
   _editingControls = NO;
   [self setMenuPaused:NO];
+  if (gameKey == nil && [LibretroChromeLayout game:[self gameScopeKey]
+                                hasOwnLayoutForKey:layoutKey
+                                             store:_store
+                                           console:_console ?: @""]) {
+    // Saved for the console, but this game shows its own layout again:
+    // said once the editor has closed.
+    __weak LibretroSession *weakSelf = self;
+    dispatch_async(dispatch_get_main_queue(), ^{
+      LibretroSession *session = weakSelf;
+      if (session == nil) return;
+      [session showStatus:[session text:@"controlsGameLayoutApplies"]];
+    });
+  }
 }
 
 - (void)resetControlsLayoutWithKey:(NSString *)layoutKey game:(NSString *)gameKey {
@@ -1397,8 +1544,20 @@ static void LibretroRestoreAppOrientations(UIViewController *presenter) {
 
 /// DS / 3DS: exchanges the places of the two screens of the default skins,
 /// where the value applies (the game's when it has one, else the console's).
+/// Only NeoStation's skin places the screens: with an imported skin or the
+/// legacy Vulkan picture nothing would change on screen, so nothing is
+/// saved (it would show up later with the default skin) and the reason is
+/// shown, as on the Screen layout page.
 - (void)swapScreens {
   if (![LibretroDefaultSkins isDualScreenConsole:_console]) return;
+  if (!_screensAndShadersAvailable) {
+    [self showStatus:[self text:@"shaderUnavailable"]];
+    return;
+  }
+  if (!self.currentRepresentation.generated) {
+    [self showStatus:[self text:@"arrangementSkinFooter"]];
+    return;
+  }
   LibretroSettingScope scope = LibretroSettingScopeDefault;
   id stored = [_store valueForKey:LibretroSettingScreensSwapped console:_console game:[self gameScopeKey] scope:&scope];
   BOOL swapped = [stored isKindOfClass:NSNumber.class] && [stored boolValue];

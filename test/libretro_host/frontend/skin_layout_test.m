@@ -2,8 +2,11 @@
 // (portrait pinned to the bottom, aspect fit otherwise, screens scaled from
 // the mapping, app placement), generated skins kept as is, user overrides
 // on movable items, clamping inside the view and off the DS / 3DS touch
-// screen, and the hit-test priorities (thumbstick, exclusive menu, buttons,
-// touch screen last).
+// screen (frame and touch area, last valid override kept when nothing
+// fits), the hit-test priorities (thumbstick, exclusive menu, buttons,
+// touch screen last; extended edges never on a drawn touch screen), the
+// thumbstick knob following its vector and a held stylus after the touch
+// screen moved.
 #import <Foundation/Foundation.h>
 
 #import "LibretroSkin.h"
@@ -11,6 +14,7 @@
 
 #include <math.h>
 #include <stdio.h>
+#include <string.h>
 
 static int failures = 0;
 
@@ -292,16 +296,26 @@ static void TestClamp(void) {
   CHECK(Inside(moved, view) && fabs(moved.x - 330) < 1e-6 && fabs(moved.y - 784) < 1e-6,
         @"moved past the corner: kept inside the view %@", Describe(moved));
 
-  // Dragged onto the touch screen: pushed out by the shortest way.
-  clamped = [LibretroSkinLayout clampOverride:@{@"dx" : @(-100.0 / 390), @"dy" : @(-250.0 / 844), @"scale" : @1}
-                                      forItem:a
-                               representation:rep
-                                     viewSize:view
-                                   safeInsets:kNoInsets];
-  moved = LibretroRectMake(300 + clamped[@"dx"].doubleValue * 390, 650 + clamped[@"dy"].doubleValue * 844, 60, 60);
+  // Dragged onto the touch screen: pushed out by the shortest way, with its
+  // touch area (6-point edges) as well, so the frame stops 6 points below
+  // the screen instead of touching it.
+  NSDictionary<NSString *, NSNumber *> *dragged = [LibretroSkinLayout clampOverride:@{@"dx" : @(-100.0 / 390), @"dy" : @(-250.0 / 844), @"scale" : @1}
+                                                                            forItem:a
+                                                                     representation:rep
+                                                                           viewSize:view
+                                                                         safeInsets:kNoInsets];
+  moved = LibretroRectMake(300 + dragged[@"dx"].doubleValue * 390, 650 + dragged[@"dy"].doubleValue * 844, 60, 60);
   CHECK(!Overlaps(moved, bottomScreen) && Inside(moved, view), @"dragged onto the touch screen: pushed off it %@",
         Describe(moved));
-  CHECK(fabs(moved.y - 518) < 1e-6 && fabs(moved.x - 200) < 1e-6, @"pushed below it, the shortest way %@", Describe(moved));
+  CHECK(fabs(moved.y - 524) < 1e-6 && fabs(moved.x - 200) < 1e-6, @"pushed below it, the shortest way %@", Describe(moved));
+  LibretroSkinLayoutResult *draggedLayout = [LibretroSkinLayout layoutRepresentation:rep
+                                                                            viewSize:view
+                                                                          safeInsets:kNoInsets
+                                                                           overrides:@{@"a" : dragged}];
+  LibretroRect hit = LaidOut(draggedLayout, @"a").hitFrame;
+  CHECK(!Overlaps(hit, bottomScreen) && fabs(hit.y - 518) < 1e-6, @"its hit frame stops at the screen edge %@", Describe(hit));
+  CHECK([Identifiers([LibretroSkinLayout itemsAtX:230 y:515 inLayout:draggedLayout]) isEqualToString:@"touchScreen"],
+        @"3 points inside the touch screen next to the moved button: the touch screen");
 
   // Grown over the touch screen: moved away, size kept.
   clamped = [LibretroSkinLayout clampOverride:@{@"dx" : @0, @"dy" : @(-0.15), @"scale" : @2}
@@ -314,6 +328,13 @@ static void TestClamp(void) {
                            60 * scale, 60 * scale);
   CHECK(fabs(scale - 2) < 1e-9 && !Overlaps(moved, bottomScreen) && Inside(moved, view),
         @"scaled item kept off the touch screen %@", Describe(moved));
+  LibretroSkinLayoutResult *grownLayout = [LibretroSkinLayout layoutRepresentation:rep
+                                                                          viewSize:view
+                                                                        safeInsets:kNoInsets
+                                                                         overrides:@{@"a" : clamped}];
+  CHECK(!Overlaps(LaidOut(grownLayout, @"a").hitFrame, bottomScreen),
+        @"its touch area, scaled with it (12-point edges), stays off the touch screen %@",
+        Describe(LaidOut(grownLayout, @"a").hitFrame));
 
   LibretroSkinItem *fixed = rep.items[1];
   clamped = [LibretroSkinLayout clampOverride:@{@"dx" : @0.3, @"dy" : @0, @"scale" : @1.5}
@@ -362,6 +383,253 @@ static void TestHitTesting(void) {
   CHECK([LibretroSkinLayout itemsAtX:390 y:300 inLayout:layout].count == 0, @"empty area hits nothing");
 }
 
+/// DS-like generated skin with a D-pad (12-point touch edges) below the
+/// touch bottom screen.
+static LibretroSkinRepresentation *DPadRepresentation(void) {
+  LibretroRect bottomScreen = LibretroRectMake(50, 300, 290, 218);
+  LibretroSkinItem *dpad = Item(@"dpad", LibretroSkinItemKindDPad, LibretroRectMake(20, 600, 120, 120),
+                                @[ @"up", @"down", @"left", @"right" ], 12, YES);
+  LibretroSkinItem *touch = Item(@"touchScreen", LibretroSkinItemKindTouchScreen, bottomScreen, @[ @"touchScreen" ], 0, NO);
+  LibretroSkinRepresentation *rep =
+      Representation(LibretroSkinOrientationPortrait, 390, 844, @[ dpad, touch ],
+                     @[ Screen(LibretroRectMake(50, 60, 290, 218), YES, @"top", NO), Screen(bottomScreen, YES, @"bottom", YES) ]);
+  rep.generated = YES;
+  return rep;
+}
+
+static void TestDPadAgainstTouchScreen(void) {
+  LibretroSkinRepresentation *rep = DPadRepresentation();
+  LibretroSize view = {390, 844};
+  LibretroRect bottomScreen = LibretroRectMake(50, 300, 290, 218);
+  LibretroSkinItem *dpad = rep.items[0];
+  // Dragged up onto the bottom screen: pushed back below it with its whole
+  // touch area, the shortest way.
+  BOOL fitted = NO;
+  NSDictionary<NSString *, NSNumber *> *clamped = [LibretroSkinLayout clampOverride:@{@"dx" : @0.1, @"dy" : @(-0.2), @"scale" : @1}
+                                                                           previous:nil
+                                                                            forItem:dpad
+                                                                     representation:rep
+                                                                           viewSize:view
+                                                                         safeInsets:kNoInsets
+                                                                             fitted:&fitted];
+  LibretroSkinLayoutResult *layout = [LibretroSkinLayout layoutRepresentation:rep
+                                                                     viewSize:view
+                                                                   safeInsets:kNoInsets
+                                                                    overrides:@{@"dpad" : clamped}];
+  LibretroLaidOutItem *moved = LaidOut(layout, @"dpad");
+  CHECK(fitted && RectNear(moved.frame, LibretroRectMake(59, 530, 120, 120)),
+        @"D-pad dragged onto the touch screen stops 12 points below it %@", Describe(moved.frame));
+  CHECK(!Overlaps(moved.hitFrame, bottomScreen) && fabs(moved.hitFrame.y - 518) < 1e-6,
+        @"its hit frame never covers the touch screen %@", Describe(moved.hitFrame));
+  BOOL onlyTouch = YES;
+  for (int x = 53; x <= 337; x += 4) {
+    NSString *hits = Identifiers([LibretroSkinLayout itemsAtX:(double)x y:513 inLayout:layout]);
+    if (![hits isEqualToString:@"touchScreen"]) onlyTouch = NO;
+  }
+  CHECK(onlyTouch, @"5 points inside the touch screen, along the moved D-pad: always the touch screen");
+
+  // Pinched to 2x near the screen: the grown touch area stays off it too.
+  clamped = [LibretroSkinLayout clampOverride:@{@"dx" : @0.1, @"dy" : @(-0.1), @"scale" : @2}
+                                     previous:nil
+                                      forItem:dpad
+                               representation:rep
+                                     viewSize:view
+                                   safeInsets:kNoInsets
+                                       fitted:&fitted];
+  layout = [LibretroSkinLayout layoutRepresentation:rep viewSize:view safeInsets:kNoInsets overrides:@{@"dpad" : clamped}];
+  moved = LaidOut(layout, @"dpad");
+  CHECK(fitted && fabs(clamped[@"scale"].doubleValue - 2) < 1e-9 && !Overlaps(moved.hitFrame, bottomScreen) &&
+            Inside(moved.frame, view),
+        @"a D-pad pinched to 2x keeps its touch area off the touch screen %@", Describe(moved.hitFrame));
+
+  // An imported skin whose own extended edges already reach the touch
+  // screen: only the frame is kept off it, a small move does not jump.
+  LibretroSkinItem *wide = Item(@"wide", LibretroSkinItemKindButton, LibretroRectMake(100, 530, 60, 60), @[ @"a" ], 20, YES);
+  LibretroSkinItem *touch = rep.items[1];
+  LibretroSkinRepresentation *imported =
+      Representation(LibretroSkinOrientationPortrait, 390, 844, @[ wide, touch ], @[ Screen(bottomScreen, YES, @"bottom", YES) ]);
+  imported.generated = YES;
+  clamped = [LibretroSkinLayout clampOverride:@{@"dx" : @(10.0 / 390), @"dy" : @0, @"scale" : @1}
+                                     previous:nil
+                                      forItem:wide
+                               representation:imported
+                                     viewSize:view
+                                   safeInsets:kNoInsets
+                                       fitted:&fitted];
+  CHECK(fitted && fabs(clamped[@"dx"].doubleValue * 390 - 10) < 1e-6 && fabs(clamped[@"dy"].doubleValue) < 1e-9,
+        @"designed extended edges over the touch screen: a small move is kept as is");
+  layout = [LibretroSkinLayout layoutRepresentation:imported viewSize:view safeInsets:kNoInsets overrides:nil];
+  CHECK([Identifiers([LibretroSkinLayout itemsAtX:130 y:515 inLayout:layout]) isEqualToString:@"touchScreen"] &&
+            [Identifiers([LibretroSkinLayout itemsAtX:130 y:525 inLayout:layout]) isEqualToString:@"wide"] &&
+            [Identifiers([LibretroSkinLayout itemsAtX:130 y:535 inLayout:layout]) isEqualToString:@"wide"],
+        @"on the touch screen the extended edges give way; outside it they still work");
+}
+
+static void TestTouchScreenPriority(void) {
+  // A container larger than the drawn picture (letterboxed touch screen),
+  // a button whose extended edges reach into it, a stick next to it.
+  LibretroSkinItem *button = Item(@"b", LibretroSkinItemKindButton, LibretroRectMake(10, 100, 60, 60), @[ @"b" ], 20, YES);
+  LibretroSkinItem *stick = Item(@"stick", LibretroSkinItemKindThumbstick, LibretroRectMake(330, 100, 60, 60),
+                                 @[ @"leftStickUp", @"leftStickDown", @"leftStickLeft", @"leftStickRight" ], 20, YES);
+  LibretroSkinScreen *screen = Screen(LibretroRectMake(80, 0, 240, 300), YES, @"full", YES);
+  LibretroSkinRepresentation *rep = Representation(LibretroSkinOrientationLandscape, 400, 300, @[ button, stick ], @[ screen ]);
+  rep.generated = YES;
+  LibretroSkinLayoutResult *layout = [LibretroSkinLayout layoutRepresentation:rep
+                                                                     viewSize:(LibretroSize){400, 300}
+                                                                   safeInsets:kNoInsets
+                                                                    overrides:nil];
+  CHECK([LibretroSkinLayout itemsAtX:85 y:130 inLayout:layout].count == 0,
+        @"on the touch-screen container, outside the button frame: no control");
+  CHECK([LibretroSkinLayout itemsAtX:315 y:130 inLayout:layout].count == 0,
+        @"on the touch-screen container, outside the stick frame: no stick");
+  CHECK([Identifiers([LibretroSkinLayout itemsAtX:75 y:130 inLayout:layout]) isEqualToString:@"b"] &&
+            [Identifiers([LibretroSkinLayout itemsAtX:325 y:130 inLayout:layout]) isEqualToString:@"stick"],
+        @"outside the touch screen the extended edges work");
+  // The picture is really drawn in the middle only (presenter mapping).
+  LibretroRect drawn = LibretroRectMake(120, 0, 160, 300);
+  NSArray<NSValue *> *areas = @[ [NSValue valueWithBytes:&drawn objCType:@encode(LibretroRect)] ];
+  CHECK([Identifiers([LibretroSkinLayout itemsAtX:85 y:130 inLayout:layout touchAreas:areas]) isEqualToString:@"b"] &&
+            [Identifiers([LibretroSkinLayout itemsAtX:315 y:130 inLayout:layout touchAreas:areas]) isEqualToString:@"stick"],
+        @"beside the drawn picture (letterbox) the extended edges work");
+  CHECK([LibretroSkinLayout itemsAtX:150 y:130 inLayout:layout touchAreas:areas].count == 0,
+        @"on the drawn picture no control answers");
+  CHECK([Identifiers([LibretroSkinLayout itemsAtX:85 y:130 inLayout:layout touchAreas:@[]]) isEqualToString:@"b"],
+        @"no drawn touch screen at all: extended edges everywhere");
+  CHECK([Identifiers([LibretroSkinLayout itemsAtX:85 y:130 inLayout:layout]) isEqualToString:@""] &&
+            [Identifiers([LibretroSkinLayout itemsAtX:85 y:130 inLayout:layout touchAreas:nil]) isEqualToString:@""],
+        @"nil areas: the layout's containers");
+}
+
+static void TestClampKeepsPrevious(void) {
+  // A narrow column (100 points) beside a full-height touch screen.
+  LibretroSkinItem *a = Item(@"a", LibretroSkinItemKindButton, LibretroRectMake(20, 120, 60, 60), @[ @"a" ], 6, YES);
+  LibretroSkinRepresentation *rep =
+      Representation(LibretroSkinOrientationLandscape, 400, 300, @[ a ],
+                     @[ Screen(LibretroRectMake(100, 0, 200, 300), YES, @"bottom", YES) ]);
+  rep.generated = YES;
+  LibretroSize view = {400, 300};
+  NSDictionary<NSString *, NSNumber *> *previous = @{@"dx" : @0, @"dy" : @0.1, @"scale" : @1.2};
+  BOOL fitted = NO;
+  NSDictionary<NSString *, NSNumber *> *result = [LibretroSkinLayout clampOverride:@{@"dx" : @0, @"dy" : @0.1, @"scale" : @1.3}
+                                                                          previous:previous
+                                                                           forItem:a
+                                                                    representation:rep
+                                                                          viewSize:view
+                                                                        safeInsets:kNoInsets
+                                                                            fitted:&fitted];
+  CHECK(fitted && fabs(result[@"scale"].doubleValue - 1.3) < 1e-9 && fabs(result[@"dy"].doubleValue - 0.1) < 1e-9 &&
+            fabs(result[@"dx"].doubleValue) < 1e-9,
+        @"a pinch that fits is kept");
+  // Pinched to 2x: 120 points never fit in the 100-point column.
+  fitted = YES;
+  result = [LibretroSkinLayout clampOverride:@{@"dx" : @0, @"dy" : @0.1, @"scale" : @2}
+                                    previous:previous
+                                     forItem:a
+                              representation:rep
+                                    viewSize:view
+                                  safeInsets:kNoInsets
+                                      fitted:&fitted];
+  CHECK(!fitted, @"a pinch that cannot fit is reported");
+  CHECK(fabs(result[@"scale"].doubleValue - 1.2) < 1e-9 && fabs(result[@"dy"].doubleValue - 0.1) < 1e-9 &&
+            fabs(result[@"dx"].doubleValue) < 1e-9,
+        @"the last valid move and size are kept, not the original place");
+  result = [LibretroSkinLayout clampOverride:@{@"dx" : @0, @"dy" : @0.1, @"scale" : @2}
+                                    previous:@{@"dx" : @0, @"dy" : @0, @"scale" : @2}
+                                     forItem:a
+                              representation:rep
+                                    viewSize:view
+                                  safeInsets:kNoInsets
+                                      fitted:NULL];
+  CHECK(fabs(result[@"scale"].doubleValue - 1) < 1e-9 && fabs(result[@"dx"].doubleValue) < 1e-9 &&
+            fabs(result[@"dy"].doubleValue) < 1e-9,
+        @"a previous value that no longer fits gives the original place");
+  result = [LibretroSkinLayout clampOverride:@{@"dx" : @0, @"dy" : @0.1, @"scale" : @2}
+                                     forItem:a
+                              representation:rep
+                                    viewSize:view
+                                  safeInsets:kNoInsets];
+  CHECK(fabs(result[@"scale"].doubleValue - 1) < 1e-9 && fabs(result[@"dy"].doubleValue) < 1e-9,
+        @"without a previous value (stored layouts): the original place");
+}
+
+static void TestKnob(void) {
+  LibretroSkinItem *stick = Item(@"stick", LibretroSkinItemKindThumbstick, LibretroRectMake(100, 100, 80, 80),
+                                 @[ @"leftStickUp", @"leftStickDown", @"leftStickLeft", @"leftStickRight" ], 0, YES);
+  stick.thumbstickSize = (LibretroSize){40, 40};
+  LibretroSkinRepresentation *rep = Representation(LibretroSkinOrientationLandscape, 400, 300, @[ stick ], @[]);
+  rep.generated = YES;
+  LibretroSkinLayoutResult *layout = [LibretroSkinLayout layoutRepresentation:rep
+                                                                     viewSize:(LibretroSize){400, 300}
+                                                                   safeInsets:kNoInsets
+                                                                    overrides:nil];
+  LibretroLaidOutItem *laidOut = LaidOut(layout, @"stick");
+  CHECK(RectNear([LibretroSkinLayout knobFrameForItem:laidOut stickX:0 stickY:0], LibretroRectMake(120, 120, 40, 40)),
+        @"released stick: knob centred");
+  CHECK(RectNear([LibretroSkinLayout knobFrameForItem:laidOut stickX:1 stickY:0], LibretroRectMake(140, 120, 40, 40)) &&
+            RectNear([LibretroSkinLayout knobFrameForItem:laidOut stickX:-1 stickY:-1], LibretroRectMake(100, 100, 40, 40)),
+        @"full deflection: the knob reaches the edge of the stick");
+  CHECK(RectNear([LibretroSkinLayout knobFrameForItem:laidOut stickX:0.5 stickY:0.25], LibretroRectMake(130, 125, 40, 40)),
+        @"partial deflection: proportional");
+  CHECK(RectNear([LibretroSkinLayout knobFrameForItem:laidOut stickX:3 stickY:NAN], LibretroRectMake(140, 120, 40, 40)),
+        @"vectors clamped, invalid values centred");
+  layout = [LibretroSkinLayout layoutRepresentation:rep
+                                           viewSize:(LibretroSize){400, 300}
+                                         safeInsets:kNoInsets
+                                          overrides:@{@"stick" : @{@"scale" : @1.5}}];
+  laidOut = LaidOut(layout, @"stick");
+  CHECK(RectNear([LibretroSkinLayout knobFrameForItem:laidOut stickX:0 stickY:1], LibretroRectMake(110, 140, 60, 60)),
+        @"a resized stick scales its knob and its travel %@",
+        Describe([LibretroSkinLayout knobFrameForItem:laidOut stickX:0 stickY:1]));
+  stick.thumbstickSize = (LibretroSize){0, 0};
+  layout = [LibretroSkinLayout layoutRepresentation:rep viewSize:(LibretroSize){400, 300} safeInsets:kNoInsets overrides:nil];
+  CHECK(RectNear([LibretroSkinLayout knobFrameForItem:LaidOut(layout, @"stick") stickX:1 stickY:0],
+                 LibretroRectMake(140, 120, 40, 40)),
+        @"no knob size: half the stick");
+  stick.thumbstickSize = (LibretroSize){80, 80};
+  layout = [LibretroSkinLayout layoutRepresentation:rep viewSize:(LibretroSize){400, 300} safeInsets:kNoInsets overrides:nil];
+  CHECK(RectNear([LibretroSkinLayout knobFrameForItem:LaidOut(layout, @"stick") stickX:1 stickY:0],
+                 LibretroRectMake(120, 100, 80, 80)),
+        @"a knob as large as the stick still moves (a quarter of it)");
+}
+
+static NSValue *MappingValue(LibretroRect output, LibretroRect source) {
+  LibretroScreenMapping mapping;
+  memset(&mapping, 0, sizeof(mapping));
+  mapping.output = output;
+  mapping.source = source;
+  mapping.rotation = 0;
+  return [NSValue valueWithBytes:&mapping objCType:@encode(LibretroScreenMapping)];
+}
+
+static void TestPointerMapping(void) {
+  LibretroRect bottomSource = LibretroRectMake(0, 0.5, 1, 0.5);
+  LibretroScreenMapping held;
+  memset(&held, 0, sizeof(held));
+  held.output = LibretroRectMake(50, 300, 290, 218);
+  held.source = bottomSource;
+  LibretroScreenMapping result;
+  memset(&result, 0, sizeof(result));
+  NSArray<NSValue *> *same = @[ MappingValue(LibretroRectMake(50, 300, 290, 218), bottomSource) ];
+  CHECK([LibretroSkinLayout resolvePointerMapping:held atX:345 y:400 mappings:same result:&result] &&
+            RectNear(result.output, held.output),
+        @"screen still drawn at the same place: the held stylus keeps it (even past its edge)");
+  // Screens swapped: the touch screen is now drawn in the upper place.
+  NSArray<NSValue *> *swapped = @[ MappingValue(LibretroRectMake(50, 60, 290, 218), bottomSource) ];
+  CHECK(![LibretroSkinLayout resolvePointerMapping:held atX:200 y:400 mappings:swapped result:&result],
+        @"swapped under the finger, which is now on the top screen: released");
+  CHECK([LibretroSkinLayout resolvePointerMapping:held atX:200 y:100 mappings:swapped result:&result] &&
+            RectNear(result.output, LibretroRectMake(50, 60, 290, 218)),
+        @"a finger that is on the touch screen's new place follows it");
+  int16_t x = 0, y = 0;
+  CHECK(LibretroPointerFromPoint(result, 195, 169, NO, &x, &y) && x == 0 && y > 0,
+        @"and is converted with the new rectangle (%d, %d)", x, y);
+  LibretroRect odd = LibretroRectMake(0, 0, 1000, 1000);
+  NSArray *junk = @[ [NSValue valueWithBytes:&odd objCType:@encode(LibretroRect)], @"x" ];
+  CHECK(![LibretroSkinLayout resolvePointerMapping:held atX:200 y:400 mappings:junk result:&result] &&
+            ![LibretroSkinLayout resolvePointerMapping:held atX:200 y:400 mappings:@[] result:&result],
+        @"no touch screen any more (or values that are not mappings): released");
+}
+
 int main(int argc, const char *argv[]) {
   @autoreleasepool {
     TestPortraitPinned();
@@ -370,6 +638,11 @@ int main(int argc, const char *argv[]) {
     TestOverrides();
     TestClamp();
     TestHitTesting();
+    TestDPadAgainstTouchScreen();
+    TestTouchScreenPriority();
+    TestClampKeepsPrevious();
+    TestKnob();
+    TestPointerMapping();
   }
   printf("%s: %d failure(s)\n", failures == 0 ? "skin_layout_test passed" : "skin_layout_test FAILED", failures);
   return failures == 0 ? 0 : 1;

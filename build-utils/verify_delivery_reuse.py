@@ -436,6 +436,10 @@ FRONTEND_DELTA = {
     'test/libretro_skin_catalog_test.dart',
     'test/libretro_skin_manager_test.dart',
     'test/libretro_skin_service_test.dart',
+    'packages/libretro_internal_bridge/ios/Classes/LibretroChromeLayout.h',
+    'packages/libretro_internal_bridge/ios/Classes/LibretroChromeLayout.m',
+    'test/libretro_host/frontend/chrome_layout_test.m',
+    'test/libretro_playlist_actions_test.dart',
 }
 DELTA |= FRONTEND_DELTA
 INPUT_ROOTS = ('lib/', 'packages/', 'native/', 'build-utils/', 'assets/', 'test/')

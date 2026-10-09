@@ -806,17 +806,14 @@ static NSArray<LibretroPresenterScreen *> *CopyScreens(NSArray *screens) {
     uniforms.uvMin = simd_make_float2((float)minU, (float)minV);
     uniforms.uvMax = simd_make_float2((float)maxU, (float)maxV);
 
-    double sourceWidth = source.w * frameWidth;
-    double sourceHeight = source.h * frameHeight;
-    const LibretroSize nominal = screen.nominalSize;
-    if (nominal.w > 0.0 && nominal.h > 0.0 && isfinite(nominal.w) && isfinite(nominal.h)) {
-      sourceWidth = nominal.w;
-      sourceHeight = nominal.h;
-    }
-    sourceWidth = fmax(sourceWidth, 1.0);
-    sourceHeight = fmax(sourceHeight, 1.0);
-    uniforms.SourceSize = simd_make_float4((float)sourceWidth, (float)sourceHeight, (float)(1.0 / sourceWidth),
-                                           (float)(1.0 / sourceHeight));
+    // The console's pixels only when this frame is a uniform upscale of them
+    // (PSP 960x544 -> 480x272); otherwise the part's real texels, compared
+    // with every frame (Nestopia crops the NES frame to 256x224, a Mega
+    // Drive game switches between 256 and 320 wide).
+    const LibretroSize texels = {source.w * frameWidth, source.h * frameHeight};
+    const LibretroSize sourceSize = LibretroShaderSourceSize(texels, screen.nominalSize);
+    uniforms.SourceSize = simd_make_float4((float)sourceSize.w, (float)sourceSize.h, (float)(1.0 / sourceSize.w),
+                                           (float)(1.0 / sourceSize.h));
     uniforms.OriginalSize = uniforms.SourceSize;
     // Along the picture's own axes: a quarter turn swaps the drawn sides.
     const double outputAlongX = fmax(quarterTurn ? output.h : output.w, 1.0);

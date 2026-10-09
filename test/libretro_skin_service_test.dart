@@ -19,6 +19,9 @@ class FakeNative {
   final skinDirectoryPresentAtForget = <bool>[];
   Map<String, Object?> Function(String directory) inspect = deltaSummary;
 
+  /// setFrontendSetting answers false (nothing stored) when this is true.
+  bool Function(Map<String, Object?> arguments) refuseSetting = (_) => false;
+
   static Map<String, Object?> deltaSummary(String directory) {
     final info = jsonDecode(File(path.join(directory, 'info.json')).readAsStringSync()) as Map;
     return <String, Object?>{
@@ -65,6 +68,7 @@ class FakeNative {
         final scope = _scope(arguments['console'] as String, arguments['game'] as String?);
         final key = arguments['key'] as String;
         final value = arguments['value'];
+        if (refuseSetting(arguments)) return false;
         if (value == null) {
           scope.remove(key);
         } else {
@@ -426,6 +430,178 @@ void main() {
     expect(native.named('forgetSkin'), isEmpty);
   });
 
+  test('a replacement whose new skin cannot be installed keeps the old skin and its selections', () async {
+    final old = (await importFiles(<String, List<int>>{
+      'info.json': infoJson(name: 'Old Name'),
+      'gba.pdf': utf8.encode('%PDF-1.4 old'),
+    }) as LibretroSkinImported)
+        .skin;
+    await service.select(console: 'gba', orientation: 'portrait', skinId: old.id);
+    await service.select(console: 'gba', orientation: 'landscape', skinId: old.id, game: 'gba/game.gba');
+
+    final newer = zipOf(<String, List<int>>{
+      'info.json': infoJson(name: 'New Name'),
+      'gba.pdf': utf8.encode('%PDF-1.4 new'),
+    });
+    final pending = await service.importFromFile((await archiveFile(newer)).path)
+        as LibretroSkinNeedsReplaceConfirmation;
+    // A file where the new skin's directory goes: moving the new skin into
+    // place fails, as on a full disk or an I/O error.
+    final obstacle = File(pending.skin.directory)..writeAsStringSync('in the way');
+
+    final failed = await service.replace(pending);
+    expectRefused(failed, LibretroSkinMessages.importFailed);
+    expect((failed as LibretroSkinImportFailed).technicalDetails, isNotEmpty);
+    expect(native.named('forgetSkin'), isEmpty);
+    expect(File(path.join(old.directory, 'gba.pdf')).readAsStringSync(), '%PDF-1.4 old');
+    expect((await service.installedSkins()).map((installed) => installed.id), <String>[old.id]);
+    expect(await service.selectedSkins('gba'), <String, String?>{'portrait': old.id, 'landscape': null});
+    expect(await service.selectedSkins('gba', game: 'gba/game.gba'),
+        <String, String?>{'portrait': null, 'landscape': old.id});
+    expect(Directory(stagingPath()).listSync(), isEmpty);
+
+    // Without the obstacle, the same archive replaces the old skin.
+    obstacle.deleteSync();
+    final again = await service.importFromFile((await archiveFile(newer)).path)
+        as LibretroSkinNeedsReplaceConfirmation;
+    final replaced = (await service.replace(again) as LibretroSkinImported).skin;
+    expect(replaced.id, pending.skin.id);
+    expect(native.named('forgetSkin').single.arguments['skinId'], old.id);
+    expect(Directory(old.directory).existsSync(), isFalse);
+    expect(await service.selectedSkins('gba'), <String, String?>{'portrait': replaced.id, 'landscape': null});
+    expect(await service.selectedSkins('gba', game: 'gba/game.gba'),
+        <String, String?>{'portrait': null, 'landscape': replaced.id});
+  });
+
+  test('a replacement whose selections cannot move takes the new skin back out', () async {
+    final old = (await importFiles(<String, List<int>>{'info.json': infoJson(name: 'Old Name')})
+            as LibretroSkinImported)
+        .skin;
+    await service.select(console: 'gba', orientation: 'portrait', skinId: old.id);
+    await service.select(console: 'gba', orientation: 'landscape', skinId: old.id, game: 'gba/game.gba');
+    final pending = await importFiles(<String, List<int>>{
+      'info.json': infoJson(name: 'New Name'),
+      'extra.pdf': utf8.encode('%PDF-1.4'),
+    }) as LibretroSkinNeedsReplaceConfirmation;
+
+    // The console choice moves (it comes first), the game choice is refused.
+    native.refuseSetting = (arguments) => arguments['value'] == pending.skin.id && arguments['game'] != null;
+    final failed = await service.replace(pending);
+    expectRefused(failed, LibretroSkinMessages.importFailed);
+
+    // Only the new skin is forgotten and deleted; the moved choice is back.
+    expect(native.named('forgetSkin').map((call) => call.arguments['skinId']), <Object?>[pending.skin.id]);
+    expect(Directory(pending.skin.directory).existsSync(), isFalse);
+    expect(Directory(old.directory).existsSync(), isTrue);
+    expect((await service.installedSkins()).map((installed) => installed.id), <String>[old.id]);
+    expect(await service.selectedSkins('gba'), <String, String?>{'portrait': old.id, 'landscape': null});
+    expect(await service.selectedSkins('gba', game: 'gba/game.gba'),
+        <String, String?>{'portrait': null, 'landscape': old.id});
+    expect(Directory(stagingPath()).listSync(), isEmpty);
+  });
+
+  test('an archive cannot provide the metadata file NeoStation writes at the skin root', () async {
+    final layouts = <Map<String, List<int>>>[
+      // A folder of that name would make the metadata write fail.
+      <String, List<int>>{'info.json': infoJson(), '${LibretroSkinService.metadataFileName}/x': <int>[1]},
+      <String, List<int>>{
+        'info.json': infoJson(),
+        LibretroSkinService.metadataFileName: utf8.encode('{"author": "someone else"}'),
+      },
+      <String, List<int>>{'Lux/info.json': infoJson(), 'Lux/NeoStation-Skin.JSON': utf8.encode('{}')},
+    ];
+    for (final files in layouts) {
+      expectRefused(await importFiles(files), LibretroSkinMessages.unsafe);
+    }
+    expect(native.named('inspectSkin'), isEmpty);
+    expectNothingInstalled();
+
+    // Deeper in the skin the name is an ordinary file.
+    final nested = await importFiles(<String, List<int>>{
+      'info.json': infoJson(),
+      'assets/${LibretroSkinService.metadataFileName}': utf8.encode('{}'),
+    });
+    expect(nested, isA<LibretroSkinImported>());
+  });
+
+  test('a .zip wrapping one skin archive installs that skin, with the id of the skin archive', () async {
+    final skin = zipOf(<String, List<int>>{
+      'info.json': infoJson(name: 'PSP Controller', identifier: 'com.example.pspcontroller'),
+      'iphone_edgetoedge_landscape.pdf': utf8.encode('%PDF-1.4 psp'),
+    });
+    final wrapper = zipOf(<String, List<int>>{
+      'pspcontroller.manicskin': skin,
+      '__MACOSX/._pspcontroller.manicskin': <int>[0, 5, 22, 7],
+    });
+    final result = await service.importFromFile((await archiveFile(wrapper)).path);
+    expect(result, isA<LibretroSkinImported>());
+    final installed = (result as LibretroSkinImported).skin;
+    final digest = sha256.convert(skin).toString();
+    expect(installed.id, digest.substring(0, 16));
+    expect(installed.sha256, digest);
+    expect(installed.name, 'PSP Controller');
+    final names = Directory(installed.directory)
+        .listSync(recursive: true)
+        .map((entity) => path.relative(entity.path, from: installed.directory))
+        .toSet();
+    expect(names, <String>{'info.json', 'iphone_edgetoedge_landscape.pdf', LibretroSkinService.metadataFileName});
+    expect(File(path.join(installed.directory, 'iphone_edgetoedge_landscape.pdf')).readAsStringSync(),
+        '%PDF-1.4 psp');
+    expect(Directory(stagingPath()).listSync(), isEmpty);
+
+    // The same skin imported on its own is already installed.
+    final direct = await service.importFromFile((await archiveFile(skin)).path) as LibretroSkinImported;
+    expect(direct.alreadyInstalled, isTrue);
+    expect(direct.skin.id, installed.id);
+    expect(native.named('inspectSkin'), hasLength(1));
+  });
+
+  test('a .zip of several skins is refused as a pack, and a wrapped skin meets every check', () async {
+    final one = zipOf(<String, List<int>>{'info.json': infoJson(identifier: 'com.example.one')});
+    final two = zipOf(<String, List<int>>{'info.json': infoJson(identifier: 'com.example.two')});
+    expectRefused(
+      await importFiles(<String, List<int>>{'One.deltaskin': one, 'Two.manicskin': two}),
+      LibretroSkinMessages.pack,
+    );
+    expectRefused(
+      await importFiles(<String, List<int>>{'Pack/One.deltaskin': one, 'Pack/Two.DELTASKIN': two}),
+      LibretroSkinMessages.pack,
+    );
+
+    // The wrapped archive goes through the same checks as an imported one.
+    expectRefused(
+      await importFiles(<String, List<int>>{
+        'evil.deltaskin': zipOf(<String, List<int>>{'info.json': infoJson(), '../evil.png': pngHeader(16, 16)}),
+      }),
+      LibretroSkinMessages.unsafe,
+    );
+    expectRefused(
+      await importFiles(<String, List<int>>{
+        'huge.manicskin': zipOf(<String, List<int>>{'info.json': infoJson(), 'huge.png': pngHeader(9000, 16)}),
+      }),
+      LibretroSkinMessages.imageTooLarge,
+    );
+    expectRefused(
+      await importFiles(<String, List<int>>{
+        'bomb.deltaskin': zipOf(<String, List<int>>{'info.json': infoJson(), 'bomb.bin': Uint8List(2 * 1024 * 1024)}),
+      }),
+      LibretroSkinMessages.expandedTooLarge,
+      parameters: <String, Object>{'limit': 200},
+    );
+    expectRefused(
+      await importFiles(<String, List<int>>{'page.manicskin': utf8.encode('<!DOCTYPE html><html></html>')}),
+      LibretroSkinMessages.notArchive,
+    );
+    // Only one level is opened.
+    expectRefused(
+      await importFiles(<String, List<int>>{'outer.deltaskin': zipOf(<String, List<int>>{'inner.deltaskin': one})}),
+      LibretroSkinMessages.infoMissing,
+    );
+    expect(native.named('inspectSkin'), isEmpty);
+    expect(root.listSync(recursive: true).where((entity) => path.basename(entity.path) == 'evil.png'), isEmpty);
+    expectNothingInstalled();
+  });
+
   test('deleting a skin makes the native store forget it first', () async {
     final skin = (await importFiles(<String, List<int>>{'info.json': infoJson()}) as LibretroSkinImported).skin;
     await service.select(console: 'gba', orientation: 'landscape', skinId: skin.id);
@@ -497,6 +673,7 @@ void main() {
         LibretroSkinMessages.download,
         LibretroSkinMessages.notDirect,
         LibretroSkinMessages.importFailed,
+        LibretroSkinMessages.pack,
       ]);
     for (final key in keys) {
       expect(english.containsKey(key), isTrue, reason: key);

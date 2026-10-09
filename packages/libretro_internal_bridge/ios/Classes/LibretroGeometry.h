@@ -70,6 +70,19 @@ FOUNDATION_EXPORT double LibretroSourceAspect(double coreAspect, LibretroRect so
 FOUNDATION_EXPORT LibretroRect LibretroFitScreen(LibretroRect container, double sourceAspect,
                                                  LibretroScreenFormat format);
 
+/// SourceSize / OriginalSize given to a shader preset for one screen
+/// (LibretroShaderUniforms). `texels`: size of the screen's part of the core
+/// frame, in texels. `nominal`: the console's pixels for that screen ({0,0}
+/// when unknown, e.g. arcade).
+/// Returns `nominal` only when the frame is a uniform upscale of it: both
+/// axis scales (texels / nominal) within 2 % of each other and neither below
+/// 0.98 (PSP 960x544 -> 480x272, N64 or 3DS 640x480 -> 320x240). Otherwise
+/// returns `texels` unchanged, the size RetroArch gives slang shaders
+/// (Nestopia's 256x224 NES frame against 256x240, mGBA's 256x224 Super Game
+/// Boy frame against 160x144, PSX 368x240 or 320x288 against 320x240).
+/// Never below 1x1; NaN or infinite sizes count as unknown.
+FOUNDATION_EXPORT LibretroSize LibretroShaderSourceSize(LibretroSize texels, LibretroSize nominal);
+
 /// One drawn screen: where it appears (`output`, any coordinate space) and
 /// which normalized part of the core image it shows (`source`, top-left
 /// origin, before rotation).

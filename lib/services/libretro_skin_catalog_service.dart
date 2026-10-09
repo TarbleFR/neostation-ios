@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
@@ -104,6 +105,7 @@ class LibretroSkinCatalogService {
     http.Client? client,
     DateTime Function()? clock,
     this.maxDownloadBytes = LibretroSkinService.maxArchiveBytes,
+    this.downloadIdleTimeout = requestTimeout,
   })  : _client = client ?? http.Client(),
         _ownsClient = client == null,
         _clock = clock ?? DateTime.now;
@@ -128,6 +130,11 @@ class LibretroSkinCatalogService {
   final String cacheDirectory;
   final LibretroSkinService skins;
   final int maxDownloadBytes;
+
+  /// Longest wait for the next part of a download body once the response
+  /// has started: a body that stops arriving (stalled host, lost mobile
+  /// connection) fails instead of keeping the entry installing forever.
+  final Duration downloadIdleTimeout;
   final http.Client _client;
   final bool _ownsClient;
   final DateTime Function() _clock;
@@ -219,8 +226,11 @@ class LibretroSkinCatalogService {
       parameters: <String, Object>{'limit': maxDownloadBytes ~/ (1024 * 1024)},
     );
     final response = await _client.send(http.Request('GET', uri)).timeout(requestTimeout);
+    // A body that will not be used is not read (an error page or an
+    // oversized file could also stall or run long): its subscription is
+    // cancelled, which closes the connection.
     if (response.statusCode != 200) {
-      await response.stream.drain<void>();
+      await response.stream.listen(null).cancel();
       return LibretroSkinImportFailed(
         LibretroSkinMessages.download,
         technicalDetails: 'HTTP ${response.statusCode} ${uri.host}',
@@ -228,14 +238,24 @@ class LibretroSkinCatalogService {
     }
     final declared = response.contentLength;
     if (declared != null && declared > maxDownloadBytes) {
-      await response.stream.drain<void>();
+      await response.stream.listen(null).cancel();
       return tooLarge;
     }
+    // Inactivity limit between two parts of the body: leaving the loop on
+    // the timeout error cancels the HTTP subscription, and download() reports
+    // the failure and removes the partial file.
+    final body = response.stream.timeout(
+      downloadIdleTimeout,
+      onTimeout: (events) {
+        events.addError(TimeoutException('Skin download stalled', downloadIdleTimeout));
+        events.close();
+      },
+    );
     final sink = file.openWrite();
     final head = <int>[];
     var received = 0;
     try {
-      await for (final chunk in response.stream) {
+      await for (final chunk in body) {
         received += chunk.length;
         if (received > maxDownloadBytes) return tooLarge;
         if (head.length < 4) {

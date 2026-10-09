@@ -59,6 +59,7 @@ abstract final class LibretroLocale {
     'shaderCredits', 'shaderMeasuring', 'settingScreenLayout',
     'layoutTopBottom', 'layoutLeftRight', 'layoutHybridTop', 'layoutTopOnly',
     'layoutBottomOnly',
+    'controlsOpacityNotApplicable', 'controlsGameLayoutApplies',
   ];
 
   /// Native error codes and their translated message keys.
@@ -365,6 +366,10 @@ abstract final class LibretroLocale {
       'skinErrorTooManyFiles': 'The archive contains too many files (limit {limit}).',
       'skinErrorExpandedTooLarge': 'The skin is too large once unpacked (limit {limit} MB).',
       'skinErrorImageTooLarge': 'An image of the skin is too large to be displayed.',
+      'controlsOpacityNotApplicable': 'This skin is opaque: its buttons are part of its picture, so opacity does not apply.',
+      'controlsGameLayoutApplies': 'This game has its own layout, which still applies to it.',
+      'skinInstalledForOtherConsoles': 'Installed for {consoles}, not for this console.',
+      'skinErrorPack': 'This archive holds several skins. Extract it and import the skins one at a time.',
     },
     'fr': {
       'menu': 'Menu',
@@ -631,6 +636,10 @@ abstract final class LibretroLocale {
       'skinErrorTooManyFiles': 'L’archive contient trop de fichiers (limite {limit}).',
       'skinErrorExpandedTooLarge': 'Le skin est trop volumineux une fois décompressé (limite {limit} Mo).',
       'skinErrorImageTooLarge': 'Une image du skin est trop grande pour être affichée.',
+      'controlsOpacityNotApplicable': 'Ce skin est opaque : ses boutons font partie de son image, l’opacité ne s’applique donc pas.',
+      'controlsGameLayoutApplies': 'Ce jeu a sa propre disposition, qui continue de s’appliquer à lui.',
+      'skinInstalledForOtherConsoles': 'Installé pour {consoles}, pas pour cette console.',
+      'skinErrorPack': 'Cette archive contient plusieurs skins. Décompressez-la et importez les skins un par un.',
     },
     'de': {
       'menu': 'Menü',
@@ -897,6 +906,10 @@ abstract final class LibretroLocale {
       'skinErrorTooManyFiles': 'Das Archiv enthält zu viele Dateien (max. {limit}).',
       'skinErrorExpandedTooLarge': 'Der Skin ist entpackt zu groß (max. {limit} MB).',
       'skinErrorImageTooLarge': 'Ein Bild des Skins ist zu groß für die Anzeige.',
+      'controlsOpacityNotApplicable': 'Dieser Skin ist deckend: Seine Tasten sind Teil seines Bildes, daher gilt die Deckkraft nicht.',
+      'controlsGameLayoutApplies': 'Dieses Spiel hat ein eigenes Layout, das für es weiterhin gilt.',
+      'skinInstalledForOtherConsoles': 'Installiert für {consoles}, nicht für diese Konsole.',
+      'skinErrorPack': 'Dieses Archiv enthält mehrere Skins. Entpacke es und importiere die Skins einzeln.',
     },
     'es': {
       'menu': 'Menú',
@@ -1163,6 +1176,10 @@ abstract final class LibretroLocale {
       'skinErrorTooManyFiles': 'El paquete contiene demasiados archivos (límite: {limit}).',
       'skinErrorExpandedTooLarge': 'El skin es demasiado grande una vez descomprimido (límite: {limit} MB).',
       'skinErrorImageTooLarge': 'Una imagen del skin es demasiado grande para mostrarse.',
+      'controlsOpacityNotApplicable': 'Este skin es opaco: sus botones forman parte de su imagen, por lo que la opacidad no se aplica.',
+      'controlsGameLayoutApplies': 'Este juego tiene su propia disposición, que sigue aplicándose a él.',
+      'skinInstalledForOtherConsoles': 'Instalado para {consoles}, no para esta consola.',
+      'skinErrorPack': 'Este archivo contiene varios skins. Descomprímelo e importa los skins de uno en uno.',
     },
     'it': {
       'menu': 'Menu',
@@ -1429,6 +1446,10 @@ abstract final class LibretroLocale {
       'skinErrorTooManyFiles': 'L’archivio contiene troppi file (limite {limit}).',
       'skinErrorExpandedTooLarge': 'La skin è troppo grande una volta decompressa (limite {limit} MB).',
       'skinErrorImageTooLarge': 'Un’immagine della skin è troppo grande per essere visualizzata.',
+      'controlsOpacityNotApplicable': 'Questa skin è opaca: i suoi pulsanti fanno parte dell’immagine, quindi l’opacità non si applica.',
+      'controlsGameLayoutApplies': 'Questo gioco ha una propria disposizione, che continua ad applicarsi.',
+      'skinInstalledForOtherConsoles': 'Installata per {consoles}, non per questa console.',
+      'skinErrorPack': 'Questo archivio contiene più skin. Estrailo e importa le skin una alla volta.',
     },
     'pt': {
       'menu': 'Menu',
@@ -1695,6 +1716,10 @@ abstract final class LibretroLocale {
       'skinErrorTooManyFiles': 'O arquivo contém demasiados ficheiros (limite: {limit}).',
       'skinErrorExpandedTooLarge': 'O skin é demasiado grande depois de descomprimido (limite: {limit} MB).',
       'skinErrorImageTooLarge': 'Uma imagem do skin é demasiado grande para ser apresentada.',
+      'controlsOpacityNotApplicable': 'Este skin é opaco: os botões fazem parte da sua imagem, por isso a opacidade não se aplica.',
+      'controlsGameLayoutApplies': 'Este jogo tem a sua própria disposição, que continua a aplicar-se a ele.',
+      'skinInstalledForOtherConsoles': 'Instalado para {consoles}, não para esta consola.',
+      'skinErrorPack': 'Este arquivo contém vários skins. Extraia-o e importe os skins um de cada vez.',
     },
     'ru': {
       'menu': 'Меню',
@@ -1961,6 +1986,10 @@ abstract final class LibretroLocale {
       'skinErrorTooManyFiles': 'Архив содержит слишком много файлов (предел — {limit}).',
       'skinErrorExpandedTooLarge': 'В распакованном виде скин слишком большой (предел — {limit} МБ).',
       'skinErrorImageTooLarge': 'Одно из изображений скина слишком большое для отображения.',
+      'controlsOpacityNotApplicable': 'Этот скин непрозрачный: его кнопки — часть изображения, поэтому непрозрачность не применяется.',
+      'controlsGameLayoutApplies': 'У этой игры собственный макет, и он продолжает действовать для неё.',
+      'skinInstalledForOtherConsoles': 'Установлен для {consoles}, но не для этой консоли.',
+      'skinErrorPack': 'Этот архив содержит несколько скинов. Распакуйте его и импортируйте скины по одному.',
     },
     'id': {
       'menu': 'Menu',
@@ -2227,6 +2256,10 @@ abstract final class LibretroLocale {
       'skinErrorTooManyFiles': 'Arsip berisi terlalu banyak file (batas {limit}).',
       'skinErrorExpandedTooLarge': 'Skin terlalu besar setelah diekstrak (batas {limit} MB).',
       'skinErrorImageTooLarge': 'Salah satu gambar skin terlalu besar untuk ditampilkan.',
+      'controlsOpacityNotApplicable': 'Skin ini buram: tombolnya bagian dari gambarnya, jadi opasitas tidak berlaku.',
+      'controlsGameLayoutApplies': 'Game ini memiliki tata letaknya sendiri, yang tetap berlaku untuknya.',
+      'skinInstalledForOtherConsoles': 'Terpasang untuk {consoles}, bukan untuk konsol ini.',
+      'skinErrorPack': 'Arsip ini berisi beberapa skin. Ekstrak lalu impor skin satu per satu.',
     },
     'ja': {
       'menu': 'メニュー',
@@ -2493,6 +2526,10 @@ abstract final class LibretroLocale {
       'skinErrorTooManyFiles': 'アーカイブ内のファイルが多すぎます（上限 {limit}）。',
       'skinErrorExpandedTooLarge': '展開後のスキンが大きすぎます（上限 {limit} MB）。',
       'skinErrorImageTooLarge': 'スキンの画像が大きすぎて表示できません。',
+      'controlsOpacityNotApplicable': 'このスキンは不透明です。ボタンが画像の一部のため、不透明度は適用されません。',
+      'controlsGameLayoutApplies': 'このゲームには独自のレイアウトがあり、引き続きこのゲームに適用されます。',
+      'skinInstalledForOtherConsoles': '{consoles} 用にインストールしました。このコンソール用ではありません。',
+      'skinErrorPack': 'このアーカイブには複数のスキンが含まれています。展開してスキンを1つずつ読み込んでください。',
     },
     'ko': {
       'menu': '메뉴',
@@ -2759,6 +2796,10 @@ abstract final class LibretroLocale {
       'skinErrorTooManyFiles': '압축 파일에 파일이 너무 많습니다(최대 {limit}개).',
       'skinErrorExpandedTooLarge': '압축을 풀면 스킨이 너무 큽니다(최대 {limit}MB).',
       'skinErrorImageTooLarge': '스킨 이미지가 너무 커서 표시할 수 없습니다.',
+      'controlsOpacityNotApplicable': '이 스킨은 불투명합니다. 버튼이 이미지의 일부이므로 불투명도가 적용되지 않습니다.',
+      'controlsGameLayoutApplies': '이 게임에는 자체 레이아웃이 있으며 계속 이 게임에 적용됩니다.',
+      'skinInstalledForOtherConsoles': '{consoles}용으로 설치했으며 이 콘솔용은 아닙니다.',
+      'skinErrorPack': '이 압축 파일에는 여러 스킨이 들어 있습니다. 압축을 풀고 스킨을 하나씩 가져오세요.',
     },
     'zh': {
       'menu': '菜单',
@@ -3025,6 +3066,10 @@ abstract final class LibretroLocale {
       'skinErrorTooManyFiles': '压缩包中的文件过多（上限 {limit} 个）。',
       'skinErrorExpandedTooLarge': '皮肤解压后过大（上限 {limit} MB）。',
       'skinErrorImageTooLarge': '皮肤中的某张图像过大，无法显示。',
+      'controlsOpacityNotApplicable': '此皮肤不透明：按键是其图像的一部分，因此不透明度不适用。',
+      'controlsGameLayoutApplies': '此游戏有自己的布局，该布局仍会应用于此游戏。',
+      'skinInstalledForOtherConsoles': '已为 {consoles} 安装，不适用于此主机。',
+      'skinErrorPack': '此压缩包包含多个皮肤。请解压后逐个导入皮肤。',
     },
     'zh_Hant': {
       'menu': '選單',
@@ -3291,6 +3336,10 @@ abstract final class LibretroLocale {
       'skinErrorTooManyFiles': '壓縮檔中的檔案過多（上限 {limit} 個）。',
       'skinErrorExpandedTooLarge': '外觀解壓縮後過大（上限 {limit} MB）。',
       'skinErrorImageTooLarge': '外觀中的某張圖片過大，無法顯示。',
+      'controlsOpacityNotApplicable': '此外觀不透明：按鍵是其圖像的一部分，因此不透明度不適用。',
+      'controlsGameLayoutApplies': '此遊戲有自己的版面配置，該配置仍會套用於此遊戲。',
+      'skinInstalledForOtherConsoles': '已為 {consoles} 安裝，不適用於此主機。',
+      'skinErrorPack': '此壓縮檔包含多個外觀。請解壓縮後逐一匯入外觀。',
     },
   };
 

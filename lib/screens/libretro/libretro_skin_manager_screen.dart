@@ -167,17 +167,22 @@ class _LibretroFocusRingState extends State<LibretroFocusRing> {
 }
 
 /// Shows the outcome of a skin import (from Files or from the catalog) and
-/// runs the replacement confirmation. True when a skin was installed.
-Future<bool> showLibretroSkinImportResult(
+/// runs the replacement confirmation. Returns the installed skin, null when
+/// nothing was installed. With [console] (the console of the page the import
+/// started from), a skin whose info.json declares other consoles only is
+/// announced as installed for those consoles: it is listed on their pages,
+/// not on this one.
+Future<LibretroInstalledSkin?> showLibretroSkinImportResult(
   BuildContext context,
   LibretroSkinService skins,
-  LibretroSkinImportResult? result,
-) async {
-  if (result == null) return false;
+  LibretroSkinImportResult? result, {
+  String? console,
+}) async {
+  if (result == null) return null;
   if (result is LibretroSkinNeedsReplaceConfirmation) {
     if (!context.mounted) {
       await skins.discard(result);
-      return false;
+      return null;
     }
     final replace = await ConfirmActionDialog.show(
       context,
@@ -192,15 +197,15 @@ Future<bool> showLibretroSkinImportResult(
     );
     if (!replace) {
       await skins.discard(result);
-      return false;
+      return null;
     }
     final replaced = await skins.replace(result);
-    if (!context.mounted) return replaced is LibretroSkinImported;
-    return showLibretroSkinImportResult(context, skins, replaced);
+    if (!context.mounted) return replaced is LibretroSkinImported ? replaced.skin : null;
+    return showLibretroSkinImportResult(context, skins, replaced, console: console);
   }
   if (result is LibretroSkinImported) {
-    if (context.mounted) _showSkinImported(context, result.skin);
-    return true;
+    if (context.mounted) _showSkinImported(context, result.skin, console: console);
+    return result.skin;
   }
   if (result is LibretroSkinImportFailed) {
     LoggerService.instance.w(
@@ -208,8 +213,12 @@ Future<bool> showLibretroSkinImportResult(
     );
     if (context.mounted) _showSkinImportFailed(context, result);
   }
-  return false;
+  return null;
 }
+
+/// Product names of embedded consoles (ids without a known name are kept).
+String libretroConsoleNames(Iterable<String> consoles) =>
+    consoles.map((id) => LibretroCoreCatalog.consoles[id]?.name ?? id).join(', ');
 
 Locale _localeOf(BuildContext context) =>
     Localizations.maybeLocaleOf(context) ?? const Locale('en');
@@ -238,16 +247,23 @@ String libretroSkinFailureText(BuildContext context, LibretroSkinImportFailed fa
   );
 }
 
-void _showSkinImported(BuildContext context, LibretroInstalledSkin skin) {
+void _showSkinImported(BuildContext context, LibretroInstalledSkin skin, {String? console}) {
   final remarks = libretroSkinRemarks(context, skin);
+  final elsewhere = console != null && !skin.consoles.contains(console);
   ScaffoldMessenger.maybeOf(context)?.showSnackBar(
     SnackBar(
-      duration: Duration(seconds: remarks.isEmpty ? 4 : 10),
+      duration: Duration(seconds: remarks.isNotEmpty ? 10 : (elsewhere ? 8 : 4)),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(LibretroLocale.formatContext(context, 'skinsImported', {'name': skin.name})),
+          if (elsewhere)
+            _SnackLine(
+              text: LibretroLocale.formatContext(context, 'skinInstalledForOtherConsoles', {
+                'consoles': libretroConsoleNames(skin.consoles),
+              }),
+            ),
           if (remarks.isNotEmpty) ...[
             const SizedBox(height: 6),
             Text(LibretroLocale.text(context, 'skinsImportRemarks')),
@@ -432,7 +448,7 @@ class _LibretroSkinManagerScreenState extends State<LibretroSkinManagerScreen>
       resumePageNavigation();
     }
     if (mounted) {
-      await showLibretroSkinImportResult(context, skins, result);
+      await showLibretroSkinImportResult(context, skins, result, console: widget.console);
     } else if (result is LibretroSkinNeedsReplaceConfirmation) {
       await skins.discard(result);
     }
@@ -641,9 +657,7 @@ class _LibretroSkinManagerScreenState extends State<LibretroSkinManagerScreen>
         ),
         if (skin.license != null) Text(_f('skinsLicense', {'license': skin.license}), style: muted),
         Text(
-          _f('skinsForConsoles', {
-            'consoles': skin.consoles.map((id) => LibretroCoreCatalog.consoles[id]?.name ?? id).join(', '),
-          }),
+          _f('skinsForConsoles', {'consoles': libretroConsoleNames(skin.consoles)}),
           style: muted,
         ),
       ],

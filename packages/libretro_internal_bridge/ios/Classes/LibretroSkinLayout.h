@@ -56,20 +56,71 @@ NS_ASSUME_NONNULL_BEGIN
                                          overrides:(nullable NSDictionary<NSString *, NSDictionary *> *)overrides;
 
 /// Clamps a layout override so the moved / resized item stays inside the
-/// view and its frame does not intersect any touch-screen container (the
-/// DS / 3DS touch screen must never be covered by a moved button). Returns
-/// the corrected override {dx, dy, scale}.
+/// view and neither its frame nor its touch area (hit frame) intersects any
+/// touch-screen container or touch-screen item (the DS / 3DS touch screen
+/// must never be covered by a moved button). An imported skin whose own
+/// design already lets the item's touch area reach a touch screen keeps
+/// only the frame off it (the hit test then gives the touch screen priority
+/// outside the frame). Returns the corrected override {dx, dy, scale}; when
+/// no position fits, the original place {0, 0, 1}.
 + (NSDictionary<NSString *, NSNumber *> *)clampOverride:(NSDictionary<NSString *, NSNumber *> *)override
                                                 forItem:(LibretroSkinItem *)item
                                          representation:(LibretroSkinRepresentation *)representation
                                                viewSize:(LibretroSize)viewSize
                                              safeInsets:(LibretroInsets)safeInsets;
 
+/// Same clamp for an editing gesture: when no position fits `override`
+/// (for example a pinch too large for the room left beside the touch
+/// screen), returns `previous` (the last valid override, clamped again) or,
+/// when `previous` is nil or no longer fits, the original place {0, 0, 1}.
+/// `fitted` (optional) is set to YES only when `override` itself could be
+/// placed, so a caller can ignore a proposal that does not fit.
++ (NSDictionary<NSString *, NSNumber *> *)clampOverride:(NSDictionary<NSString *, NSNumber *> *)override
+                                               previous:(nullable NSDictionary<NSString *, NSNumber *> *)previous
+                                                forItem:(LibretroSkinItem *)item
+                                         representation:(LibretroSkinRepresentation *)representation
+                                               viewSize:(LibretroSize)viewSize
+                                             safeInsets:(LibretroInsets)safeInsets
+                                                 fitted:(nullable BOOL *)fitted;
+
 /// Items hit by a point, Delta rules: a thumbstick containing the point
 /// wins alone; else an item with the "menu" input is exclusive; else every
 /// button / D-pad whose hit frame contains the point; touch-screen items are
-/// returned only when nothing else is hit.
+/// returned only when nothing else is hit. On a drawn touch screen (the
+/// layout's touch-screen containers, or the frame of a touch-screen item),
+/// a control is hit only inside its visible frame: its extended edges never
+/// take a touch from the touch screen.
 + (NSArray<LibretroLaidOutItem *> *)itemsAtX:(double)x y:(double)y inLayout:(LibretroSkinLayoutResult *)layout;
+
+/// Same, with the rectangles where the touch screens are really drawn
+/// (`touchAreas`: NSValue of LibretroRect in view points, for example the
+/// presenter's touch-screen mappings, which can be smaller than their
+/// container); nil uses the layout's touch-screen containers. The frames of
+/// touch-screen items always count as touch screen.
++ (NSArray<LibretroLaidOutItem *> *)itemsAtX:(double)x
+                                           y:(double)y
+                                    inLayout:(LibretroSkinLayoutResult *)layout
+                                  touchAreas:(nullable NSArray<NSValue *> *)touchAreas;
+
+/// Knob of a thumbstick item for a stick vector (`x`, `y` in -1...1,
+/// clamped; y positive downward): centred on the frame for {0, 0}, moved by
+/// the vector times half the room between the knob and the frame (a
+/// quarter of the frame when the knob is as large as the frame). The knob
+/// size is the item's `thumbstickSize` scaled with the laid-out frame, or
+/// half the frame without one.
++ (LibretroRect)knobFrameForItem:(LibretroLaidOutItem *)laidOut stickX:(double)x stickY:(double)y;
+
+/// Pointer mapping a held finger keeps after the touch-screen mappings
+/// changed (screens swapped or moved, another arrangement): `current`
+/// unchanged when it is still published; else the published mapping whose
+/// output contains (`x`, `y`). Returns NO when the finger is no longer on
+/// any touch screen (the pointer must then be released). `mappings` holds
+/// LibretroScreenMapping values (other values are ignored).
++ (BOOL)resolvePointerMapping:(LibretroScreenMapping)current
+                         atX:(double)x
+                           y:(double)y
+                    mappings:(NSArray<NSValue *> *)mappings
+                      result:(nullable LibretroScreenMapping *)result;
 
 @end
 

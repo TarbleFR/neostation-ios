@@ -2,6 +2,7 @@
 
 #include <math.h>
 
+#import "LibretroChromeLayout.h"
 #import "LibretroDefaultSkins.h"
 #import "LibretroGeometry.h"
 #import "LibretroShaderLibrary.h"
@@ -1136,14 +1137,18 @@ static CGSize PreviewSize(LibretroSize reference, LibretroSkinOrientation orient
   NSString *identifier = preset.identifier;
   state.busy = YES;
   [self clearMeasurementOfState:state];
-  __weak LibretroFrontendMenu *weakSelf = self;
+  // The host calls this completion once and then drops it: holding the menu
+  // strongly creates no cycle, and a compilation that ends after the menu
+  // was closed is still saved (or, on failure, announced and undone), so the
+  // store always matches the picture. Only the page's own updates need the
+  // page to still exist.
+  LibretroFrontendMenu *menu = self;
   __weak LibretroMenuPage *weakPage = page;
   [host applyShaderPreset:identifier
                parameters:parameters
                completion:^(BOOL success) {
                  state.busy = NO;
-                 LibretroFrontendMenu *menu = weakSelf;
-                 if (menu == nil) return;
+                 LibretroMenuPage *target = weakPage;
                  if (success) {
                    [menu storeValue:@YES forKey:LibretroSettingShaderEnabled state:state];
                    [menu storeValue:identifier forKey:LibretroSettingShaderPreset state:state];
@@ -1151,19 +1156,19 @@ static CGSize PreviewSize(LibretroSize reference, LibretroSkinOrientation orient
                      [menu storeValue:RoundedParameters(parameters) forKey:LibretroSettingShaderParameters state:state];
                    }
                    LibretroShaderPreset *effective = [menu activeShaderPresetWithScope:NULL];
-                   if ([effective.identifier isEqualToString:identifier]) {
-                     [menu measureShaderWithState:state page:weakPage];
-                   } else {
+                   if (![effective.identifier isEqualToString:identifier]) {
                      // This game's own values hide the console-wide change.
-                     [menu applyResolvedShaderWithState:state page:weakPage];
+                     [menu applyResolvedShaderWithState:state page:target];
+                   } else if (target != nil) {
+                     [menu measureShaderWithState:state page:target];
                    }
                  } else {
                    [menu->_host showStatus:[menu text:@"shaderFailed"]];
                    if (previous != nil) {
-                     [menu restorePreset:previous parameters:previousParameters state:state page:weakPage];
+                     [menu restorePreset:previous parameters:previousParameters state:state page:target];
                    }
                  }
-                 [weakPage rebuild];
+                 [target rebuild];
                }];
   [self rebuildSoon:page];
 }
@@ -1181,8 +1186,11 @@ static CGSize PreviewSize(LibretroSize reference, LibretroSkinOrientation orient
                parameters:parameters
                completion:^(BOOL success) {
                  state.busy = NO;
-                 if (success) [weakSelf measureShaderWithState:state page:weakPage];
-                 [weakPage rebuild];
+                 // Nothing to save: only the page shows the measurement.
+                 LibretroMenuPage *target = weakPage;
+                 if (target == nil) return;
+                 if (success) [weakSelf measureShaderWithState:state page:target];
+                 [target rebuild];
                }];
 }
 
@@ -1196,20 +1204,21 @@ static CGSize PreviewSize(LibretroSize reference, LibretroSkinOrientation orient
   NSDictionary<NSString *, NSNumber *> *parameters = preset != nil ? [preset resolvedParameters:stored] : nil;
   state.busy = YES;
   [self clearMeasurementOfState:state];
-  __weak LibretroFrontendMenu *weakSelf = self;
+  // One-shot completion holding the menu (see activatePreset...): a failure
+  // that ends after the menu was closed is still announced.
+  LibretroFrontendMenu *menu = self;
   __weak LibretroMenuPage *weakPage = page;
   [host applyShaderPreset:preset.identifier
                parameters:parameters
                completion:^(BOOL success) {
                  state.busy = NO;
-                 LibretroFrontendMenu *menu = weakSelf;
-                 if (menu == nil) return;
+                 LibretroMenuPage *target = weakPage;
                  if (!success) {
                    [menu->_host showStatus:[menu text:@"shaderFailed"]];
-                 } else if (preset != nil) {
-                   [menu measureShaderWithState:state page:weakPage];
+                 } else if (preset != nil && target != nil) {
+                   [menu measureShaderWithState:state page:target];
                  }
-                 [weakPage rebuild];
+                 [target rebuild];
                }];
 }
 
@@ -1328,7 +1337,16 @@ static CGSize PreviewSize(LibretroSize reference, LibretroSkinOrientation orient
   edit.enabled = movable;
   edit.identifier = @"libretro-controls-edit";
   LibretroMenuSection *entries = [LibretroMenuSection sectionWithTitle:nil rows:@[ gamepad, touch, edit ]];
-  entries.footer = movable ? nil : [self text:@"controlsNotMovable"];
+  // Saving the layout for the console does not change this game when it
+  // has its own layout for the skin and orientation on screen.
+  NSString *layoutKey = LibretroSettingLayoutKey(host.currentSkin.installedIdentifier ?: LibretroDefaultSkinIdentifier,
+                                                 LibretroSkinOrientationName(host.currentOrientation));
+  BOOL gameLayoutApplies = movable && !state.gameScope && [LibretroChromeLayout game:[self currentGameKey]
+                                                                  hasOwnLayoutForKey:layoutKey
+                                                                               store:host.frontendStore
+                                                                             console:host.console ?: @""];
+  entries.footer = JoinedText(movable ? nil : [self text:@"controlsNotMovable"],
+                              gameLayoutApplies ? [self text:@"controlsGameLayoutApplies"] : nil, nil, nil);
 
   LibretroSettingScope opacityScope = LibretroSettingScopeDefault;
   float opacity = [self opacityWithScope:&opacityScope];
@@ -1349,10 +1367,14 @@ static CGSize PreviewSize(LibretroSize reference, LibretroSkinOrientation orient
                                                                           state:state
                                                                            page:page];
                                                      }];
-  slider.enabled = YES;
+  // An opaque imported skin draws its controls and its picture at full
+  // opacity (LibretroSkinRenderer): the slider would change nothing there.
+  BOOL opacityApplies = representation == nil || representation.generated || representation.translucent;
+  slider.enabled = opacityApplies;
   slider.identifier = @"libretro-controls-opacity";
   LibretroMenuSection *opacitySection = [LibretroMenuSection sectionWithTitle:nil rows:@[ slider ]];
-  opacitySection.footer = [self sourceTextForScope:opacityScope];
+  opacitySection.footer = JoinedText([self sourceTextForScope:opacityScope],
+                                     opacityApplies ? nil : [self text:@"controlsOpacityNotApplicable"], nil, nil);
 
   return @[
     [self scopeSectionWithState:state], entries, opacitySection,

@@ -1,5 +1,6 @@
 #import "LibretroGameViewController.h"
 
+#import "LibretroChromeLayout.h"
 #import "LibretroInputState.h"
 #import "LibretroSkinRenderer.h"
 #import "LibretroTouchOverlay.h"
@@ -13,8 +14,6 @@
 }
 @end
 
-static const CGFloat kMenuButtonWidth = 44;
-static const CGFloat kMenuButtonHeight = 40;
 static const CGFloat kEditBarPadding = 10;
 static const CGFloat kEditButtonHeight = 36;
 
@@ -47,6 +46,7 @@ static NSString *const kMenuInput = @"menu";
   // "Commandes › Modifier la disposition".
   BOOL _editing;
   NSMutableDictionary<NSString *, NSDictionary *> *_editOverrides;
+  LibretroControlsOverridesProvider _editStartingOverrides;
   NSString *_editSelectedItem;
   void (^_editFinished)(void);
   void (^_editReset)(void);
@@ -112,6 +112,10 @@ static NSString *const kMenuInput = @"menu";
   __weak LibretroSkinRenderer *renderer = _skinRenderer;
   _overlay.pressedItemsChanged = ^(NSSet<NSString *> *itemIdentifiers) {
     [renderer setPressedItems:itemIdentifiers];
+  };
+  // The knob of a held thumbstick follows the finger.
+  _overlay.stickVectorsChanged = ^(NSDictionary<NSString *, NSValue *> *vectors) {
+    [renderer setStickVectors:vectors];
   };
   [root addSubview:_overlay];
 
@@ -366,18 +370,24 @@ static NSString *const kMenuInput = @"menu";
 }
 
 /// Menu button: hidden when the skin has its own "menu" item (shown
-/// again when the skin's controls are hidden); otherwise at the top centre
-/// of the safe area in landscape, at the top-right corner of the game area
-/// in portrait, where the default skins leave the controls below.
+/// again when the skin's controls are hidden). Otherwise at the top centre
+/// in landscape, at the top-right corner of the safe area in portrait (the
+/// default skins' game area), unless that place covers a touch screen or a
+/// shown control: the button sits above the touch overlay and takes every
+/// touch in its frame, so LibretroChromeLayout moves it to the closest free
+/// place (DS / 3DS bottom screen swapped to the top, bottom screen only...).
 - (void)layoutChrome {
   if (!self.isViewLoaded) return;
   CGRect bounds = self.view.bounds;
-  UIEdgeInsets insets = self.view.safeAreaInsets;
-  BOOL portrait = bounds.size.height > bounds.size.width;
-  CGFloat x = portrait ? CGRectGetMaxX(bounds) - insets.right - kMenuButtonWidth - 10
-                       : CGRectGetMidX(bounds) - kMenuButtonWidth / 2;
-  _menuButton.frame = CGRectMake(x, insets.top + 6, kMenuButtonWidth, kMenuButtonHeight);
-  _menuButton.hidden = _editing || (_hasMenuItem && !_controlsHidden);
+  BOOL hidden = _editing || (_hasMenuItem && !_controlsHidden);
+  _menuButton.hidden = hidden;
+  if (!hidden) {
+    LibretroRect frame = [LibretroChromeLayout menuButtonFrameForLayout:_layout
+                                                               viewSize:[self layoutViewSize]
+                                                             safeInsets:[self layoutSafeInsets]
+                                                        controlsVisible:!_controlsHidden];
+    _menuButton.frame = CGRectMake(frame.x, frame.y, frame.w, frame.h);
+  }
   _spinner.center = CGPointMake(CGRectGetMidX(bounds), CGRectGetMidY(bounds));
   if (_editBar != nil && !_editBar.hidden) [self layoutEditBar];
 }
@@ -431,18 +441,33 @@ static NSString *const kMenuInput = @"menu";
                                      hint:(NSString *)hint
                                  finished:(void (^)(void))finished
                                     reset:(void (^)(void))reset {
+  [self beginEditingControlsWithDoneTitle:doneTitle
+                               resetTitle:resetTitle
+                                     hint:hint
+                        startingOverrides:nil
+                                 finished:finished
+                                    reset:reset];
+}
+
+- (void)beginEditingControlsWithDoneTitle:(NSString *)doneTitle
+                               resetTitle:(NSString *)resetTitle
+                                     hint:(NSString *)hint
+                        startingOverrides:(LibretroControlsOverridesProvider)startingOverrides
+                                 finished:(void (^)(void))finished
+                                    reset:(void (^)(void))reset {
   [self loadViewIfNeeded];
   [_overlay releaseAllTouches];
   _editing = YES;
   _editFinished = [finished copy];
   _editReset = [reset copy];
+  _editStartingOverrides = [startingOverrides copy];
   [self ensureEditBar];
   [_editDoneButton setTitle:doneTitle forState:UIControlStateNormal];
   [_editResetButton setTitle:resetTitle forState:UIControlStateNormal];
   _editHint.text = hint;
   _editBar.hidden = NO;
 
-  _editOverrides = [self storedOverrides];
+  _editOverrides = [self editingStartOverrides];
   __weak LibretroGameViewController *weakSelf = self;
   _overlay.editOverrides = _editOverrides;
   _overlay.editChanged = ^(NSString *itemIdentifier, NSDictionary<NSString *, NSNumber *> *override) {
@@ -461,11 +486,18 @@ static NSString *const kMenuInput = @"menu";
   UIAccessibilityPostNotification(UIAccessibilityScreenChangedNotification, _editBar);
 }
 
-/// Overrides stored for the representation on screen (game, else console).
-- (NSMutableDictionary<NSString *, NSDictionary *> *)storedOverrides {
+/// What the editor starts from, and comes back to after Reset: the
+/// session's overrides for the scope being edited, else those in effect for
+/// the representation on screen (game, else console).
+- (NSMutableDictionary<NSString *, NSDictionary *> *)editingStartOverrides {
   NSMutableDictionary<NSString *, NSDictionary *> *overrides = [NSMutableDictionary dictionary];
-  NSDictionary *stored =
-      _representation != nil ? [self.layoutSource layoutOverridesForRepresentation:_representation] : nil;
+  LibretroControlsOverridesProvider provider = _editStartingOverrides;
+  NSDictionary *stored = nil;
+  if (provider != nil) {
+    stored = provider();
+  } else if (_representation != nil) {
+    stored = [self.layoutSource layoutOverridesForRepresentation:_representation];
+  }
   for (id key in stored) {
     id value = stored[key];
     if ([key isKindOfClass:NSString.class] && [value isKindOfClass:NSDictionary.class]) overrides[key] = value;
@@ -490,12 +522,21 @@ static NSString *const kMenuInput = @"menu";
     }
   }
   if (item == nil || !item.movable) return;
-  // Inside the view and never over the DS / 3DS touch screen.
+  // Inside the view and never over the DS / 3DS touch screen; a proposal
+  // that cannot be placed leaves the item at its last valid place.
+  NSDictionary *previous = _editOverrides[itemIdentifier];
+  BOOL fitted = NO;
   value = [LibretroSkinLayout clampOverride:value
+                                   previous:[previous isKindOfClass:NSDictionary.class] ? previous : nil
                                     forItem:item
                              representation:_representation
                                    viewSize:[self layoutViewSize]
-                                 safeInsets:[self layoutSafeInsets]];
+                                 safeInsets:[self layoutSafeInsets]
+                                     fitted:&fitted];
+  if (!fitted) {
+    _overlay.editOverrides = _editOverrides;
+    return;
+  }
   _editOverrides[itemIdentifier] = value;
   _overlay.editOverrides = _editOverrides;
   [self scheduleSkinLayout];
@@ -570,9 +611,12 @@ static NSString *const kMenuInput = @"menu";
   if (!_editing) return;
   void (^reset)(void) = _editReset;
   if (reset != nil) reset();
-  // What is stored now (the console's layout after a game reset, or none).
-  _editOverrides = [self storedOverrides];
+  // What is stored now for the scope being edited (the console's layout
+  // after a game reset, nothing after a console reset).
+  _editOverrides = [self editingStartOverrides];
   _overlay.editOverrides = _editOverrides;
+  // No pinch may resize an item that is no longer shown as selected.
+  [_overlay clearEditSelection];
   _editSelectedItem = nil;
   [_skinRenderer setEditing:YES selectedItem:nil];
   [self setNeedsSkinLayout];
@@ -582,6 +626,8 @@ static NSString *const kMenuInput = @"menu";
   _editing = NO;
   _editFinished = nil;
   _editReset = nil;
+  _editStartingOverrides = nil;
+  [_overlay clearEditSelection];
   _overlay.editing = NO;
   _overlay.editChanged = nil;
   _overlay.editSelectionChanged = nil;
@@ -605,7 +651,9 @@ static NSString *const kMenuInput = @"menu";
   CGFloat top = insets.top + 10;
   if (_editing && _editBar != nil) {
     top = CGRectGetMaxY(_editBar.frame) + 10;
-  } else if (!_menuButton.hidden) {
+  } else if (!_menuButton.hidden && CGRectGetMinY(_menuButton.frame) <= insets.top + 10) {
+    // Below the menu button while it is in the top row (not when it moved
+    // down beside a touch screen).
     top = CGRectGetMaxY(_menuButton.frame) + 10;
   }
   CGSize fit = [_statusLabel sizeThatFits:CGSizeMake(bounds.size.width * 0.7, 80)];

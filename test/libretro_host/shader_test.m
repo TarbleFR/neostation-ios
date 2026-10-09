@@ -7,8 +7,10 @@
 // uniformly black, and an output that does not change with the colour of the
 // other half (NEO_SAMPLE clamps inside the part). The plain path reproduces
 // the checkerboard exactly, also from a bottom-left origin texture; crt-lottes
-// curvature changes the picture; sharp-bilinear survives an output smaller
-// than its source. Run by test/libretro_shader_test.py.
+// curvature changes the picture; crt-lottes shows black outside the picture
+// (all-white source, CURVATURE 0.25, CORNER 0 and 1: black output corners, as
+// upstream's clamp_to_border, lit centre); sharp-bilinear survives an output
+// smaller than its source. Run by test/libretro_shader_test.py.
 // `shader_test --dump DIR` writes every complete MSL source to DIR instead.
 // Exit code 3: no Metal device (the catalog checks still ran).
 #import <Foundation/Foundation.h>
@@ -181,6 +183,25 @@ static id<MTLTexture> MakeSource(id<MTLDevice> device, uint32_t outside, BOOL bo
   return texture;
 }
 
+/// Every texel of the texture (part and other half) is `color`.
+static id<MTLTexture> MakeSolidSource(id<MTLDevice> device, uint32_t color) {
+  MTLTextureDescriptor *descriptor = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatBGRA8Unorm
+                                                                                        width:kTextureWidth
+                                                                                       height:kTextureHeight
+                                                                                    mipmapped:NO];
+  descriptor.usage = MTLTextureUsageShaderRead;
+  descriptor.storageMode = MTLStorageModeManaged;
+  id<MTLTexture> texture = [device newTextureWithDescriptor:descriptor];
+  NSMutableData *pixels = [NSMutableData dataWithLength:kTextureWidth * kTextureHeight * 4];
+  uint32_t *data = pixels.mutableBytes;
+  for (NSUInteger index = 0; index < (NSUInteger)(kTextureWidth * kTextureHeight); index++) data[index] = color;
+  [texture replaceRegion:MTLRegionMake2D(0, 0, kTextureWidth, kTextureHeight)
+             mipmapLevel:0
+               withBytes:pixels.bytes
+             bytesPerRow:kTextureWidth * 4];
+  return texture;
+}
+
 static id<MTLSamplerState> MakeSampler(id<MTLDevice> device, BOOL linear) {
   MTLSamplerDescriptor *descriptor = [MTLSamplerDescriptor new];
   descriptor.sAddressMode = MTLSamplerAddressModeClampToEdge;
@@ -331,6 +352,16 @@ static BOOL VisiblePicture(NSData *pixels) {
   return brightest >= 64 && !uniform;
 }
 
+/// Largest colour channel (0-255) of the target's BGRA8 pixel (x, y).
+static uint32_t Brightness(NSData *pixels, NSUInteger x, NSUInteger y) {
+  if (pixels == nil || (y * kTargetWidth + x + 1) * 4 > pixels.length) return 255;
+  const uint32_t *data = pixels.bytes;
+  const uint32_t pixel = data[y * kTargetWidth + x];
+  uint32_t brightest = 0;
+  for (uint32_t shift = 0; shift < 24; shift += 8) brightest = MAX(brightest, (pixel >> shift) & 0xFF);
+  return brightest;
+}
+
 static BOOL ReproducesCheckerboard(NSData *pixels) {
   if (pixels == nil) return NO;
   const uint32_t *data = pixels.bytes;
@@ -355,6 +386,8 @@ static BOOL ReproducesCheckerboard(NSData *pixels) {
 @property(nonatomic) id<MTLTexture> sourceBlackOutside;
 /// Checkerboard part stored bottom-left origin.
 @property(nonatomic) id<MTLTexture> sourceBottomUp;
+/// White everywhere, part and other half.
+@property(nonatomic) id<MTLTexture> sourceWhite;
 @property(nonatomic) id<MTLSamplerState> nearest;
 @property(nonatomic) id<MTLSamplerState> linear;
 @end
@@ -398,6 +431,35 @@ static void CheckReflection(MTLRenderPipelineReflection *reflection, NSString *n
     }
   }
   Check(offsets, [NSString stringWithFormat:@"%@: NeoUniforms member offsets match LibretroShaderUniforms", name]);
+}
+
+/// crt-lottes-fast at full curvature with CORNER 0 and 1: the warp pushes the
+/// output corners outside the picture and the corner vignette is not zero
+/// there, so every tap of those pixels must read upstream's black border
+/// (clamp_to_border), never the edge colour of an all-white source. The
+/// centre stays lit. The other half is white too: only the border emulation
+/// can make the corners black.
+static void TestLottesCorners(Fixture *fixture, LibretroShaderPreset *preset, id<MTLRenderPipelineState> pipeline,
+                              id<MTLSamplerState> sampler) {
+  const NSUInteger corners[4][2] = {
+      {0, 0}, {kTargetWidth - 1, 0}, {0, kTargetHeight - 1}, {kTargetWidth - 1, kTargetHeight - 1}};
+  for (NSNumber *corner in @[ @0, @1 ]) {
+    LibretroShaderUniforms uniforms = MakeUniforms(preset, @{@"CURVATURE" : @0.25, @"CORNER" : corner});
+    NSData *pixels = Render(fixture.device, fixture.queue, pipeline, MTLPixelFormatBGRA8Unorm, 4, fixture.sourceWhite,
+                            sampler, uniforms);
+    uint32_t brightest = 0;
+    for (NSUInteger index = 0; index < 4; index++) {
+      brightest = MAX(brightest, Brightness(pixels, corners[index][0], corners[index][1]));
+    }
+    Check(pixels != nil && brightest <= 2,
+          [NSString stringWithFormat:@"crt-lottes-fast: CURVATURE 0.25, CORNER %@: the four output corners are black "
+                                     @"on a white source (brightest %u/255)",
+                                     corner, brightest]);
+    const uint32_t centre = Brightness(pixels, kTargetWidth / 2, kTargetHeight / 2);
+    Check(pixels != nil && centre >= 64,
+          [NSString stringWithFormat:@"crt-lottes-fast: CURVATURE 0.25, CORNER %@: the centre is lit (%u/255)", corner,
+                                     centre]);
+  }
 }
 
 static void TestPreset(Fixture *fixture, LibretroShaderPreset *preset) {
@@ -482,6 +544,10 @@ static void TestPreset(Fixture *fixture, LibretroShaderPreset *preset) {
                                      (unsigned long)changed]);
   }
 
+  if ([preset.identifier isEqualToString:@"crt-lottes-fast"]) {
+    TestLottesCorners(fixture, preset, pipeline, sampler);
+  }
+
   if ([preset.identifier isEqualToString:@"sharp-bilinear"]) {
     // The source is taller than the output: upstream's automatic prescale
     // floors to 0 and divides by it.
@@ -516,6 +582,7 @@ int main(int argc, const char *argv[]) {
     fixture.sourceWhiteOutside = MakeSource(device, BGRA(255, 255, 255), NO);
     fixture.sourceBlackOutside = MakeSource(device, BGRA(0, 0, 0), NO);
     fixture.sourceBottomUp = MakeSource(device, BGRA(255, 0, 255), YES);
+    fixture.sourceWhite = MakeSolidSource(device, BGRA(255, 255, 255));
     fixture.nearest = MakeSampler(device, NO);
     fixture.linear = MakeSampler(device, YES);
 

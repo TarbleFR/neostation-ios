@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -75,13 +76,19 @@ void main() {
   late LibretroSkinService skins;
   late List<MethodCall> nativeCalls;
 
-  LibretroSkinCatalogService catalogService(http.Client client, {DateTime Function()? clock, int? maxBytes}) =>
+  LibretroSkinCatalogService catalogService(
+    http.Client client, {
+    DateTime Function()? clock,
+    int? maxBytes,
+    Duration? idleTimeout,
+  }) =>
       LibretroSkinCatalogService(
         cacheDirectory: path.join(root.path, 'Caches'),
         skins: skins,
         client: client,
         clock: clock,
         maxDownloadBytes: maxBytes ?? LibretroSkinService.maxArchiveBytes,
+        downloadIdleTimeout: idleTimeout ?? LibretroSkinCatalogService.requestTimeout,
       );
 
   List<FileSystemEntity> leftoverDownloads() {
@@ -260,6 +267,64 @@ void main() {
     ).download(byId('a1')) as LibretroSkinImportFailed;
     expect(streamed.messageKey, LibretroSkinMessages.tooLarge);
     expect(nativeCalls.where((call) => call.method == 'inspectSkin'), isEmpty);
+    expect(leftoverDownloads(), isEmpty);
+  });
+
+  test('a download whose body stops arriving fails after the inactivity limit and leaves nothing', () async {
+    // Headers arrive, then the body never does (or stops after its first part).
+    for (final firstPart in <List<int>?>[null, _skinArchive().sublist(0, 8)]) {
+      var cancelled = false;
+      final body = StreamController<List<int>>(onCancel: () => cancelled = true);
+      if (firstPart != null) body.add(firstPart);
+      final service = catalogService(
+        MockClient.streaming((request, _) async => http.StreamedResponse(body.stream, 200)),
+        idleTimeout: const Duration(milliseconds: 50),
+      );
+      final result = await service.download(byId('a1')).timeout(const Duration(seconds: 10));
+      expect(result, isA<LibretroSkinImportFailed>());
+      final failure = result as LibretroSkinImportFailed;
+      expect(failure.messageKey, LibretroSkinMessages.download);
+      expect(failure.technicalDetails, contains('TimeoutException'));
+      // The HTTP body is no longer listened to, and the partial file is gone.
+      expect(cancelled, isTrue);
+      expect(leftoverDownloads(), isEmpty);
+      await body.close();
+    }
+
+    // An error answer is not read at all, even when its body never comes.
+    var errorBodyCancelled = false;
+    final errorBody = StreamController<List<int>>(onCancel: () => errorBodyCancelled = true);
+    final refused = await catalogService(
+      MockClient.streaming((request, _) async => http.StreamedResponse(errorBody.stream, 503)),
+    ).download(byId('a1')).timeout(const Duration(seconds: 10)) as LibretroSkinImportFailed;
+    expect(refused.messageKey, LibretroSkinMessages.download);
+    expect(refused.technicalDetails, 'HTTP 503 raw.githubusercontent.com');
+    expect(errorBodyCancelled, isTrue);
+    await errorBody.close();
+    expect(leftoverDownloads(), isEmpty);
+    expect(nativeCalls.where((call) => call.method == 'inspectSkin'), isEmpty);
+    expect(Directory(path.join(root.path, 'Skins')).existsSync(), isFalse);
+  });
+
+  test('a body that keeps arriving is not cut by the inactivity limit', () async {
+    // Six parts, 100 ms apart: longer in total than the 250 ms limit, which
+    // only applies between two parts.
+    final archive = _skinArchive();
+    const parts = 6;
+    final size = (archive.length / parts).ceil();
+    final service = catalogService(
+      MockClient.streaming((request, _) async => http.StreamedResponse(
+            Stream<List<int>>.periodic(
+              const Duration(milliseconds: 100),
+              (index) => archive.sublist(index * size, ((index + 1) * size).clamp(0, archive.length)),
+            ).take(parts),
+            200,
+          )),
+      idleTimeout: const Duration(milliseconds: 250),
+    );
+    final result = await service.download(byId('a1')).timeout(const Duration(seconds: 30));
+    expect(result, isA<LibretroSkinImported>());
+    expect((result as LibretroSkinImported).skin.name, 'Lux GBA');
     expect(leftoverDownloads(), isEmpty);
   });
 

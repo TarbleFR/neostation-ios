@@ -137,6 +137,31 @@ LibretroRect LibretroFitScreen(LibretroRect container, double sourceAspect, Libr
   return LibretroRectAspectFit(container, sourceAspect);
 }
 
+#pragma mark - Shaders
+
+/// LibretroShaderSourceSize: largest relative gap between the two axis
+/// scales, and how far below 1 they may be, for the frame to count as a
+/// uniform upscale of the nominal size.
+static const double kShaderScaleTolerance = 0.02;
+
+static BOOL SizeIsUsable(LibretroSize size) {
+  return size.w > 0.0 && size.h > 0.0 && isfinite(size.w) && isfinite(size.h);
+}
+
+LibretroSize LibretroShaderSourceSize(LibretroSize texels, LibretroSize nominal) {
+  LibretroSize size = texels;
+  if (SizeIsUsable(texels) && SizeIsUsable(nominal)) {
+    const double scaleX = texels.w / nominal.w;
+    const double scaleY = texels.h / nominal.h;
+    const BOOL uniform = fabs(scaleX - scaleY) <= kShaderScaleTolerance * fmax(scaleX, scaleY);
+    if (uniform && fmin(scaleX, scaleY) >= 1.0 - kShaderScaleTolerance) size = nominal;
+  }
+  // The shaders divide by it. Written so NaN gives 1 too.
+  if (!(size.w >= 1.0) || isinf(size.w)) size.w = 1.0;
+  if (!(size.h >= 1.0) || isinf(size.h)) size.h = 1.0;
+  return size;
+}
+
 #pragma mark - Touch
 
 static double Clamp01(double value) {

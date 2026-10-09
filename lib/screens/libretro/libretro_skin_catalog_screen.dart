@@ -101,10 +101,12 @@ class _LibretroSkinCatalogScreenState extends State<LibretroSkinCatalogScreen>
       if (result is LibretroSkinNeedsReplaceConfirmation) await skins.discard(result);
       return;
     }
-    final installed = await showLibretroSkinImportResult(context, skins, result);
+    final installed = await showLibretroSkinImportResult(context, skins, result, console: widget.console);
     if (!mounted) return;
     setState(() {
-      if (installed) _installed.add(entry.id);
+      // A skin whose info.json declares other consoles is installed for
+      // those consoles only (announced as such): it is not marked here.
+      if (installed != null && installed.consoles.contains(widget.console)) _installed.add(entry.id);
       _installing = null;
     });
   }

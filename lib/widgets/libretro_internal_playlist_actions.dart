@@ -1,9 +1,9 @@
-import 'dart:io';
-
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 import '../l10n/libretro_locale.dart';
+import '../models/system_model.dart';
 import '../screens/libretro/libretro_skin_manager_screen.dart';
 import '../services/libretro_core_catalog.dart';
 import '../services/libretro_internal_service.dart';
@@ -14,13 +14,21 @@ import '../services/libretro_internal_service.dart';
 class LibretroInternalPlaylistActions extends StatefulWidget {
   const LibretroInternalPlaylistActions({
     super.key,
-    required this.systemFolder,
+    required this.system,
     required this.onLibraryChanged,
     this.onInteractionChanged,
     this.embedded = false,
   });
 
-  final String systemFolder;
+  /// System of the playlist. A copy named after an alias folder during a
+  /// scan (folder "n3ds" of the 3DS) imports games and opens skins as its
+  /// bound system, like its launches.
+  final SystemModel system;
+
+  /// Canonical catalog key of [system] ([LibretroInternalService.systemKey]),
+  /// also the `roms/<key>` folder its games are imported into.
+  String get systemFolder => LibretroInternalService.systemKey(system);
+
   final Future<void> Function() onLibraryChanged;
   final ValueChanged<bool>? onInteractionChanged;
   final bool embedded;
@@ -74,7 +82,7 @@ class _LibretroInternalPlaylistActionsState
     _interaction(true);
     try {
       if (action == 'games') {
-        final result = await LibretroInternalService.importGames(widget.systemFolder);
+        final result = await LibretroInternalService.importGamesForSystem(widget.system);
         if (result.imported > 0) {
           await widget.onLibraryChanged();
           _notice(_f('gamesImported', {'count': result.imported}));
@@ -105,7 +113,9 @@ class _LibretroInternalPlaylistActionsState
 
   @override
   Widget build(BuildContext context) {
-    if (!Platform.isIOS) return const SizedBox.shrink();
+    // The embedded engine runs on iOS only (the platform Flutter reports, so
+    // a widget test can stand in for an iPhone).
+    if (defaultTargetPlatform != TargetPlatform.iOS) return const SizedBox.shrink();
     final scheme = Theme.of(context).colorScheme;
     final button = SizedBox(
       width: 36.r,

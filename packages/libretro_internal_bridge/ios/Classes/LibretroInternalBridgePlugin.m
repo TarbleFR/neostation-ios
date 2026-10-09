@@ -49,6 +49,7 @@ static NSArray<NSString *> *LibretroRequiredUIText(void) {
     @"padLeftShoulder", @"padRightShoulder", @"padLeftTrigger", @"padRightTrigger", @"padLeftStickButton",
     @"padRightStickButton", @"controlsCoreDefault", @"shaderCredits", @"shaderMeasuring", @"settingScreenLayout",
     @"layoutTopBottom", @"layoutLeftRight", @"layoutHybridTop", @"layoutTopOnly", @"layoutBottomOnly",
+    @"controlsOpacityNotApplicable", @"controlsGameLayoutApplies",
   ];
 }
 

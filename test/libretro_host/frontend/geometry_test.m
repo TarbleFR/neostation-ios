@@ -1,6 +1,8 @@
 // Behavioural test of LibretroGeometry (portable layout math): rectangles,
-// screen formats, touch pointer mapping through every rotation and source
-// region (DS / 3DS screens), D-pad sectors and stick vectors.
+// screen formats, the shaders' SourceSize (nominal size only for a uniform
+// upscale, else the real texels), touch pointer mapping through every
+// rotation and source region (DS / 3DS screens), D-pad sectors and stick
+// vectors.
 #import <Foundation/Foundation.h>
 
 #import "LibretroGeometry.h"
@@ -137,6 +139,51 @@ static void TestScreenFormats(void) {
   }
 }
 
+static BOOL SourceSizeIs(double texelsW, double texelsH, double nominalW, double nominalH, double expectedW,
+                         double expectedH) {
+  LibretroSize texels = {texelsW, texelsH};
+  LibretroSize nominal = {nominalW, nominalH};
+  LibretroSize size = LibretroShaderSourceSize(texels, nominal);
+  if (!Near(size.w, expectedW) || !Near(size.h, expectedH)) {
+    printf("  %gx%g against %gx%g gave %gx%g, expected %gx%g\n", texelsW, texelsH, nominalW, nominalH, size.w, size.h,
+           expectedW, expectedH);
+    return NO;
+  }
+  return YES;
+}
+
+static void TestShaderSourceSize(void) {
+  // Uniform upscales of the console's pixels keep them (LCD grids and
+  // scanlines stay on console pixels when the core renders in high resolution).
+  CHECK(SourceSizeIs(960, 544, 480, 272, 480, 272), @"PSP rendered at 2x keeps 480x272");
+  CHECK(SourceSizeIs(640, 480, 320, 240, 320, 240), @"N64 / 3DS bottom / PSX rendered at 2x keep 320x240");
+  CHECK(SourceSizeIs(1200, 720, 400, 240, 400, 240), @"3DS top screen rendered at 3x keeps 400x240");
+  CHECK(SourceSizeIs(256, 192, 256, 192, 256, 192), @"a native frame keeps its size");
+  CHECK(SourceSizeIs(319, 240, 320, 240, 320, 240),
+        @"a frame within 2 percent of a uniform scale keeps the nominal size");
+  // Any other frame gives its real texels, as RetroArch does.
+  CHECK(SourceSizeIs(256, 224, 256, 240, 256, 224), @"Nestopia's cropped NES frame gives 256x224, not 256x240");
+  CHECK(SourceSizeIs(256, 224, 160, 144, 256, 224), @"mGBA's Super Game Boy frame gives 256x224, not 160x144");
+  CHECK(SourceSizeIs(256, 239, 256, 224, 256, 239) && SourceSizeIs(512, 224, 256, 224, 512, 224),
+        @"SNES overscan and hi-res frames give their texels");
+  CHECK(SourceSizeIs(256, 224, 320, 224, 256, 224) && SourceSizeIs(320, 240, 320, 224, 320, 240),
+        @"Mega Drive H32 and PAL V30 frames give their texels");
+  CHECK(SourceSizeIs(368, 240, 320, 240, 368, 240) && SourceSizeIs(320, 288, 320, 240, 320, 288) &&
+            SourceSizeIs(512, 480, 320, 240, 512, 480),
+        @"PSX non-320 and PAL modes give their texels (no integer division)");
+  CHECK(SourceSizeIs(330, 240, 320, 240, 330, 240), @"axis scales more than 2 percent apart give the texels");
+  CHECK(SourceSizeIs(128, 112, 256, 224, 128, 112) && SourceSizeIs(310, 232, 320, 240, 310, 232),
+        @"a frame smaller than the nominal size (scale below 0.98) gives its texels");
+  // Unknown nominal size (arcade) and invalid values.
+  CHECK(SourceSizeIs(384, 224, 0, 0, 384, 224), @"no nominal size gives the texels");
+  CHECK(SourceSizeIs(256, 224, NAN, 240, 256, 224) && SourceSizeIs(256, 224, INFINITY, 240, 256, 224) &&
+            SourceSizeIs(256, 224, -256, -240, 256, 224),
+        @"an invalid nominal size is ignored");
+  CHECK(SourceSizeIs(0, 0, 256, 240, 1, 1) && SourceSizeIs(NAN, 224, 256, 240, 1, 224) &&
+            SourceSizeIs(0.5, 0.25, 0, 0, 1, 1),
+        @"the size is never below 1x1, NaN included");
+}
+
 static BOOL PointerAt(LibretroScreenMapping mapping, double x, double y, BOOL clamp, int16_t expectedX,
                       int16_t expectedY) {
   int16_t px = 0;
@@ -240,6 +287,7 @@ int main(int argc, const char *argv[]) {
   @autoreleasepool {
     TestRectangles();
     TestScreenFormats();
+    TestShaderSourceSize();
     TestPointer();
     TestDPadAndStick();
   }

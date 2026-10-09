@@ -58,6 +58,26 @@ FOUNDATION_EXPORT NSString *const LibretroArrangementBottomOnly;  // "bottomOnly
                                                  swapped:(BOOL)swapped
                                                  regions:(nullable NSDictionary<NSString *, NSArray<NSNumber *> *> *)regions;
 
+/// Same, sized for the picture the core really draws: `coreAspect` is its
+/// display aspect (width / height) after rotation, for example
+/// LibretroSourceAspect of the whole picture (3:4 for a vertical arcade
+/// game); 0 or an invalid value keeps the console's aspect (the method
+/// above). In portrait, the game area of a single-screen console is as tall
+/// as MIN(console aspect, `coreAspect`) needs for the content width, up to
+/// the room left above the controls, so a vertical or narrow game is shown
+/// as large as possible; a wider picture keeps the console's area.
+/// Dual-screen consoles and landscape ignore it. Generate again when the
+/// core's geometry or rotation changes.
++ (LibretroSkinRepresentation *)representationForConsole:(NSString *)console
+                                             orientation:(LibretroSkinOrientation)orientation
+                                                viewSize:(LibretroSize)viewSize
+                                              safeInsets:(LibretroInsets)safeInsets
+                                                    iPad:(BOOL)iPad
+                                             arrangement:(nullable NSString *)arrangement
+                                                 swapped:(BOOL)swapped
+                                                 regions:(nullable NSDictionary<NSString *, NSArray<NSNumber *> *> *)regions
+                                              coreAspect:(double)coreAspect;
+
 @end
 
 NS_ASSUME_NONNULL_END

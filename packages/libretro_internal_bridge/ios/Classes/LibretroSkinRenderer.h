@@ -35,6 +35,14 @@ NS_ASSUME_NONNULL_BEGIN
 /// Highlights the items currently pressed (by identifier).
 - (void)setPressedItems:(NSSet<NSString *> *)itemIdentifiers;
 
+/// Moves each thumbstick knob with its finger: {itemId: NSValue of a
+/// CGPoint, x and y in -1...1, y positive downward}, as reported by
+/// LibretroTouchOverlay.stickVectorsChanged; absent items are centred.
+/// The knob travels by the vector times half the room left between it and
+/// the stick (+[LibretroSkinLayout knobFrameForItem:stickX:stickY:]),
+/// without animation. Ignored while editing.
+- (void)setStickVectors:(NSDictionary<NSString *, NSValue *> *)vectors;
+
 /// Editing mode of "Commandes › Déplacer et redimensionner": dashed
 /// outlines around movable items and a highlight on `selectedItem`. During
 /// a pinch the item layer is only scaled; it is re-rasterised at the end.

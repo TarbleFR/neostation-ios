@@ -9,9 +9,13 @@ NS_ASSUME_NONNULL_BEGIN
 /// checked by _Static_assert in LibretroShaderLibrary.m and by the macOS
 /// test against the compiled Metal reflection).
 typedef struct {
-  /// w, h, 1/w, 1/h of the screen's picture in console pixels: the
-  /// console's nominal size for that screen when known (PSP 480x272 even if
-  /// PPSSPP renders 960x544), else the size of the source part in texels.
+  /// w, h, 1/w, 1/h of the screen's picture, chosen for every frame by
+  /// LibretroShaderSourceSize (LibretroGeometry.h): the console's nominal
+  /// size for that screen when the frame is a uniform upscale of it (PSP
+  /// 480x272 even if PPSSPP renders 960x544: both axis scales within 2 % of
+  /// each other, neither below 0.98), else the real size of the source part
+  /// in texels, as RetroArch gives it (NES 256x224 when Nestopia crops its
+  /// overscan, Mega Drive 256x224 in H32 mode, arcade always).
   simd_float4 SourceSize;
   /// Same as SourceSize (single pass).
   simd_float4 OriginalSize;

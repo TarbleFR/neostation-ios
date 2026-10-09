@@ -694,6 +694,26 @@ static double DefaultInset(double value) {
                                              arrangement:(NSString *)arrangement
                                                  swapped:(BOOL)swapped
                                                  regions:(NSDictionary<NSString *, NSArray<NSNumber *> *> *)regions {
+  return [self representationForConsole:console
+                             orientation:orientation
+                                viewSize:viewSize
+                              safeInsets:safeInsets
+                                    iPad:iPad
+                             arrangement:arrangement
+                                 swapped:swapped
+                                 regions:regions
+                              coreAspect:0];
+}
+
++ (LibretroSkinRepresentation *)representationForConsole:(NSString *)console
+                                             orientation:(LibretroSkinOrientation)orientation
+                                                viewSize:(LibretroSize)viewSize
+                                              safeInsets:(LibretroInsets)safeInsets
+                                                    iPad:(BOOL)iPad
+                                             arrangement:(NSString *)arrangement
+                                                 swapped:(BOOL)swapped
+                                                 regions:(NSDictionary<NSString *, NSArray<NSNumber *> *> *)regions
+                                              coreAspect:(double)coreAspect {
   LibretroInputMap *map = [LibretroInputMap mapForConsole:console];
   LibretroDefaultPlan *plan = DefaultPlanForConsole(console, map);
   double viewWidth = isfinite(viewSize.w) && viewSize.w > 1 ? viewSize.w : 1;
@@ -770,7 +790,11 @@ static double DefaultInset(double value) {
       natural = 0;
       for (NSUInteger index = 0; index < count; index++) natural = MAX(natural, rects[index].y + rects[index].h);
     } else {
-      natural = contentWidth / DefaultSingleAspect(console);
+      // The core's real picture when known (vertical arcade games, other
+      // cropped aspects): never shorter than the console's own area.
+      double aspect = DefaultSingleAspect(console);
+      if (isfinite(coreAspect) && coreAspect > 0) aspect = MIN(aspect, coreAspect);
+      natural = contentWidth / aspect;
     }
     double gameMinimum = MIN(natural, 0.42 * available);
     double bottomPadding = safeBottom > 0 ? 6 : 14;

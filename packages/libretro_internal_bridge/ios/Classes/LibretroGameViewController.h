@@ -31,6 +31,9 @@ NS_ASSUME_NONNULL_BEGIN
                     points:(CGSize)pointSize;
 @end
 
+/// Overrides the controls editor starts from ({item identifier: override}).
+typedef NSDictionary<NSString *, NSDictionary *> * (^LibretroControlsOverridesProvider)(void);
+
 /// Full-screen surface of an embedded libretro session: the CAMetalLayer for
 /// the picture, the skin renderer, the touch overlay, a menu button and
 /// short status messages. Supports portrait and landscape (see
@@ -60,9 +63,21 @@ NS_ASSUME_NONNULL_BEGIN
 
 /// Controls editing ("Commandes › Modifier la disposition"): shows a small
 /// toolbar with Done / Reset defaults (translated titles) above the game.
+/// Starts from the overrides in effect for the representation on screen.
 - (void)beginEditingControlsWithDoneTitle:(NSString *)doneTitle
                                resetTitle:(NSString *)resetTitle
                                      hint:(NSString *)hint
+                                 finished:(void (^)(void))finished
+                                    reset:(void (^)(void))reset;
+
+/// Same, starting from what `startingOverrides` returns, asked again after
+/// each Reset: the scope being edited decides it (at console scope the
+/// console's own layout, never the game's, see LibretroChromeLayout). nil
+/// gives the overrides in effect for the representation on screen.
+- (void)beginEditingControlsWithDoneTitle:(NSString *)doneTitle
+                               resetTitle:(NSString *)resetTitle
+                                     hint:(NSString *)hint
+                        startingOverrides:(nullable LibretroControlsOverridesProvider)startingOverrides
                                  finished:(void (^)(void))finished
                                     reset:(void (^)(void))reset;
 

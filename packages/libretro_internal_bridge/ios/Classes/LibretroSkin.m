@@ -591,11 +591,21 @@ static NSString *SkinImagePath(NSString *root, id name) {
   }
 
   BOOL touchConsole = self.inputMap.hasTouchScreen;
+  // The bottom role or the 0.5 coverage rule choose the touch screen among
+  // several screens. When neither picks one, a "full" screen (the whole
+  // stacked picture) is touchable as soon as a touch-screen item overlaps
+  // it: its touch item naturally covers about half of it, sometimes a
+  // little less (integer frames).
+  BOOL chosen = NO;
+  for (LibretroSkinScreenDraft *draft in drafts) {
+    if ([draft.screen.role isEqualToString:SkinRoleBottom] || draft.touchCoverage >= SkinTouchCoverage) chosen = YES;
+  }
   NSMutableArray<LibretroSkinScreen *> *screens = [NSMutableArray array];
   for (LibretroSkinScreenDraft *draft in drafts) {
     LibretroSkinScreen *screen = draft.screen;
+    BOOL wholePicture = !chosen && [screen.role isEqualToString:SkinRoleFull] && draft.touchCoverage > 0;
     screen.touchScreen = touchConsole && ([screen.role isEqualToString:SkinRoleBottom] ||
-                                          draft.touchCoverage >= SkinTouchCoverage);
+                                          draft.touchCoverage >= SkinTouchCoverage || wholePicture);
     [screens addObject:screen];
   }
   if (screens.count == 0 && touchConsole) {

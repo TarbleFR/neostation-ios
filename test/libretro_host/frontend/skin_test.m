@@ -4,7 +4,8 @@
 // a bogus bottom inputFrame and a HOME button, a portrait-only Manic PSP
 // skin with per-button PDFs, impossible inputFrames, gameScreenFrame
 // precedence, input shapes (array, single string, D-pad, thumbstick, touch
-// screen), representation fallbacks, image fallbacks and every import error.
+// screen), whole-picture DS / 3DS screens made touchable by their touch
+// item, representation fallbacks, image fallbacks and every import error.
 #import <Foundation/Foundation.h>
 
 #import "LibretroInputMap.h"
@@ -592,6 +593,48 @@ static void TestInputFrames(void) {
         @"other skins without screens leave the full screen to the layout");
 }
 
+/// One screen showing the whole stacked DS / 3DS picture, with a touch item
+/// over its lower half minus one point (coverage 300 / 612 = 0.49).
+static LibretroSkinRepresentation *WholePicture(NSString *name, NSString *gameType, NSDictionary *screenKeys,
+                                                LibretroRect touchFrame) {
+  NSMutableDictionary *portrait = [@{
+    @"mappingSize" : Mapping(414, 896),
+    @"items" : @[ @{
+      @"frame" : Frame(touchFrame.x, touchFrame.y, touchFrame.w, touchFrame.h),
+      @"inputs" : @{@"x" : @"touchScreenX", @"y" : @"touchScreenY"}
+    } ],
+  } mutableCopy];
+  [portrait addEntriesFromDictionary:screenKeys];
+  LibretroSkin *skin = Parse(WriteSkin(name, Info(gameType, Phone(@"edgeToEdge", @"portrait", portrait)), @{}), NULL);
+  return [skin representationForOrientation:LibretroSkinOrientationPortrait iPad:NO edgeToEdge:YES];
+}
+
+static void TestWholePictureTouch(void) {
+  LibretroRect lowerHalf = LibretroRectMake(20, 332, 374, 300);
+  NSDictionary *legacy = @{@"gameScreenFrame" : Frame(20, 20, 374, 612)};
+  LibretroSkinRepresentation *rep = WholePicture(@"ds-whole-legacy", @"com.rileytestut.delta.game.ds", legacy, lowerHalf);
+  CHECK(rep.screens.count == 1 && [rep.screens[0].role isEqualToString:@"full"] &&
+            RectNear(rep.screens[0].source, LibretroRectMake(0, 0, 1, 1)) && rep.screens[0].touchScreen,
+        @"DS gameScreenFrame with a touch item over 49 %% of it: the whole picture is touchable");
+  NSDictionary *single = @{@"screens" : @[ @{@"outputFrame" : Frame(20, 20, 374, 612)} ]};
+  rep = WholePicture(@"ds-whole-screen", @"com.rileytestut.delta.game.ds", single, lowerHalf);
+  CHECK(rep.screens.count == 1 && [rep.screens[0].role isEqualToString:@"full"] && rep.screens[0].touchScreen,
+        @"DS screen without inputFrame, touch item over 49 %% of it: touchable");
+  rep = WholePicture(@"3ds-whole-screen", @"public.aoshuang.game.3ds", single, lowerHalf);
+  CHECK(rep.screens.count == 1 && [rep.screens[0].role isEqualToString:@"full"] && rep.screens[0].touchScreen,
+        @"3DS whole-picture screen, touch item over 49 %% of it: touchable");
+  rep = WholePicture(@"ds-whole-apart", @"com.rileytestut.delta.game.ds", single, LibretroRectMake(20, 700, 374, 150));
+  CHECK(rep.screens.count == 1 && !rep.screens[0].touchScreen,
+        @"a whole-picture screen the touch item does not overlap stays a picture only");
+  // Two screens: the 0.5 rule still chooses; the other one is not touchable.
+  NSDictionary *pair = @{
+    @"screens" : @[ @{@"outputFrame" : Frame(20, 20, 374, 300)}, @{@"outputFrame" : Frame(20, 330, 374, 302)} ]
+  };
+  rep = WholePicture(@"ds-two-whole", @"com.rileytestut.delta.game.ds", pair, lowerHalf);
+  CHECK(rep.screens.count == 2 && !rep.screens[0].touchScreen && rep.screens[1].touchScreen,
+        @"among several screens only the one mostly under the touch item is touchable");
+}
+
 static void TestItemsAndTouch(void) {
   NSDictionary *gba = @{
     @"mappingSize" : Mapping(320, 240),
@@ -820,6 +863,7 @@ int main(int argc, const char *argv[]) {
     TestThreeDS();
     TestManicPSP();
     TestInputFrames();
+    TestWholePictureTouch();
     TestItemsAndTouch();
     TestRepresentationFallbacks();
     TestImages();
