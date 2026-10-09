@@ -61,6 +61,18 @@ import UIKit
                 app.endBackgroundTask(self.backgroundTask); self.backgroundTask = .invalid
             }
         }
+        if mode == "double" {
+            // Probe only: the harmless start route and the functional URL are
+            // both requested in this run-loop turn, while the sender is active.
+            var results: [String: Bool] = [:]
+            func settle(_ key: String, _ accepted: Bool) {
+                results[key] = accepted
+                if results.count == 2 { done(results["functional"] ?? false) }
+            }
+            open(URL(string: "retroarch://start")!) { settle("start", $0) }
+            open(target) { settle("functional", $0) }
+            return
+        }
         if mode == "legacy" {
             legacy.start(target: target, open: open, schedule: schedule, completion: done)
         } else {

@@ -37,6 +37,37 @@ final class ConsentTests: XCTestCase {
         add(screen)
     }
 
+    func testDoubleOpenWarmThenCold() {
+        let receiver = XCUIApplication(bundleIdentifier: "org.neostation.handofftest.receiver")
+        let sender = XCUIApplication(bundleIdentifier: "org.neostation.handofftest.sender")
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        func settle() {
+            let deadline = Date().addingTimeInterval(8)
+            while Date() < deadline {
+                for app in [springboard, sender, receiver] {
+                    let open = app.alerts.buttons["Open"]
+                    if open.exists { open.tap() }
+                }
+                RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+            }
+        }
+        let target = "retroarch://game/007%20-%20Everything%20or%20Nothing%20(USA,%20Europe)%20(En,Fr,De).zip%23007%20-%20Everything%20or%20Nothing%20(USA,%20Europe)%20(En,Fr,De).gba"
+        // Warm: the receiver scene already exists, as when RetroArch stays in
+        // the background. Cold: the receiver process is not running.
+        for (name, warm) in [("double-warm", true), ("double-cold", false)] {
+            sender.terminate(); receiver.terminate()
+            if warm {
+                receiver.launchEnvironment = ["HANDOFF_CASE": name]
+                receiver.launch()
+            }
+            sender.launchEnvironment = ["HANDOFF_MODE": "double", "HANDOFF_CASE": name, "HANDOFF_TARGET": target]
+            sender.launch(); settle()
+            let screen = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+            screen.name = name; screen.lifetime = .keepAlways
+            add(screen)
+        }
+    }
+
     func testTransportFromFixtureApps() {
         let receiver = XCUIApplication(bundleIdentifier: "org.neostation.handofftest.receiver")
         let sender = XCUIApplication(bundleIdentifier: "org.neostation.handofftest.sender")

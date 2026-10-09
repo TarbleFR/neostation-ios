@@ -1,0 +1,49 @@
+name: RetroArch cold launch double-open probe
+'on':
+  push:
+    branches: [Claude]
+    paths:
+      - '.github/workflows/retroarch-double-open-probe.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: retroarch-double-open-probe-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  uikit:
+    # Two synthetic simulator apps only: no NeoStation or RetroArch build.
+    # The receiver reproduces RetroArchSceneDelegate (initial URLs ignored).
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - xcode: '16.4'
+            label: xcode16
+          - xcode: '26.3'
+            label: xcode26
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        persist-credentials: false
+    - uses: maxim-lobanov/setup-xcode@v1
+      with:
+        xcode-version: ${{ matrix.xcode }}
+    - name: Install fixture project generator
+      run: brew install xcodegen
+    - name: Measure start and functional URL sent in one turn, warm then cold
+      env:
+        HANDOFF_DOUBLE_ONLY: '1'
+        HANDOFF_EVIDENCE_NAME: double-open-${{ matrix.label }}
+      run: python3 tools/test_retroarch_uikit_handoff.py
+    - uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: retroarch-double-open-${{ matrix.label }}-${{ github.sha }}
+        path: |
+          ${{ runner.temp }}/double-open-${{ matrix.label }}.json
+          ${{ runner.temp }}/double-open-${{ matrix.label }}.log
+        if-no-files-found: warn
+        retention-days: 7

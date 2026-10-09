@@ -12,6 +12,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / 'test/fixtures/retroarch_handoff'
 OUT = pathlib.Path(os.environ.get('RUNNER_TEMP', tempfile.gettempdir())) / (os.environ.get('HANDOFF_EVIDENCE_NAME', 'retroarch-uikit-evidence') + '.json')
 RELAUNCH_ONLY = os.environ.get('HANDOFF_RELAUNCH_ONLY') == '1'
+DOUBLE_ONLY = os.environ.get('HANDOFF_DOUBLE_ONLY') == '1'
 FIX_INITIAL_URLS = os.environ.get('HANDOFF_FIX_INITIAL_URLS') == '1'
 
 
@@ -108,7 +109,12 @@ def main():
             spec.write_text(json.dumps(project))
             run('xcodegen', 'generate', '--spec', str(spec), '--project', tmp)
             print('Exercising same-URL returns and receiver restart' if RELAUNCH_ONLY else 'Exercising five UIKit transports through XCTest; no open result is mocked', flush=True)
-            selection = ['-only-testing:ConsentTests/ConsentTests/testSameURLAfterReturnAndReceiverTermination'] if RELAUNCH_ONLY else ['-only-testing:ConsentTests/ConsentTests/testTransportFromFixtureApps']
+            if DOUBLE_ONLY:
+                selection = ['-only-testing:ConsentTests/ConsentTests/testDoubleOpenWarmThenCold']
+            elif RELAUNCH_ONLY:
+                selection = ['-only-testing:ConsentTests/ConsentTests/testSameURLAfterReturnAndReceiverTermination']
+            else:
+                selection = ['-only-testing:ConsentTests/ConsentTests/testTransportFromFixtureApps']
             consent_log = run('xcodebuild', 'test', '-project', str(pathlib.Path(tmp) / 'HandoffConsent.xcodeproj'),
                 '-scheme', 'HandoffConsent', '-destination', 'platform=iOS Simulator,id=' + udid,
                 '-parallel-testing-enabled', 'NO', 'CODE_SIGNING_ALLOWED=YES', 'CODE_SIGN_IDENTITY=-',
@@ -119,6 +125,33 @@ def main():
             receiver = 'org.neostation.handofftest.receiver'
             sender_data = pathlib.Path(run('xcrun', 'simctl', 'get_app_container', udid, sender, 'data')) / 'Documents'
             receiver_data = pathlib.Path(run('xcrun', 'simctl', 'get_app_container', udid, receiver, 'data')) / 'Documents'
+            if DOUBLE_ONLY:
+                # Measurement, not a pass/fail claim: record what UIKit delivers
+                # when start and the functional URL leave in the same turn.
+                def read(folder, name):
+                    file = folder / name
+                    return json.loads(file.read_text()) if file.exists() else None
+                functional = None
+                for name, warm in (('double-warm', True), ('double-cold', False)):
+                    events = read(sender_data, f'result-{name}.json') or []
+                    sends = [e for e in events if e['event'] == 'send']
+                    functional = functional or next((e['url'] for e in sends if '://game/' in e['url']), None)
+                    delivered = read(receiver_data, f'received-{name}.json' if warm else 'received-cold.json') or []
+                    case = {
+                        'case': name, 'sender': events,
+                        'sendStates': [e['state'] for e in sends],
+                        'acceptance': {e['url']: e['accepted'] for e in events if e['event'] == 'acceptance'},
+                        'receiverOpenURLContexts': delivered,
+                        'functionalDeliveries': delivered.count(functional) if functional else 0,
+                    }
+                    if not warm:
+                        case['initialURLContexts'] = read(receiver_data, 'initial-urls.json')
+                    assert any(e['event'] == 'finished' for e in events), f'{name}: sender did not finish'
+                    evidence['cases'].append(case)
+                    print('DOUBLE-OPEN', json.dumps(case, sort_keys=True), flush=True)
+                evidence['gameExecutionValidated'] = False
+                OUT.write_text(json.dumps(evidence, indent=2))
+                return
             if RELAUNCH_ONLY:
                 events = json.loads((sender_data / 'result-relaunch.json').read_text())
                 warm = json.loads((receiver_data / 'received-relaunch.json').read_text())
