@@ -6,7 +6,10 @@ core and that the parser still finds the option maps and curated settings.
 
 With --cores DIR (the LibretroCores artifact), also requires that:
 - every option key and value NeoStation sets (defaults, no-JIT overrides,
-  curated settings and their choices) exists in the core binary;
+  options locked for the session, curated settings and their choices)
+  exists in the core binary: the host silently ignores a value the core
+  does not offer, which for a locked DS/3DS option would break the screen
+  crop and the touch screen without any error;
 - every option of a core that selects run-time code generation (dynarec,
   JIT, recompiler, CPU core or mode) has a no-JIT override, because iOS 26
   gives libretro cores no JIT and generated code would crash the session.
@@ -37,6 +40,31 @@ PREFIXES = {
 }
 CODE_GENERATION = re.compile(r'dynarec|jit|recompil|cpucore|cpu_core|cpu_mode|(?:^|[_-])drc(?:$|[_-])', re.I)
 
+# Curated in-game settings, exactly. The DeSmuME screen layout setting was
+# removed on purpose: NeoStation now locks DeSmuME to stacked screens and
+# arranges them itself, so it moved to LOCKED below.
+CURATED = {
+    ('mupen64plus_next', 'mupen64plus-43screensize'),
+    ('mednafen_psx_hw', 'beetle_psx_hw_internal_resolution'),
+    ('ppsspp', 'ppsspp_internal_resolution'),
+}
+# Options NeoStation locks for the session, exactly (screen crop, touch
+# screen and sticks of the dual-screen consoles).
+LOCKED = {
+    'desmume': {
+        'desmume_screens_layout': 'top/bottom',
+        'desmume_screens_gap': '0',
+        'desmume_pointer_type': 'touch',
+        'desmume_pointer_mouse': 'enabled',
+    },
+    'azahar': {
+        'citra_layout_option': 'default',
+        'citra_swap_screen': 'Top',
+        'citra_analog_function': 'c_stick',
+        'citra_render_3d': 'off',
+    },
+}
+
 
 def require(condition, message):
     if not condition:
@@ -63,6 +91,7 @@ def catalog():
         cores[start.group(1)] = {
             'defaults': literal_map(block, 'optionDefaults'),
             'noJit': literal_map(block, 'noJitOverrides'),
+            'locked': literal_map(block, 'lockedOptions'),
             'settings': settings,
         }
     return cores
@@ -73,6 +102,7 @@ def binary_findings(core_id, entry, data):
     present = lambda text: text.encode() + b'\0' in data
     required = dict(entry['defaults'])
     required.update(entry['noJit'])
+    required.update(entry['locked'])
     for key, value in required.items():
         if not present(key):
             findings.append(f'{core_id}: option {key} is not declared by the core')
@@ -102,7 +132,18 @@ def main():
     packaged = [core['id'] for core in manifest['cores']]
     require(sorted(cores) == sorted(packaged), f'catalog {sorted(cores)} differs from packaged {sorted(packaged)}')
     require(set(PREFIXES) == set(packaged), 'every packaged core needs its option prefixes')
-    require(sum(len(entry['settings']) for entry in cores.values()) >= 4, 'curated settings were not parsed')
+    # Replaces the former ">= 4 curated settings" count: the exact set also
+    # catches a setting that silently stops being parsed or offered.
+    curated = {(core_id, key) for core_id, entry in cores.items() for key, _ in entry['settings']}
+    require(curated == CURATED, f'curated settings {sorted(curated)} differ from {sorted(CURATED)}')
+    require(all(values for entry in cores.values() for _, values in entry['settings']),
+            'curated setting choices were not parsed')
+    locked = {core_id: entry['locked'] for core_id, entry in cores.items() if entry['locked']}
+    require(locked == LOCKED, f'locked options {locked} differ from {LOCKED}')
+    for core_id, entry in cores.items():
+        overlap = set(entry['locked']) & (set(entry['defaults']) | set(entry['noJit']) |
+                                          {key for key, _ in entry['settings']})
+        require(not overlap, f'{core_id}: locked options {sorted(overlap)} are also defaults or settings')
     require(all(entry['noJit'] for core_id, entry in cores.items()
                 if core_id in ('mupen64plus_next', 'ppsspp', 'azahar', 'desmume')),
             'no-JIT overrides were not parsed')
@@ -117,7 +158,8 @@ def main():
         findings += binary_findings(core_id, entry, binary.read_bytes())
     require(not findings, '\n  ' + '\n  '.join(findings))
     print('Libretro core options match', len(cores), 'pinned binaries; code generation is overridden for',
-          ', '.join(core_id for core_id, entry in cores.items() if entry['noJit']))
+          ', '.join(core_id for core_id, entry in cores.items() if entry['noJit']) + '; locked options checked for',
+          ', '.join(sorted(locked)))
 
 
 if __name__ == '__main__':

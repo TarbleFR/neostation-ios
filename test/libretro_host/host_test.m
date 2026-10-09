@@ -147,6 +147,9 @@ int main(int argc, const char *argv[]) {
     [again.options setValue:@"beta" forKey:@"neotest_mode" persist:YES];
     CHECK([again.options consumeUpdate], "option change flagged for the core");
     CHECK(![again.options consumeUpdate], "option change flagged only once");
+    // User values that session 3's NeoStation values must beat.
+    [again.options setValue:@"three" forKey:@"neotest_init" persist:YES];
+    [again.options setValue:@"user" forKey:@"neotest_locked" persist:YES];
 
     // RetroArch-style compressed state in slot 2 (frame counter 42).
     uint32_t serialized[2] = {42, 0};
@@ -166,6 +169,53 @@ int main(int argc, const char *argv[]) {
     CHECK(options != nil && [[[NSString alloc] initWithData:options encoding:NSUTF8StringEncoding]
                                 containsString:@"beta"],
           "user option persisted per core");
+
+    // Session 3: NeoStation's option values must reach a core that reads
+    // them only in retro_init (DeSmuME), locked values resist user changes,
+    // and a value changed during the session is flagged for the core.
+    TestDelegate *third = [TestDelegate new];
+    LibretroCoreHost *configured = MakeHost(core, work);
+    configured.delegate = third;
+    configured.initialOptionDefaults = @{@"neotest_default" : @"neo", @"neotest_mode" : @"alpha"};
+    configured.initialSessionOverrides = @{@"neotest_init" : @"two", @"neotest_locked" : @"free"};
+    configured.lockedSessionOverrides = @{@"neotest_locked" : @"fixed"};
+    CHECK([configured loadCore:&error], "core loads with initial option values");
+    CHECK([configured loadContentAtPath:content error:&error], "content loads in the option session");
+    size_t reportSize = 0;
+    const char *report = [configured memoryDataForIdentifier:RETRO_MEMORY_SYSTEM_RAM size:&reportSize];
+    BOOL hasReport = report != NULL && reportSize >= 96;
+    CHECK(hasReport && strcmp(report, "two") == 0, "session override read in retro_init, over the stored value");
+    CHECK(hasReport && strcmp(report + 16, "fixed") == 0, "locked override read in retro_init, over everything");
+    CHECK(hasReport && strcmp(report + 32, "neo") == 0, "NeoStation default read in retro_init");
+    CHECK(hasReport && strcmp(report + 48, "beta") == 0, "NeoStation default does not replace a stored user value");
+    CHECK(!configured.options.updatePending, "values given before retro_init are not flagged as updates");
+    CHECK([configured.options isLockedKey:@"neotest_locked"] && ![configured.options isLockedKey:@"neotest_init"],
+          "only locked overrides are locked");
+    CHECK(![configured.options setValue:@"user" forKey:@"neotest_locked" persist:YES],
+          "a locked option refuses a user change");
+    const char *lockedValue = [configured.options valueForKey:"neotest_locked"];
+    CHECK(lockedValue != NULL && strcmp(lockedValue, "fixed") == 0, "the locked value stays in effect");
+    CHECK(!configured.options.updatePending, "a refused change is not flagged");
+    [configured runFrame];
+    [configured.options applySessionOverrides:@{@"neotest_init" : @"two"}];
+    CHECK(!configured.options.updatePending, "an override that changes nothing is not flagged");
+    [configured.options applySessionOverrides:@{@"neotest_init" : @"one"}];
+    CHECK(configured.options.updatePending, "an override changing a declared option is flagged for the core");
+    [configured runFrame];
+    CHECK(!configured.options.updatePending, "the core consumed the update");
+    report = [configured memoryDataForIdentifier:RETRO_MEMORY_SYSTEM_RAM size:&reportSize];
+    hasReport = report != NULL && reportSize >= 96;
+    CHECK(hasReport && strcmp(report + 64, "one") == 0 && report[80] == 1, "the core re-read the overridden value");
+    [configured.options applyDefaults:@{@"neotest_mode" : @"beta"}];
+    CHECK(!configured.options.updatePending, "a default under a stored user value is not flagged");
+    [configured.options applyDefaults:@{@"neotest_default" : @"core"}];
+    CHECK(configured.options.updatePending, "a default changing a declared option is flagged for the core");
+    [configured unloadWithHardwareTeardown:nil];
+    NSData *stored = [NSData dataWithContentsOfFile:[work stringByAppendingPathComponent:@"Config/NeoTest.json"]];
+    id storedJSON = stored != nil ? [NSJSONSerialization JSONObjectWithData:stored options:0 error:nil] : nil;
+    NSDictionary *storedValues = [storedJSON isKindOfClass:[NSDictionary class]] ? storedJSON[@"values"] : nil;
+    CHECK([storedValues[@"neotest_locked"] isEqual:@"user"], "the refused change was not stored");
+    CHECK([storedValues[@"neotest_init"] isEqual:@"three"], "session overrides are never stored");
   }
   if (failures > 0) {
     printf("%d libretro host check(s) failed\n", failures);

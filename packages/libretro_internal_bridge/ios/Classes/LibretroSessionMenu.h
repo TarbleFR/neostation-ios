@@ -19,10 +19,38 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nonatomic, copy, nullable) void (^action)(LibretroMenuPage *page);
 @property(nonatomic, copy, nullable) void (^toggle)(LibretroMenuPage *page, BOOL on);
 @property(nonatomic, copy, nullable) void (^remove)(LibretroMenuPage *page);
+/// Optional preview drawn at the leading edge (skin pickers). When
+/// `imageLoader` is set the cell shows a placeholder of `imageSize` and the
+/// loader delivers the image asynchronously (on the main queue).
+@property(nonatomic, strong, nullable) UIImage *image;
+@property(nonatomic, assign) CGSize imageSize;
+@property(nonatomic, copy, nullable) void (^imageLoader)(void (^deliver)(UIImage *_Nullable image));
+/// VoiceOver label of the cell when it differs from the title.
+@property(nonatomic, copy, nullable) NSString *spokenLabel;
+/// Slider rows (shader parameters, opacity), drawn by a dedicated cell (a
+/// UISlider below the title, full width). The value is snapped to `step`;
+/// the detail label is updated in place through `valueFormatter` while
+/// dragging (no table reload during a drag); `sliderChanged` gets
+/// finished = NO while dragging and YES once on release (persist then). The
+/// VoiceOver value comes from `valueFormatter` and increments follow `step`.
+@property(nonatomic, assign) BOOL isSlider;
+@property(nonatomic, assign) float sliderValue;
+@property(nonatomic, assign) float sliderMinimum;
+@property(nonatomic, assign) float sliderMaximum;
+@property(nonatomic, assign) float sliderStep;
+@property(nonatomic, copy, nullable) NSString * (^valueFormatter)(float value);
+@property(nonatomic, copy, nullable) void (^sliderChanged)(LibretroMenuPage *page, float value, BOOL finished);
 + (instancetype)rowWithTitle:(NSString *)title action:(nullable void (^)(LibretroMenuPage *page))action;
 + (instancetype)toggleWithTitle:(NSString *)title
                              on:(BOOL)on
                          toggle:(void (^)(LibretroMenuPage *page, BOOL on))toggle;
++ (instancetype)sliderWithTitle:(NSString *)title
+                          value:(float)value
+                        minimum:(float)minimum
+                        maximum:(float)maximum
+                           step:(float)step
+                      formatter:(NSString * (^)(float value))formatter
+                        changed:(void (^)(LibretroMenuPage *page, float value, BOOL finished))changed;
 @end
 
 @interface LibretroMenuSection : NSObject
@@ -32,10 +60,24 @@ NS_ASSUME_NONNULL_BEGIN
 + (instancetype)sectionWithTitle:(nullable NSString *)title rows:(NSArray<LibretroMenuRow *> *)rows;
 @end
 
+/// Navigation controller of the in-game menu: supportedInterfaceOrientations
+/// returns LibretroOrientationGameMask() (portrait and landscape) instead of
+/// forcing landscape; its view background is clear so pages that preview
+/// the game can show it.
+@interface LibretroMenuNavigationController : UINavigationController
+@end
+
 /// A page of the in-game menu: dark inset-grouped table whose content is
-/// rebuilt from `builder` every time it appears or is reloaded.
+/// rebuilt from `builder` every time it appears or is reloaded. Titles and
+/// details wrap on several lines so long translations stay readable.
 @interface LibretroMenuPage : UITableViewController
 @property(nonatomic, copy) NSArray<LibretroMenuSection *> * (^builder)(void);
+/// Pages whose changes are visible on the game (Format d'écran, Shaders,
+/// Disposition des écrans, Skins): the table background is transparent,
+/// cells are 85 % opaque, and the table only covers the trailing half of
+/// the screen in landscape (bottom half in portrait), so the redrawn game
+/// stays visible.
+@property(nonatomic, assign) BOOL previewsGame;
 @property(nonatomic, copy, nullable) dispatch_block_t closeHandler;
 @property(nonatomic, copy, nullable) NSString *closeTitle;
 - (instancetype)initWithTitle:(NSString *)title builder:(NSArray<LibretroMenuSection *> * (^)(void))builder;

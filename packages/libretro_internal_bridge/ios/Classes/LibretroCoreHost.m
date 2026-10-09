@@ -698,6 +698,14 @@ static bool HostEnvironment(unsigned command, void *data) {
   _saveDirectoryC = strdup(_saveDirectory.fileSystemRepresentation);
   NSString *optionsPath = [_optionsDirectory stringByAppendingPathComponent:[folder stringByAppendingPathExtension:@"json"]];
   _options = [[LibretroCoreOptions alloc] initWithStorePath:optionsPath];
+  // Before retro_set_environment and retro_init: DeSmuME reads its options
+  // only in retro_init. Locked values come last so they win.
+  NSDictionary<NSString *, NSString *> *initialDefaults = self.initialOptionDefaults;
+  NSDictionary<NSString *, NSString *> *initialOverrides = self.initialSessionOverrides;
+  NSDictionary<NSString *, NSString *> *lockedOverrides = self.lockedSessionOverrides;
+  if (initialDefaults.count > 0) [_options applyDefaults:initialDefaults];
+  if (initialOverrides.count > 0) [_options applySessionOverrides:initialOverrides];
+  if (lockedOverrides.count > 0) [_options lockSessionOverrides:lockedOverrides];
 
   gActiveHost = self;
   _symbols.retro_set_environment(HostEnvironment);

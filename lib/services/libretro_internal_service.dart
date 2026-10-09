@@ -11,6 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../l10n/libretro_locale.dart';
 import '../models/game_model.dart';
 import '../models/system_model.dart';
+import '../repositories/system_repository.dart';
 import 'config_service.dart';
 import 'libretro_core_catalog.dart';
 import 'logger_service.dart';
@@ -32,11 +33,16 @@ class LibretroImportResult {
     required this.imported,
     required this.rejected,
     this.importedPaths = const <String>[],
+    this.systemFolder = '',
   });
 
   final int imported;
   final int rejected;
   final List<String> importedPaths;
+
+  /// System folder the games were copied into (`roms/<systemFolder>`), the
+  /// system to rescan afterwards.
+  final String systemFolder;
 }
 
 class LibretroRetroArchCopy {
@@ -67,6 +73,18 @@ abstract final class LibretroInternalService {
   static bool handlesSystem(String folderName) =>
       Platform.isIOS && LibretroCoreCatalog.handles(folderName);
 
+  /// Canonical catalog key of a system (see
+  /// [LibretroCoreCatalog.canonicalSystem]): a system copy named after an
+  /// alias folder during a scan still resolves to its bound system.
+  static String systemKey(SystemModel system) => LibretroCoreCatalog.canonicalSystem(
+        id: system.id,
+        folders: system.folders,
+        folderName: system.folderName,
+      );
+
+  /// [handlesSystem] for a system model, through [systemKey].
+  static bool handlesSystemModel(SystemModel system) => handlesSystem(systemKey(system));
+
   static Future<Directory> rootDirectory() async {
     final documents = await getApplicationDocumentsDirectory();
     return Directory(path.join(documents.path, 'Libretro'));
@@ -81,6 +99,14 @@ abstract final class LibretroInternalService {
   static Future<Directory> configDirectory() => _child('Config');
   static Future<Directory> cheatsDirectory() => _child('Cheats');
 
+  /// One directory per imported skin (`Skins/<id>`).
+  static Future<Directory> skinsDirectory() => _child('Skins');
+
+  /// Per-console frontend settings, written only by the native
+  /// LibretroFrontendStore (`Config/Frontend/<console>.json`).
+  static Future<Directory> frontendDirectory() async =>
+      Directory(path.join((await configDirectory()).path, 'Frontend'));
+
   static Future<Directory> cacheDirectory() async {
     final caches = await getApplicationCacheDirectory();
     return Directory(path.join(caches.path, 'Libretro'));
@@ -93,7 +119,9 @@ abstract final class LibretroInternalService {
       await savesDirectory(),
       await statesDirectory(),
       await configDirectory(),
+      await frontendDirectory(),
       await cheatsDirectory(),
+      await skinsDirectory(),
       await cacheDirectory(),
     ]) {
       await directory.create(recursive: true);
@@ -133,12 +161,13 @@ abstract final class LibretroInternalService {
   /// embedded core present in this build, the file is readable here, and
   /// the user did not switch the game to the RetroArch app.
   static Future<bool> shouldLaunchEmbedded(SystemModel system, GameModel game) async {
-    if (!handlesSystem(system.folderName)) return false;
+    final key = systemKey(system);
+    if (!handlesSystem(key)) return false;
     final romPath = game.romPath;
     if (romPath == null || romPath.isEmpty || !await File(romPath).exists()) return false;
-    final choice = await coreChoiceFor(system.folderName, game.romname);
+    final choice = await coreChoiceFor(key, game.romname);
     if (choice == retroArchChoice) return false;
-    final coreId = _resolveCoreId(system.folderName, choice);
+    final coreId = _resolveCoreId(key, choice);
     return coreId != null && (await _bundledCores()).contains(coreId);
   }
 
@@ -154,13 +183,15 @@ abstract final class LibretroInternalService {
     required GameModel game,
     required Locale locale,
   }) async {
-    final binding = LibretroCoreCatalog.bindingFor(system.folderName);
+    final key = systemKey(system);
+    final binding = LibretroCoreCatalog.bindingFor(key);
+    final console = LibretroCoreCatalog.consoleFor(key);
     final romPath = game.romPath;
-    if (binding == null || romPath == null) {
+    if (binding == null || console == null || romPath == null) {
       return const LibretroLaunchOutcome(success: false, errorCode: 'LIBRETRO_INVALID_REQUEST');
     }
-    final choice = await coreChoiceFor(system.folderName, game.romname);
-    final coreId = _resolveCoreId(system.folderName, choice)!;
+    final choice = await coreChoiceFor(key, game.romname);
+    final coreId = _resolveCoreId(key, choice)!;
     final core = LibretroCoreCatalog.cores[coreId]!;
     await ensureLayout();
     final biosDirectory = await systemDirectory();
@@ -184,18 +215,24 @@ abstract final class LibretroInternalService {
       'coreId': coreId,
       'contentPath': path.normalize(romPath),
       'gameTitle': game.name,
-      'profile': binding.profile,
+      'console': console.id,
+      'consoleName': console.name,
+      'gameKey': '$key/${game.romname}',
       'systemDirectory': biosDirectory.path,
       'saveDirectory': (await savesDirectory()).path,
       'stateDirectory': (await statesDirectory()).path,
       'optionsDirectory': (await configDirectory()).path,
       'cheatsDirectory': (await cheatsDirectory()).path,
       'cacheDirectory': (await cacheDirectory()).path,
+      'skinsDirectory': (await skinsDirectory()).path,
+      'frontendDirectory': (await frontendDirectory()).path,
+      'consoleGeometry': LibretroCoreCatalog.consoleGeometry(),
       'uiLocale': locale.toLanguageTag(),
       'retroLanguage': LibretroLocale.retroLanguage(locale),
       'uiText': LibretroLocale.nativeUI(locale),
       'optionDefaults': core.optionDefaults,
       'noJitOverrides': core.noJitOverrides,
+      'lockedOptions': core.lockedOptions,
       'coreSettings': LibretroLocale.coreSettings(locale, core),
       'achievementsAllowed': binding.achievementsConsoleId > 0,
       'achievementsConsoleId': binding.achievementsConsoleId,
@@ -237,8 +274,20 @@ abstract final class LibretroInternalService {
     return Directory(path.join(roms, systemFolder.toLowerCase()));
   }
 
-  static Future<LibretroImportResult> importGames(String systemFolder) async {
-    final extensions = LibretroCoreCatalog.importExtensionsFor(systemFolder).toList()..sort();
+  /// Imports games for a system folder. The picker offers only the formats
+  /// the system's cores open and the library scanner indexes for it
+  /// ([systemExtensions], else the extensions the database lists for the
+  /// system): a copied file the scanner ignores would never appear.
+  static Future<LibretroImportResult> importGames(
+    String systemFolder, {
+    Iterable<String>? systemExtensions,
+  }) async {
+    final folder = systemFolder.toLowerCase();
+    final indexed = systemExtensions ?? await _indexedExtensions(folder);
+    final extensions = LibretroCoreCatalog.importExtensionsFor(folder, indexed: indexed).toList()..sort();
+    if (extensions.isEmpty) {
+      return LibretroImportResult(imported: 0, rejected: 0, systemFolder: folder);
+    }
     final selection = await FilePicker.pickFiles(
       allowMultiple: true,
       type: FileType.custom,
@@ -246,8 +295,10 @@ abstract final class LibretroInternalService {
       withData: false,
       lockParentWindow: true,
     );
-    if (selection == null) return const LibretroImportResult(imported: 0, rejected: 0);
-    final destination = await importDirectoryFor(systemFolder);
+    if (selection == null) {
+      return LibretroImportResult(imported: 0, rejected: 0, systemFolder: folder);
+    }
+    final destination = await importDirectoryFor(folder);
     await destination.create(recursive: true);
     var imported = 0;
     var rejected = 0;
@@ -278,7 +329,43 @@ abstract final class LibretroInternalService {
         rejected++;
       }
     }
-    return LibretroImportResult(imported: imported, rejected: rejected, importedPaths: importedPaths);
+    return LibretroImportResult(
+      imported: imported,
+      rejected: rejected,
+      importedPaths: importedPaths,
+      systemFolder: folder,
+    );
+  }
+
+  /// [importGames] for a system model: its canonical folder and the
+  /// extensions it carries from the database.
+  static Future<LibretroImportResult> importGamesForSystem(SystemModel system) =>
+      importGames(
+        systemKey(system),
+        systemExtensions: system.extensions.isEmpty ? null : system.extensions,
+      );
+
+  /// Imports games for one of the embedded consoles, even before it has any
+  /// game: into [system] when the caller resolved it (from the provider's
+  /// available systems), else into the console's import system.
+  static Future<LibretroImportResult> importGamesForConsole(String console, {SystemModel? system}) async {
+    final descriptor = LibretroCoreCatalog.consoles[console];
+    if (descriptor == null) return const LibretroImportResult(imported: 0, rejected: 0);
+    if (system != null) return importGamesForSystem(system);
+    return importGames(descriptor.importSystem);
+  }
+
+  /// Extensions the scanner indexes for a system id (from its
+  /// `assets/systems` definition, synced into the database); null when they
+  /// cannot be read, in which case the picker keeps every core format.
+  static Future<Set<String>?> _indexedExtensions(String systemId) async {
+    try {
+      final extensions = await SystemRepository.getExtensionsForSystem(systemId);
+      return extensions.isEmpty ? null : extensions;
+    } catch (error) {
+      _log.w('Indexed extensions unavailable for $systemId: $error');
+      return null;
+    }
   }
 
   /// A cue sheet or playlist only works with the files it names; copy those

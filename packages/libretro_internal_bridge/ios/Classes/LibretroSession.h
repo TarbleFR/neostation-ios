@@ -8,7 +8,6 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nonatomic, copy) NSString *corePath;
 @property(nonatomic, copy) NSString *contentPath;
 @property(nonatomic, copy) NSString *gameTitle;
-@property(nonatomic, copy) NSString *profile;
 @property(nonatomic, copy) NSString *systemDirectory;
 @property(nonatomic, copy) NSString *saveDirectory;
 @property(nonatomic, copy) NSString *stateDirectory;
@@ -28,6 +27,29 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nonatomic, assign) unsigned achievementsConsoleId;
 /// RETRO_HW_CONTEXT_* answered to GET_PREFERRED_HW_RENDER for this core.
 @property(nonatomic, assign) unsigned preferredHardwareContext;
+/// NeoStation console of the game ("gba", "psp", "3ds"...): key of skins,
+/// screen format, shaders and controls, independent of the core.
+@property(nonatomic, copy) NSString *console;
+/// Product name of the console ("Nintendo 3DS"), never translated.
+@property(nonatomic, copy) NSString *consoleName;
+/// Per-game key of the frontend settings ("<system>/<rom file name>").
+@property(nonatomic, copy) NSString *gameKey;
+/// Documents/Libretro/Skins: one directory per imported skin.
+@property(nonatomic, copy) NSString *skinsDirectory;
+/// Documents/Libretro/Config/Frontend (LibretroFrontendStore).
+@property(nonatomic, copy) NSString *frontendDirectory;
+/// Geometry of every console, for skins (see +[LibretroSkin
+/// skinWithDirectory:consoleGeometry:errorCode:]):
+/// {console: {"size": [w, h], "regions": {"top": [x,y,w,h], "bottom": [...]}}}.
+@property(nonatomic, copy) NSDictionary<NSString *, NSDictionary *> *consoleGeometry;
+/// Core options NeoStation locks for this session so it can crop the two
+/// screens and route touches (DeSmuME: desmume_screens_layout=top/bottom,
+/// desmume_screens_gap=0, desmume_pointer_type=touch,
+/// desmume_pointer_mouse=enabled; Azahar: citra_layout_option=default,
+/// citra_swap_screen=Top, citra_analog_function=c_stick,
+/// citra_render_3d=off). Applied before retro_init and read-only in the
+/// menu.
+@property(nonatomic, copy) NSDictionary<NSString *, NSString *> *lockedOptions;
 @end
 
 /// One embedded game: core host on its own emulation thread, presentation,

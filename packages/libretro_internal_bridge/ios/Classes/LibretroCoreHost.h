@@ -90,6 +90,21 @@ typedef struct {
 
 @property(nonatomic, weak, nullable) id<LibretroCoreHostDelegate> delegate;
 
+/// Option values given to the option store by `loadCore:` right after it is
+/// created, BEFORE retro_set_environment and retro_init: some cores
+/// (DeSmuME) read their options only in retro_init. Set them before
+/// `loadCore:`.
+/// - `initialOptionDefaults`: NeoStation defaults (used while the user has
+///   stored no value);
+/// - `initialSessionOverrides`: session values that win over stored ones
+///   (no-JIT interpreters);
+/// - `lockedSessionOverrides`: session values the user cannot change during
+///   this session (screen layout and pointer type NeoStation needs to crop
+///   the DS / 3DS screens); `setValue:forKey:persist:` refuses those keys.
+@property(nonatomic, copy, nullable) NSDictionary<NSString *, NSString *> *initialOptionDefaults;
+@property(nonatomic, copy, nullable) NSDictionary<NSString *, NSString *> *initialSessionOverrides;
+@property(nonatomic, copy, nullable) NSDictionary<NSString *, NSString *> *lockedSessionOverrides;
+
 /// dlopen, symbol resolution, API version check, callbacks, retro_init.
 - (BOOL)loadCore:(NSError *_Nullable *_Nullable)error;
 

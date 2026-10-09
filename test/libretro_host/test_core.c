@@ -30,6 +30,24 @@ static char option_value[32];
 static bool jit_capable;
 static bool first_frame = true;
 static uint8_t restored_marker;
+/*
+ * Option values seen by retro_init (like DeSmuME, which reads its options
+ * only there) and the last value re-read after GET_VARIABLE_UPDATE. Exposed
+ * as RETRO_MEMORY_SYSTEM_RAM, which the host never saves or restores:
+ *   [0..15] neotest_init, [16..31] neotest_locked, [32..47] neotest_default
+ *   and [48..63] neotest_mode at retro_init; [64..79] neotest_init re-read
+ *   in retro_run after an update; [80] number of updates seen.
+ */
+#define INIT_REPORT_FIELD 16
+static uint8_t init_report[96];
+
+static void read_option(const char *key, uint8_t *field) {
+  struct retro_variable variable = {key, NULL};
+  memset(field, 0, INIT_REPORT_FIELD);
+  if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &variable) && variable.value != NULL) {
+    snprintf((char *)field, INIT_REPORT_FIELD, "%s", variable.value);
+  }
+}
 
 static bool set_eject_state(bool ejected) {
   disk_ejected = ejected;
@@ -56,6 +74,12 @@ RETRO_API void retro_set_environment(retro_environment_t cb) {
   environ_cb = cb;
   static struct retro_core_option_v2_definition definitions[] = {
       {"neotest_mode", "Mode", NULL, "Test mode", NULL, NULL, {{"alpha", "Alpha"}, {"beta", "Beta"}, {NULL, NULL}}, "alpha"},
+      {"neotest_init", "Init", NULL, "Read in retro_init", NULL, NULL,
+       {{"one", "One"}, {"two", "Two"}, {"three", "Three"}, {NULL, NULL}}, "one"},
+      {"neotest_locked", "Locked", NULL, "Locked by the frontend", NULL, NULL,
+       {{"free", "Free"}, {"user", "User"}, {"fixed", "Fixed"}, {NULL, NULL}}, "free"},
+      {"neotest_default", "Default", NULL, "Frontend default", NULL, NULL,
+       {{"core", "Core"}, {"neo", "Neo"}, {NULL, NULL}}, "core"},
       {NULL, NULL, NULL, NULL, NULL, NULL, {{NULL, NULL}}, NULL},
   };
   static struct retro_core_options_v2 options = {NULL, definitions};
@@ -81,6 +105,11 @@ RETRO_API void retro_init(void) {
   environ_cb(RETRO_ENVIRONMENT_SET_DISK_CONTROL_EXT_INTERFACE, &disk);
   bool jit = false;
   if (environ_cb(RETRO_ENVIRONMENT_GET_JIT_CAPABLE, &jit)) jit_capable = jit;
+  memset(init_report, 0, sizeof(init_report));
+  read_option("neotest_init", init_report);
+  read_option("neotest_locked", init_report + 16);
+  read_option("neotest_default", init_report + 32);
+  read_option("neotest_mode", init_report + 48);
 }
 
 RETRO_API void retro_deinit(void) {}
@@ -113,6 +142,11 @@ RETRO_API void retro_run(void) {
   if (first_frame) {
     restored_marker = save_ram[1];
     first_frame = false;
+  }
+  bool updated = false;
+  if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE, &updated) && updated) {
+    read_option("neotest_init", init_report + 64);
+    init_report[80]++;
   }
   input_poll_cb();
   int16_t buttons = input_state_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_MASK);
@@ -169,5 +203,14 @@ RETRO_API bool retro_load_game_special(unsigned type, const struct retro_game_in
 RETRO_API void retro_unload_game(void) {}
 RETRO_API unsigned retro_get_region(void) { return RETRO_REGION_NTSC; }
 
-RETRO_API void *retro_get_memory_data(unsigned id) { return id == RETRO_MEMORY_SAVE_RAM ? save_ram : NULL; }
-RETRO_API size_t retro_get_memory_size(unsigned id) { return id == RETRO_MEMORY_SAVE_RAM ? sizeof(save_ram) : 0; }
+RETRO_API void *retro_get_memory_data(unsigned id) {
+  if (id == RETRO_MEMORY_SAVE_RAM) return save_ram;
+  if (id == RETRO_MEMORY_SYSTEM_RAM) return init_report;
+  return NULL;
+}
+
+RETRO_API size_t retro_get_memory_size(unsigned id) {
+  if (id == RETRO_MEMORY_SAVE_RAM) return sizeof(save_ram);
+  if (id == RETRO_MEMORY_SYSTEM_RAM) return sizeof(init_report);
+  return 0;
+}
