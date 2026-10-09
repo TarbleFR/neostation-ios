@@ -73,7 +73,7 @@ jobs:
             for line in result.stdout.splitlines():
                 try: lines.append(json.loads(line))
                 except json.JSONDecodeError: pass
-            failures=[x for x in lines if x.get('type')=='error' and 'NEW_RETROARCH_ROOT_NOT_REGISTERED' in x.get('error','')]
+            failures=[x for x in lines if isinstance(x,dict) and x.get('type')=='error' and 'NEW_RETROARCH_ROOT_NOT_REGISTERED' in x.get('error','')]
             if result.returncode==0 or not failures:
                 print(result.stdout)
                 raise SystemExit('Expected registration failure was not reproduced; refusing the IPA')
