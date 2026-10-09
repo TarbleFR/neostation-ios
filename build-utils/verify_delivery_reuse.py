@@ -56,6 +56,7 @@ DELTA = {
     'build-utils/sign_delivery.py', 'build-utils/delivery_benchmark.py',
     'build-utils/delivery_cipher.py', 'build-utils/delivery-422-recipient.pem',
     'build-utils/delivery-423-recipient.pem',
+    'build-utils/delivery-424-recipient.pem',
 }
 INPUT_ROOTS = ('lib/', 'packages/', 'native/', 'build-utils/', 'assets/', 'test/')
 

@@ -159,7 +159,7 @@ jobs:
     - native
     env:
       BUILD_NUMBER: ${{ inputs.build_number || '424' }}
-      DELIVERY_RECIPIENT: build-utils/delivery-423-recipient.pem
+      DELIVERY_RECIPIENT: build-utils/delivery-424-recipient.pem
       IPA_NAME: NeoStation
       ARTIFACT_NAME: NeoStation-Build-424-${{ github.sha }}-cold
       KARTPAD_CORE_RUN_ID: ${{ inputs.kartpad_core_run_id || '36322395443' }}
@@ -954,7 +954,7 @@ jobs:
     - cold
     env:
       BUILD_NUMBER: ${{ inputs.build_number || '424' }}
-      DELIVERY_RECIPIENT: build-utils/delivery-423-recipient.pem
+      DELIVERY_RECIPIENT: build-utils/delivery-424-recipient.pem
       IPA_NAME: NeoStation
       ARTIFACT_NAME: NeoStation-Build-424-${{ github.sha }}-warm
       KARTPAD_CORE_RUN_ID: ${{ inputs.kartpad_core_run_id || '36322395443' }}
