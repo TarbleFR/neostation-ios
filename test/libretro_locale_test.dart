@@ -16,7 +16,33 @@ void main() {
     'de:disc', 'de:cheatName', 'de:cheatCode',
     'it:menu', 'it:slot', 'it:achievementsPassword',
     'pt:menu', 'id:menu', 'id:slot',
+    // "Skins" and "shaders": loanwords French, Spanish, Portuguese and German
+    // players use as is (Delta, Provenance and RetroArch use them too).
+    'fr:skins', 'es:skins', 'pt:skins', 'de:skins',
+    'fr:shaders', 'es:shaders', 'pt:shaders',
+    // "Preset": the established loanword of Italian and Indonesian software.
+    'it:shaderPreset', 'id:shaderPreset',
+    // "Scanlines": the usual German retro-gaming term (RetroArch de).
+    'de:shaderScanlines',
+    // "Downloads": the German noun (Duden: der Download, die Downloads).
+    'de:catalogDownloads',
+    // Same word in that language: Portrait (fr), Gamma (fr, es, it, de),
+    // Amplitude (fr, pt, de), Phase (fr, de).
+    'fr:orientationPortrait',
+    'fr:paramGamma', 'es:paramGamma', 'it:paramGamma', 'de:paramGamma',
+    'fr:paramAmplitude', 'pt:paramAmplitude', 'de:paramAmplitude',
+    'fr:paramPhase', 'de:paramPhase',
   };
+
+  const nativeClasses = 'packages/libretro_internal_bridge/ios/Classes';
+
+  // Every Objective-C implementation of the native bridge, concatenated.
+  String nativeSources() => Directory(nativeClasses)
+      .listSync()
+      .whereType<File>()
+      .where((file) => file.path.endsWith('.m'))
+      .map((file) => file.readAsStringSync())
+      .join('\n');
 
   test('libretro covers exactly the twelve NeoStation languages', () {
     expect(
@@ -74,8 +100,13 @@ void main() {
       r'LibretroRequiredUIText\(void\) \{\s*return @\[(.*?)\];',
       dotAll: true,
     ).firstMatch(plugin)!.group(1)!;
-    final native = RegExp(r'@"(\w+)"').allMatches(block).map((m) => m[1]!).toSet();
+    final nativeList = RegExp(r'@"(\w+)"').allMatches(block).map((m) => m[1]!).toList();
+    final native = nativeList.toSet();
     expect(native, LibretroLocale.nativeKeys.toSet());
+    // Same order and no duplicate on either side.
+    expect(nativeList, LibretroLocale.nativeKeys);
+    expect(native.length, nativeList.length);
+    expect(english.keys, containsAll(LibretroLocale.nativeKeys));
     for (final locale in LibretroLocale.values.keys) {
       final labels = LibretroLocale.nativeUI(Locale(locale));
       expect(labels.keys.toSet(), native, reason: locale);
@@ -84,12 +115,7 @@ void main() {
   });
 
   test('every native error code maps to a translated message', () {
-    final sources = Directory('packages/libretro_internal_bridge/ios/Classes')
-        .listSync()
-        .whereType<File>()
-        .where((file) => file.path.endsWith('.m'))
-        .map((file) => file.readAsStringSync())
-        .join('\n');
+    final sources = nativeSources();
     final codes = RegExp(r'@"(LIBRETRO_[A-Z_]+)"').allMatches(sources).map((m) => m[1]!).toSet();
     expect(codes, isNotEmpty);
     for (final code in codes) {
@@ -105,6 +131,72 @@ void main() {
     expect(
       LibretroLocale.launchError(const Locale('fr'), 'SOMETHING_ELSE'),
       LibretroLocale.values['fr']!['errorUnknown'],
+    );
+  });
+
+  test('every native skin import code maps to a translated message', () {
+    final codes =
+        RegExp(r'@"(SKIN_[A-Z_]+)"').allMatches(nativeSources()).map((m) => m[1]!).toSet();
+    expect(codes, isNotEmpty);
+    for (final code in codes) {
+      expect(LibretroLocale.skinErrorKeys.containsKey(code), isTrue, reason: code);
+    }
+    for (final key in LibretroLocale.skinErrorKeys.values) {
+      expect(english.containsKey(key), isTrue, reason: key);
+    }
+    final french = LibretroLocale.values['fr']!;
+    expect(
+      LibretroLocale.skinMessage(
+        const Locale('fr'),
+        'SKIN_CONSOLE_UNSUPPORTED',
+        arguments: <String, Object?>{'type': 'com.example.game'},
+      ),
+      french['skinErrorConsoleUnsupported']!.replaceAll('{type}', 'com.example.game'),
+    );
+    expect(
+      LibretroLocale.skinMessage(const Locale('fr'), 'SKIN_WARN_DEBUG_MISSING'),
+      french['skinWarnDebugMissing'],
+    );
+    expect(
+      LibretroLocale.skinMessage(const Locale('fr'), 'SOMETHING_ELSE'),
+      french['skinsImportFailed'],
+    );
+  });
+
+  test('every shader preset and parameter label is sent to the native session', () {
+    final source = File('$nativeClasses/LibretroShaderLibrary.m').readAsStringSync();
+    // MakePreset(identifier, nameKey, ...) and MakeParameter(identifier,
+    // labelKey, ...), plus any other shader* / param* key literal.
+    final declared = RegExp(r'Make(?:Preset|Parameter)\(\s*@"[^"]*",\s*@"(\w+)"')
+        .allMatches(source)
+        .map((m) => m[1]!)
+        .toSet();
+    final literals =
+        RegExp(r'@"((?:shader|param)[A-Z]\w*)"').allMatches(source).map((m) => m[1]!).toSet();
+    expect(declared, isNotEmpty);
+    for (final key in <String>{...declared, ...literals}) {
+      expect(LibretroLocale.nativeKeys, contains(key), reason: key);
+    }
+  });
+
+  test('every label the native code asks for is sent to the native session', () {
+    final requested =
+        RegExp(r'\btext:@"(\w+)"').allMatches(nativeSources()).map((m) => m[1]!).toSet();
+    expect(requested, isNotEmpty);
+    for (final key in requested) {
+      expect(LibretroLocale.nativeKeys, contains(key), reason: key);
+    }
+  });
+
+  test('the native session receives the skin, format, shader and control labels', () {
+    expect(
+      LibretroLocale.nativeKeys,
+      containsAll(<String>[
+        'skins', 'screenFormat', 'shaders', 'controls',
+        // Existing DS / 3DS layout labels, now shown by the native layout page.
+        'settingScreenLayout', 'layoutTopBottom', 'layoutLeftRight',
+        'layoutHybridTop', 'layoutTopOnly', 'layoutBottomOnly',
+      ]),
     );
   });
 

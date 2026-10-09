@@ -37,7 +37,16 @@ jobs:
         xcode-version: '26.3'
     - name: Run the portable host against a test core
       run: python3 test/libretro_host_test.py
+    - name: Run the portable frontend modules (geometry, controls, settings, skins)
+      # Runs even when an earlier native check failed, so one CI round reports every
+      # native problem; the job still fails.
+      if: ${{ !cancelled() }}
+      run: python3 test/libretro_frontend_test.py
+    - name: Compile and render every shader preset with Metal
+      if: ${{ !cancelled() }}
+      run: python3 test/libretro_shader_test.py
     - name: Compile every bridge and rcheevos source for iPhone
+      if: ${{ !cancelled() }}
       run: python3 test/libretro_ios_syntax_test.py
   dart:
     runs-on: ubuntu-24.04
