@@ -8,6 +8,11 @@ Ces règles expriment les exigences du mainteneur du 18 septembre 2026 et s'appl
 - Travailler sur une seule version candidate clairement identifiée pendant le cycle de correction. Chaque modification crée naturellement un nouveau SHA : consigner ce SHA exact, ne pas mélanger des binaires ou des résultats de tests provenant de révisions différentes.
 - Ne jamais réutiliser le nom d'un artefact pour faire passer une autre révision pour celle déjà testée. Associer version, SHA, entrées natives et résultats de validation.
 
+## Précision du mainteneur — 9 octobre 2026, 13 h
+
+- L'état fonctionnel confirmé est NeoStation Build 422 : bibliothèque visible et lancement RetroArch lorsque l'application externe reste en arrière-plan. Conserver ces sources de lancement/synchronisation ; ne pas prendre le récepteur autonome 781 pour une mise à jour NeoStation.
+- Aucun plafond arbitraire du nombre de dossiers de ROM n'est souhaité. La liaison doit enregistrer chaque dossier demandé et permettre son scan. La limite silencieuse de cinq racines a été retrouvée alors que la base fournie en contient sept ; le correctif 423 retire uniquement ce plafond et empêche d'afficher un succès d'enregistrement après un échec de persistance. Le scanner lui-même, les moteurs, la base et les métadonnées de jeux ne font l'objet d'aucune migration.
+
 ## Corriger avant de compiler
 
 - Le retour demandé au comportement de bibliothèque Build 419 est prioritaire : aucune nouvelle migration, réparation automatique, remise à zéro ou dissimulation de doublons. Une réparation de données persistées se documente séparément et ne s'applique pas à cette livraison. Corriger uniquement la liaison RetroArch établie et distinguer demande envoyée, application ouverte et jeu effectivement démarré.

@@ -65,7 +65,7 @@ def artifact(source,destination):
         password.write_text(os.urandom(32).hex())
         run('tar','-cf',raw,'-C',source,'.')
         aes(raw,destination/'artifact.tar.enc',password)
-        run('openssl','pkeyutl','-encrypt','-pubin','-inkey',ROOT/'build-utils/delivery-422-recipient.pem',
+        run('openssl','pkeyutl','-encrypt','-pubin','-inkey',ROOT/os.environ.get('DELIVERY_RECIPIENT','build-utils/delivery-422-recipient.pem'),
             '-in',password,'-out',destination/'password.rsa',
             '-pkeyopt','rsa_padding_mode:oaep','-pkeyopt','rsa_oaep_md:sha256')
     # No plaintext credentials, application binary or cache is uploaded.

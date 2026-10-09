@@ -15,17 +15,17 @@ extension SqliteConfigScanning on SqliteConfigProvider {
   Future<void> addRomFolder(String folderPath, {bool scan = true}) async {
     if (folderPath.isEmpty) return;
     if (_config.romFolders.contains(folderPath)) return;
-    if (_config.romFolders.length >= 5) return;
 
     try {
       _setLoading(true);
       final newList = [..._config.romFolders, folderPath];
-      _config = _config.copyWith(
+      final updatedConfig = _config.copyWith(
         romFolders: newList,
         lastScan: DateTime.now(),
         setupCompleted: true,
       );
-      await SqliteConfigService.saveConfig(_config);
+      await SqliteConfigService.saveConfig(updatedConfig);
+      _config = updatedConfig;
       if (scan) {
         await scanSystems();
       }

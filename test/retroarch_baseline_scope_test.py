@@ -20,6 +20,21 @@ class RetroArchBaselineScope(unittest.TestCase):
                     literal = b'final rootPath = path.normalize(linkedRoot);'
                     self.assertEqual(data.count(literal), 1)
                     data = data.replace(literal, b'final rootPath = path.normalize(linkedRoot.trim());', 1)
+                if name == 'lib/providers/sqlite_config_provider/scanning.dart':
+                    # Build423: the user's seven saved roots exposed the silent
+                    # five-folder cap. Only registration changes; scan logic is
+                    # still byte-identical to 419/422. Reconstruct those exact
+                    # reviewed edits before checking the historical fingerprint.
+                    edits = [
+                        (b'    if (_config.romFolders.contains(folderPath)) return;\n',
+                         b'    if (_config.romFolders.contains(folderPath)) return;\n    if (_config.romFolders.length >= 5) return;\n'),
+                        (b'      final updatedConfig = _config.copyWith(\n', b'      _config = _config.copyWith(\n'),
+                        (b'      await SqliteConfigService.saveConfig(updatedConfig);\n      _config = updatedConfig;\n',
+                         b'      await SqliteConfigService.saveConfig(_config);\n'),
+                    ]
+                    for current, original in edits:
+                        self.assertEqual(data.count(current), 1)
+                        data = data.replace(current, original, 1)
                 self.assertEqual(hashlib.sha256(data).hexdigest(), expected)
 
     def test_native_sources_keep_their_existing_identity(self):

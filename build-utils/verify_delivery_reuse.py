@@ -12,6 +12,11 @@ import subprocess
 ROOT = Path(__file__).resolve().parents[1]
 REFERENCE = 'af0d539b4b8b3b95fe0434fc1f72c74d7c0b6eca'
 REFERENCE_RUN = 37781416715
+# Receiver-only evidence was added after the last complete NeoStation build.
+# It is not a product change and has its own successful, pinned CI provenance.
+RECEIVER_REFERENCE = '3c70b5f4adb80232d3c50d0b648520c7db5afe2c'
+RECEIVER_RUN = 37857669052
+RECEIVER_INPUT = 'test/fixtures/retroarch_handoff/SourceReceiverTests.swift'
 DELTA = {
     'lib/data/datasources/sqlite_database_service.dart',
     'lib/data/datasources/sqlite_service.dart', 'lib/main.dart',
@@ -43,9 +48,11 @@ DELTA = {
     'test/fixtures/retroarch_handoff/PatchedSceneSyntax.m',
     'test/retroarch_relaunch_cache_test.dart',
     'test/library_scan_restart_test.dart', 'test/delivery_pipeline_test.py',
+    'test/rom_folder_registration_test.dart',
     'build-utils/verify_delivery_reuse.py', 'build-utils/delivery_metrics.py',
     'build-utils/sign_delivery.py', 'build-utils/delivery_benchmark.py',
     'build-utils/delivery_cipher.py', 'build-utils/delivery-422-recipient.pem',
+    'build-utils/delivery-423-recipient.pem',
 }
 INPUT_ROOTS = ('lib/', 'packages/', 'native/', 'build-utils/', 'assets/', 'test/')
 
@@ -59,6 +66,12 @@ def verify_tree():
         metadata, path = line.split('\t', 1)
         if path.startswith(INPUT_ROOTS) or path in ('pubspec.yaml', 'pubspec.lock'):
             old[path] = metadata.split()
+    receiver_entry = subprocess.check_output(
+        ['git', 'ls-tree', RECEIVER_REFERENCE, '--', RECEIVER_INPUT], cwd=ROOT, text=True)
+    metadata, receiver_path = receiver_entry.strip().split('\t', 1)
+    if receiver_path != RECEIVER_INPUT:
+        raise ValueError('Missing pinned receiver validation input')
+    old[receiver_path] = metadata.split()
     current = set(subprocess.check_output(['git', 'ls-files'], cwd=ROOT, text=True).splitlines())
     current = {p for p in current if p.startswith(INPUT_ROOTS) or p in ('pubspec.yaml', 'pubspec.lock')}
     changed = []
@@ -93,8 +106,13 @@ def main():
         build = next(j for j in jobs if 'private IPA' in j['name'])
         if build['conclusion'] != 'success' or any(s['conclusion'] != 'success' for s in build['steps']):
             raise ValueError('Historical build contains failed or skipped checks')
+        receiver_run = json.loads(subprocess.check_output(['gh', 'api', f'repos/TarbleFR/neostation-ios/actions/runs/{RECEIVER_RUN}']))
+        if (receiver_run['head_sha'] != RECEIVER_REFERENCE or receiver_run['conclusion'] != 'success'
+                or receiver_run['path'] != '.github/workflows/retroarch-source-proof.yml'):
+            raise ValueError('Pinned receiver validation was not successful')
     report = {'referenceSHA': REFERENCE, 'referenceRun': REFERENCE_RUN,
               'onlineSuccessVerified': run is not None,
+              'receiverReferenceSHA': RECEIVER_REFERENCE, 'receiverReferenceRun': RECEIVER_RUN,
               'unchangedInputCount': len(unchanged),
               'unchangedInputsSha256': sha(json.dumps(unchanged, sort_keys=True).encode()),
               'changedInputsRequiringNewTests': changed,

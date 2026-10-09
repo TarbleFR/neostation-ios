@@ -563,6 +563,11 @@ class DirectoriesSettingsContentState
       } else {
         await configProvider.addRomFolder(scanRoot, scan: true);
       }
+      if (!configProvider.config.romFolders.contains(scanRoot)) {
+        throw StateError(
+          configProvider.error ?? 'ROM folder registration did not complete',
+        );
+      }
       _log.i('iOS emulator link: root=$activePath romScanRoot=$scanRoot');
       if (!mounted) return;
 
@@ -850,17 +855,6 @@ class DirectoriesSettingsContentState
       context,
       listen: false,
     );
-
-    if (configProvider.config.romFolders.length >= 5) {
-      if (mounted) {
-        AppNotification.showNotification(
-          context,
-          AppLocale.maxRomFoldersReached.getString(context),
-          type: NotificationType.info,
-        );
-      }
-      return;
-    }
 
     try {
       String? selected;
