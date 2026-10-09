@@ -83,4 +83,16 @@ void main() {
     expect(LibretroCoreCatalog.coresFor('3ds').single.preferredHardwareContext,
         LibretroHardwareContext.vulkan);
   });
+
+  test('cores that generate machine code fall back to interpreters without JIT', () {
+    final cores = LibretroCoreCatalog.cores;
+    expect(cores['azahar']!.noJitOverrides, <String, String>{
+      'citra_use_cpu_jit': 'disabled',
+      'citra_use_shader_jit': 'disabled',
+    });
+    expect(cores['mupen64plus_next']!.noJitOverrides,
+        <String, String>{'mupen64plus-cpucore': 'cached_interpreter'});
+    expect(cores['ppsspp']!.noJitOverrides, <String, String>{'ppsspp_cpu_core': 'IR JIT'});
+    expect(cores['desmume']!.noJitOverrides, <String, String>{'desmume_cpu_mode': 'interpreter'});
+  });
 }

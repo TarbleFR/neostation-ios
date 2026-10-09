@@ -106,6 +106,7 @@ jobs:
         python3 test/retroarch_baseline_scope_test.py
         python3 test/delivery_pipeline_test.py
         python3 test/libretro_route_contract_test.py
+        python3 test/libretro_core_options_test.py
         python3 test/integrated_import_tab_contract_test.py
         python3 test/localization_12_locale_coverage_test.py
         python3 test/cheats_media_source_contract_test.py
@@ -709,6 +710,8 @@ jobs:
         fast_path.write_text(json.dumps(fast, indent=2) + '\n')
         print('Verified', len(identity['cores']), 'libretro cores and', len(identity['files']), 'files')
         PY
+    - name: Check catalog options and no-JIT overrides against the pinned cores
+      run: python3 test/libretro_core_options_test.py --cores dist/libretro
     - name: Download validated KartPad Core candidate
       if: ${{ env.KARTPAD_CANDIDATE == '1' }}
       shell: bash

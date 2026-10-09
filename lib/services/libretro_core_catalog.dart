@@ -129,6 +129,7 @@ abstract final class LibretroCoreCatalog {
       displayName: 'DeSmuME',
       extensions: {'nds', 'ids', 'bin'},
       optionDefaults: {'desmume_screens_layout': 'left/right'},
+      noJitOverrides: {'desmume_cpu_mode': 'interpreter'},
       settings: [
         LibretroCuratedSetting(
           'desmume_screens_layout',
@@ -177,7 +178,9 @@ abstract final class LibretroCoreCatalog {
       biosAnyOf: ['scph5500.bin', 'scph5501.bin', 'scph5502.bin'],
       // The iOS build links OpenGLES; its Vulkan renderer stays available.
       preferredHardwareContext: LibretroHardwareContext.openGLES3,
-      noJitOverrides: {'beetle_psx_hw_cpu_dynarec': 'disabled'},
+      // No no-JIT override: the pinned iOS builds of both Beetle PSX cores
+      // have no Lightrec dynarec option, and test/libretro_core_options_test.py
+      // flags one if a future core build adds it.
       settings: [
         LibretroCuratedSetting(
           'beetle_psx_hw_internal_resolution',
@@ -192,7 +195,6 @@ abstract final class LibretroCoreCatalog {
       displayName: 'Beetle PSX',
       extensions: {'cue', 'toc', 'm3u', 'ccd', 'exe', 'pbp', 'chd', 'bin'},
       biosAnyOf: ['scph5500.bin', 'scph5501.bin', 'scph5502.bin'],
-      noJitOverrides: {'beetle_psx_cpu_dynarec': 'disabled'},
     ),
     'ppsspp': LibretroCore(
       id: 'ppsspp',
@@ -217,9 +219,11 @@ abstract final class LibretroCoreCatalog {
         'app',
       },
       preferredHardwareContext: LibretroHardwareContext.vulkan,
+      // The libretro build keeps Citra's option keys. Both the ARM11 JIT and
+      // the PICA shader JIT emit machine code.
       noJitOverrides: {
-        'azahar_use_cpu_jit': 'disabled',
         'citra_use_cpu_jit': 'disabled',
+        'citra_use_shader_jit': 'disabled',
       },
     ),
   };

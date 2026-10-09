@@ -19,6 +19,7 @@ name: Libretro engine checks
   workflow_dispatch:
 permissions:
   contents: read
+  actions: read
 concurrency:
   group: libretro-checks-${{ github.ref }}
   cancel-in-progress: true
@@ -61,8 +62,16 @@ jobs:
     - name: Libretro, launch and library tests
       run: |
         flutter test test/libretro_locale_test.dart test/libretro_core_catalog_test.dart test/frontend_media_gate_test.dart test/rom_folder_registration_test.dart test/library_scan_restart_test.dart test/retroarch_library_protocol_test.dart test/retroarch_library_cache_test.dart test/retroarch_launch_diagnostics_test.dart test/retroarch_sync_locale_test.dart test/ios_selective_rollback_test.dart test/armsx2_retroarch_routing_isolation_test.dart test/game_repository_test.dart test/system_repository_test.dart test/rpcs3_embedded_identity_test.dart test/audio_policy_service_test.dart
+    - name: Download the libretro cores pinned by the delivery
+      uses: actions/download-artifact@v4
+      with:
+        name: LibretroCores-48635465f4bdb324db4ff41b8b9815ff101ad360
+        run-id: '37945318237'
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        path: dist/libretro
     - name: Source contracts
       run: |
+        python3 test/libretro_core_options_test.py --cores dist/libretro
         python3 test/libretro_route_contract_test.py
         python3 test/integrated_import_tab_contract_test.py
         python3 test/localization_12_locale_coverage_test.py

@@ -191,6 +191,7 @@ LIBRETRO_DELTA = {
     'test/frontend_media_gate_test.dart',
     'test/integrated_import_tab_contract_test.py',
     'test/libretro_core_catalog_test.dart',
+    'test/libretro_core_options_test.py',
     'test/libretro_host/host_test.m',
     'test/libretro_host/stubs/Flutter/Flutter.h',
     'test/libretro_host/test_core.c',
