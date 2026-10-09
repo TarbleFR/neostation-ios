@@ -46,7 +46,6 @@ class MusicPlayerService extends ChangeNotifier {
   String? _currentTitle;
   String? _currentArtist;
   String? _currentAlbum;
-  String? _currentYear;
   Uint8List? _currentPicture;
 
   // Metadata for active playback
@@ -451,7 +450,6 @@ class MusicPlayerService extends ChangeNotifier {
     _currentTitle = null;
     _currentArtist = null;
     _currentAlbum = null;
-    _currentYear = null;
     _currentPicture = null;
 
     final track = _playlist[_currentIndex];
@@ -468,7 +466,6 @@ class MusicPlayerService extends ChangeNotifier {
         _currentTitle = metadata.title;
         _currentArtist = metadata.artist;
         _currentAlbum = metadata.album;
-        _currentYear = metadata.year?.toString();
 
         if (_currentPicture == null && metadata.pictures.isNotEmpty) {
           _currentPicture = Uint8List.fromList(metadata.pictures.first.bytes);
@@ -546,7 +543,6 @@ class MusicPlayerService extends ChangeNotifier {
             _currentTitle = null;
             _currentArtist = null;
             _currentAlbum = null;
-            _currentYear = null;
             _currentPicture = null;
           }
         }
@@ -597,7 +593,6 @@ class MusicPlayerService extends ChangeNotifier {
               _currentTitle = _activeTitle;
               _currentArtist = _activeArtist;
               _currentAlbum = metadata.album;
-              _currentYear = metadata.year?.toString();
               if (metadata.pictures.isNotEmpty) {
                 _currentPicture = _activePicture;
                 _pictureCache[trackPath] = _currentPicture;
@@ -721,7 +716,6 @@ class MusicPlayerService extends ChangeNotifier {
     _currentTitle = null;
     _currentArtist = null;
     _currentAlbum = null;
-    _currentYear = null;
     _currentPicture = null;
 
     notifyListeners();

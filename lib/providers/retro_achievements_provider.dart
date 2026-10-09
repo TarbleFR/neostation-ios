@@ -55,20 +55,8 @@ class RetroAchievementsProvider extends ChangeNotifier {
   /// Total number of ROMs identified for the scan.
   final int _totalRoms = 0;
 
-  /// Total count of ROMs in the user's local database.
-  int _totalLocalRoms = 0;
-
-  /// Count of local ROMs that have a valid RA hash.
-  int _retroAchievementsCompatibleLocalRoms = 0;
-
-  /// Whether local statistics have been successfully computed.
-  bool _localStatsLoaded = false;
-
   /// Full user summary including recent activity and badges.
   RetroAchievementsUserSummary? _userSummary;
-
-  /// Whether the full user summary has been loaded.
-  bool _summaryLoaded = false;
 
   /// Memory cache for detailed game metadata and user progress, keyed by Game ID.
   final Map<int, GameInfoAndUserProgress> _gameInfoCache = {};
@@ -203,7 +191,6 @@ class RetroAchievementsProvider extends ChangeNotifier {
 
         await _saveRAUserToConfig(_username);
         await _saveRAApiKeyToConfig(_apiKey);
-        await loadLocalStats();
         unawaited(loadUserSummary());
 
         notifyListeners();
@@ -234,7 +221,6 @@ class RetroAchievementsProvider extends ChangeNotifier {
     }
 
     if (!hasResolvedApiKey) {
-      _summaryLoaded = false;
       _error = _dashboardApiKeyError;
       notifyListeners();
       return false;
@@ -251,18 +237,15 @@ class RetroAchievementsProvider extends ChangeNotifier {
 
       if (summary != null) {
         _userSummary = summary;
-        _summaryLoaded = true;
         notifyListeners();
         return true;
       } else {
         _error = 'User summary could not be loaded';
-        _summaryLoaded = false;
         notifyListeners();
         return false;
       }
     } catch (e) {
       _error = _describeApiError(e, 'Error loading user summary');
-      _summaryLoaded = false;
       _log.e('$_error');
       notifyListeners();
       return false;
@@ -513,7 +496,6 @@ class RetroAchievementsProvider extends ChangeNotifier {
     _apiKey = '';
     _error = null;
     _userSummary = null;
-    _summaryLoaded = false;
     _gotw = null;
     _gotwLoaded = false;
     _gotwLoading = false;
@@ -549,21 +531,6 @@ class RetroAchievementsProvider extends ChangeNotifier {
   void _setLoading(bool loading) {
     _isLoading = loading;
     notifyListeners();
-  }
-
-  /// Loads ROM statistics (total count and RA-compatible count) from the local database.
-  Future<void> loadLocalStats() async {
-    try {
-      final stats = await RetroAchievementsRepository.getLocalRomStats();
-      _totalLocalRoms = stats.totalRoms;
-      _retroAchievementsCompatibleLocalRoms = stats.raCompatibleRoms;
-      _localStatsLoaded = true;
-      notifyListeners();
-    } catch (e) {
-      _log.e('Error loading local stats: $e');
-      _localStatsLoaded = false;
-      notifyListeners();
-    }
   }
 
   /// Resets the current error state.

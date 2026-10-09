@@ -261,7 +261,6 @@ class GamepadNavigation {
   static const int _reactivationGraceMs = 150;
 
   String? _currentGamepadId;
-  String? _currentGamepadName;
 
   final GamepadEventTranslator _translator = GamepadEventTranslator();
 
@@ -361,7 +360,6 @@ class GamepadNavigation {
       if (gamepads.isNotEmpty) {
         final firstGamepad = gamepads.first;
         _currentGamepadId = firstGamepad.id;
-        _currentGamepadName = firstGamepad.name;
 
         _translator.updateGamepadSystemInfo(
           firstGamepad.id,
@@ -395,7 +393,6 @@ class GamepadNavigation {
       _translator.updateGamepadName(gamepadId, gamepad.name);
       final connectionType = gamepad.deviceInfo.connectionType;
       _translator.updateGamepadConnectionType(gamepadId, connectionType);
-      _currentGamepadName = gamepad.name;
     } catch (e) {
       _log.e('[GamepadNavigation] Error detecting connection type: $e');
     }

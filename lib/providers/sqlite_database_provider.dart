@@ -30,9 +30,6 @@ class SqliteDatabaseProvider extends ChangeNotifier {
   /// Last error message encountered during database operations.
   String? _error;
 
-  /// Timestamp of the last successful database synchronization.
-  DateTime? _lastUpdate;
-
   /// Whether the provider has finished its initial data load.
   bool _initialized = false;
 
@@ -71,7 +68,6 @@ class SqliteDatabaseProvider extends ChangeNotifier {
 
     try {
       _database = await GameRepository.loadDatabase();
-      _lastUpdate = DateTime.now();
       _log.i('Database loaded: ${_database.length} systems with games');
       notifyListeners();
     } catch (e) {
@@ -119,7 +115,6 @@ class SqliteDatabaseProvider extends ChangeNotifier {
         SteamScraperService.scrapeSteamGames(provider: this);
       }
 
-      _lastUpdate = DateTime.now();
       notifyListeners();
       return summary;
     } catch (e) {

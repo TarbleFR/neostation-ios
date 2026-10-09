@@ -30,9 +30,6 @@ class FileProvider extends ChangeNotifier {
   /// Absolute path to the root media directory.
   String? _mediaPath;
 
-  /// Absolute path to the user's standard Documents directory.
-  String? _documentsPath;
-
   /// Whether the provider has finished resolving all platform-specific paths.
   bool _isInitialized = false;
 
@@ -89,7 +86,6 @@ class FileProvider extends ChangeNotifier {
     try {
       if (Platform.isAndroid || Platform.isIOS) {
         final appSupportDir = await getApplicationSupportDirectory();
-        _documentsPath = appSupportDir.path;
         _userDataPath = appSupportDir.path;
 
         if (Platform.isAndroid) {
@@ -121,8 +117,6 @@ class FileProvider extends ChangeNotifier {
 
         final fullMediaPath = await ConfigService.getMediaPath();
         _mediaPath = path.dirname(fullMediaPath);
-
-        _documentsPath = path.dirname(userDataDir.path);
       }
 
       // Ensure directory structures exist.
@@ -148,7 +142,6 @@ class FileProvider extends ChangeNotifier {
       _log.e('FileProvider: Error initializing: $e');
       _userDataPath = null;
       _mediaPath = null;
-      _documentsPath = null;
       _isInitialized = false;
       notifyListeners();
     }
@@ -492,7 +485,6 @@ class FileProvider extends ChangeNotifier {
   void reset() {
     _userDataPath = null;
     _mediaPath = null;
-    _documentsPath = null;
     _esdeRoot = null;
     _esdeSystemDirs = {};
     _esdeMediaSubdirs = {};

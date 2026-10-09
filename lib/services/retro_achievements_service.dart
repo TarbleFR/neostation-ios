@@ -292,11 +292,7 @@ class RetroAchievementsService {
     );
   }
 
-  /// Resolves a game's information and user progress using a file hash.
-  @Deprecated(
-    'The Web API does not support hash lookup on the user-progress endpoint. '
-    'Resolve the hash to a game ID locally, then call getGameInfoAndUserProgress.',
-  )
+  static const String apiGetUserAwards = 'API_GetUserAwards.php';
 
   static Future<List<RetroAchievementRecentUnlockItem>>
   getUserRecentAchievements(
