@@ -115,9 +115,14 @@ static NSString *ErrorFor(NSString *name, id info) {
   return skin == nil ? (code ?: @"(nil code)") : @"(parsed)";
 }
 
+/// Imported items are named "<device>-<displayType>-<orientation>-item<N>"
+/// and the identifier must carry the representation's prefix; a short
+/// "item<N>" looks the item up within this representation.
 static LibretroSkinItem *ItemNamed(LibretroSkinRepresentation *representation, NSString *identifier) {
+  NSString *prefixed = [NSString stringWithFormat:@"%@-%@-%@-%@", representation.device, representation.displayType,
+                                                  LibretroSkinOrientationName(representation.orientation), identifier];
   for (LibretroSkinItem *item in representation.items) {
-    if ([item.identifier isEqualToString:identifier]) return item;
+    if ([item.identifier isEqualToString:identifier] || [item.identifier isEqualToString:prefixed]) return item;
   }
   return nil;
 }

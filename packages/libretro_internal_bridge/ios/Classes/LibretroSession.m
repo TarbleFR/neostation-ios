@@ -1330,18 +1330,21 @@ static void LibretroRestoreAppOrientations(UIViewController *presenter) {
   if (!pressed || !_loaded || _menu != nil || _editingControls) return;
   __weak LibretroSession *weakSelf = self;
   switch (action) {
-    case LibretroFrontendActionMenu:
+    case LibretroFrontendActionMenu: {
       // Outside the overlay's touch handling, which the menu interrupts.
       dispatch_async(dispatch_get_main_queue(), ^{
         [weakSelf openMenu];
       });
       break;
-    case LibretroFrontendActionQuickSave:
+    }
+    case LibretroFrontendActionQuickSave: {
       [self quickState:YES];
       break;
-    case LibretroFrontendActionQuickLoad:
+    }
+    case LibretroFrontendActionQuickLoad: {
       [self quickState:NO];
       break;
+    }
     case LibretroFrontendActionToggleFastForward: {
       BOOL on = !atomic_load(&_fastForward);
       _fastForwardHeld = NO;
@@ -1349,11 +1352,12 @@ static void LibretroRestoreAppOrientations(UIViewController *presenter) {
       [self showStatus:[self text:on ? @"fastForwardOn" : @"fastForwardOff"]];
       break;
     }
-    case LibretroFrontendActionSwapScreens:
+    case LibretroFrontendActionSwapScreens: {
       dispatch_async(dispatch_get_main_queue(), ^{
         [weakSelf swapScreens];
       });
       break;
+    }
     default:
       break;
   }
