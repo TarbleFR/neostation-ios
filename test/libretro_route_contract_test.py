@@ -56,8 +56,13 @@ require('retroarch://' not in plugin, 'the embedded engine never opens RetroArch
 # and portrait is installed when the plugin registers.
 require('@"profile"' not in plugin, 'the touch profile is retired from the launch request')
 for key in ('console', 'consoleName', 'gameKey', 'skinsDirectory', 'frontendDirectory', 'consoleGeometry',
-            'lockedOptions'):
+            'lockedOptions', 'logsDirectory'):
     require(f'@"{key}"' in plugin, f'launch key {key} parsed natively')
+# The session journal (Documents/Libretro/Logs) is sent with every launch.
+libretro_service = read('lib/services/libretro_internal_service.dart')
+require("'logsDirectory': (await logsDirectory()).path" in libretro_service, 'session journal directory sent')
+require("static Future<Directory> logsDirectory() => _child('Logs');" in libretro_service,
+        'session journal under Documents/Libretro/Logs')
 require(re.search(r'directoryKeys = @\[[^\]]*@"skinsDirectory", @"frontendDirectory"', plugin) is not None,
         'skins and frontend directories must be absolute paths')
 require('LibretroOrientationInstall();' in plugin, 'portrait support installed at plugin registration')

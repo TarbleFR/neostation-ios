@@ -50,6 +50,9 @@ NS_ASSUME_NONNULL_BEGIN
 /// citra_render_3d=off). Applied before retro_init and read-only in the
 /// menu.
 @property(nonatomic, copy) NSDictionary<NSString *, NSString *> *lockedOptions;
+/// Documents/Libretro/Logs: the session journal (LibretroSessionJournal);
+/// empty for none.
+@property(nonatomic, copy) NSString *logsDirectory;
 @end
 
 /// One embedded game: core host on its own emulation thread, presentation,
@@ -59,7 +62,12 @@ NS_ASSUME_NONNULL_BEGIN
 - (instancetype)initWithConfiguration:(LibretroSessionConfiguration *)configuration;
 
 /// Presents the game over `presenter` and loads the content. `completion`
-/// runs once on the main thread with {success, code, message, ...}.
+/// runs once on the main thread with {success, code, message, ...}:
+/// success once the core has run for the startup period (or the user left
+/// the game before), failure when the content could not be loaded or when
+/// the core stopped by itself during that period (LIBRETRO_CORE_STOPPED,
+/// with the core's error lines and log). On failure the game view is
+/// already dismissed.
 - (void)startFromViewController:(UIViewController *)presenter
                      completion:(void (^)(NSDictionary<NSString *, id> *result))completion;
 

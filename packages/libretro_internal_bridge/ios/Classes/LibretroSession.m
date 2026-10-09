@@ -1,6 +1,7 @@
 #import "LibretroSession.h"
 
 #import "LibretroAchievements.h"
+#import "LibretroAddressSpace.h"
 #import "LibretroAudioOutput.h"
 #import "LibretroChromeLayout.h"
 #import "LibretroCoreHost.h"
@@ -16,6 +17,7 @@
 #import "LibretroJit.h"
 #import "LibretroMetalPresenter.h"
 #import "LibretroOrientation.h"
+#import "LibretroSessionJournal.h"
 #import "LibretroSessionMenu.h"
 #import "LibretroShaderLibrary.h"
 #import "LibretroSkin.h"
@@ -38,6 +40,16 @@ static const double kImportedSkinOpacity = 0.7;
 static const double kMinimumOpacity = 0.15;
 /// Redraws of the last frame used to measure a shader preset.
 static const NSUInteger kShaderMeasureIterations = 30;
+/// Startup period: the launch is reported successful once the core has run
+/// this many frames and this long (frame-to-frame time, at most 0.25 s per
+/// frame, pauses excluded). Before that, a core that stops by itself (PPSSPP
+/// when its boot fails) is a launch failure carrying its own error lines,
+/// not a silent return to the library.
+static const NSUInteger kStartupFrames = 60;
+static const double kStartupSeconds = 5.0;
+static const double kStartupFrameCap = 0.25;
+/// Error lines of the core quoted in a LIBRETRO_CORE_STOPPED failure.
+static const NSUInteger kStartupErrorLines = 4;
 
 static NSString *SettingString(id value) {
   return [value isKindOfClass:NSString.class] && ((NSString *)value).length > 0 ? value : nil;
@@ -78,7 +90,15 @@ static void LibretroRestoreAppOrientations(UIViewController *presenter) {
   NSThread *_thread;
   NSCondition *_condition;
   NSMutableArray<dispatch_block_t> *_commands;
+  /// Quit requested by the user (menu, plugin "stop").
   BOOL _stopRequested;
+  /// RETRO_ENVIRONMENT_SHUTDOWN from the core.
+  BOOL _coreStopRequested;
+  // Startup period (emulation thread).
+  BOOL _startupConfirmed;
+  NSUInteger _startupFrames;
+  double _startupSeconds;
+  LibretroSessionJournal *_journal;
   BOOL _menuPaused;
   BOOL _backgroundPaused;
   _Atomic bool _fastForward;
@@ -176,6 +196,12 @@ static void LibretroRestoreAppOrientations(UIViewController *presenter) {
 - (void)startFromViewController:(UIViewController *)presenter
                      completion:(void (^)(NSDictionary<NSString *, id> *result))completion {
   _startCompletion = [completion copy];
+  _journal = [LibretroSessionJournal journalInDirectory:_configuration.logsDirectory ?: @""];
+  [_journal note:[NSString stringWithFormat:@"launch: \"%@\" (%@) with %@, console %@, locale %@",
+                                            _configuration.gameTitle ?: @"",
+                                            _configuration.contentPath.lastPathComponent ?: @"",
+                                            _configuration.corePath.lastPathComponent ?: @"",
+                                            _configuration.console ?: @"", _configuration.uiLocale ?: @""]];
   [self prepareFrontend];
   NSString *cacheDirectory =
       _configuration.cacheDirectory.length > 0 ? _configuration.cacheDirectory : NSTemporaryDirectory();
@@ -201,6 +227,7 @@ static void LibretroRestoreAppOrientations(UIViewController *presenter) {
   _presenter = [[LibretroMetalPresenter alloc] initWithLayer:_metalLayer];
   if (_presenter == nil) {
     _controller = nil;
+    [_journal finishWithOutcome:@"launch failed LIBRETRO_VIDEO_FAILED (no Metal presenter)"];
     [self finishStartWithResult:@{@"success" : @NO, @"code" : @"LIBRETRO_VIDEO_FAILED", @"message" : @"Metal"}];
     return;
   }
@@ -219,6 +246,7 @@ static void LibretroRestoreAppOrientations(UIViewController *presenter) {
                         completion:^{
                           LibretroSession *session = weakSelf;
                           if (session == nil) return;
+                          [session->_journal note:@"launch: game view presented, emulation thread starting"];
                           session->_thread = [[NSThread alloc] initWithTarget:session
                                                                      selector:@selector(threadMain)
                                                                        object:nil];
@@ -252,6 +280,7 @@ static void LibretroRestoreAppOrientations(UIViewController *presenter) {
     [self finishStop];
     return;
   }
+  [_journal note:@"stop: requested by the user"];
   [_condition lock];
   _stopRequested = YES;
   [_condition signal];
@@ -273,8 +302,14 @@ static void LibretroRestoreAppOrientations(UIViewController *presenter) {
   BOOL notify = _started;
   _started = NO;
   UIViewController *presenter = controller.presentingViewController;
+  LibretroSessionJournal *journal = _journal;
+  NSArray<NSString *> *finalLog = _finalLog ?: @[];
+  [journal note:@"stop: dismissing the game view"];
   dispatch_block_t done = ^{
     LibretroRestoreAppOrientations(presenter);
+    [journal note:@"stop: game view dismissed, returning to NeoStation"];
+    [journal noteLines:finalLog title:@"core log"];
+    [journal finishWithOutcome:@"closed"];
     for (dispatch_block_t completion in completions) completion();
     if (notify && self.endedHandler != nil) self.endedHandler();
   };
@@ -290,12 +325,25 @@ static void LibretroRestoreAppOrientations(UIViewController *presenter) {
   _finalLog = result[@"log"];
   LibretroGameViewController *controller = _controller;
   _controller = nil;
+  _menu = nil;
+  _frontendMenu = nil;
+  _editingControls = NO;
   _input.actionHandler = nil;
   [controller stopInputPolling];
+  // A stop asked while the launch was failing is answered too.
+  NSArray<dispatch_block_t> *completions = [_stopCompletions copy];
+  [_stopCompletions removeAllObjects];
   UIViewController *presenter = controller.presentingViewController;
+  LibretroSessionJournal *journal = _journal;
+  NSString *code = [result[@"code"] isKindOfClass:NSString.class] ? result[@"code"] : @"";
+  NSArray<NSString *> *finalLog = [_finalLog isKindOfClass:NSArray.class] ? _finalLog : @[];
+  [journal note:[NSString stringWithFormat:@"launch failed %@: %@", code, result[@"message"] ?: @""]];
   dispatch_block_t done = ^{
     LibretroRestoreAppOrientations(presenter);
+    [journal noteLines:finalLog title:@"core log"];
+    [journal finishWithOutcome:[@"launch failed " stringByAppendingString:code]];
     [self finishStartWithResult:result];
+    for (dispatch_block_t completion in completions) completion();
   };
   if (presenter != nil) {
     [presenter dismissViewControllerAnimated:NO completion:done];
@@ -320,26 +368,95 @@ static void LibretroRestoreAppOrientations(UIViewController *presenter) {
     });
     return;
   }
+  [_journal note:[NSString stringWithFormat:@"run: %@ %@ loaded, renderer %@", _host.libraryName ?: @"",
+                                            _host.libraryVersion ?: @"", [self rendererName]]];
+  dispatch_async(dispatch_get_main_queue(), ^{
+    [self->_controller setLoading:NO];
+  });
+  [self runLoop];
+  [_condition lock];
+  BOOL coreStopped = _coreStopRequested && !_stopRequested;
+  [_condition unlock];
+  NSDictionary<NSString *, id> *startupFailure = nil;
+  if (coreStopped) {
+    [_journal note:[NSString stringWithFormat:@"run: the core requested shutdown after %lu frames",
+                                              (unsigned long)_startupFrames]];
+  }
+  if (!_startupConfirmed) {
+    if (coreStopped) {
+      startupFailure = [self coreStoppedFailure];
+    } else {
+      // Left by the user before the end of the startup period: the game ran.
+      [self confirmStartup];
+    }
+  }
+  @autoreleasepool {
+    [self unloadCore];
+  }
+  if (startupFailure != nil) {
+    NSMutableDictionary<NSString *, id> *result = [startupFailure mutableCopy];
+    result[@"log"] = _finalLog ?: @[];
+    dispatch_async(dispatch_get_main_queue(), ^{
+      [self failStartWithResult:result];
+    });
+    return;
+  }
+  dispatch_async(dispatch_get_main_queue(), ^{
+    [self finishStop];
+  });
+}
+
+- (NSString *)rendererName {
+  return _gl != nil ? @"gles" : (_vulkan != nil ? @"vulkan" : @"software");
+}
+
+/// Emulation thread. Tells Dart the launch succeeded: the core has run for
+/// the startup period, or the user left the game before its end.
+- (void)confirmStartup {
+  if (_startupConfirmed) return;
+  _startupConfirmed = YES;
+  [_journal note:[NSString stringWithFormat:@"run: startup confirmed after %lu frames (%.1f s)",
+                                            (unsigned long)_startupFrames, _startupSeconds]];
   NSDictionary<NSString *, id> *success = @{
     @"success" : @YES,
     @"code" : @"",
     @"libraryName" : _host.libraryName ?: @"",
     @"libraryVersion" : _host.libraryVersion ?: @"",
-    @"hardwareRendering" : _gl != nil ? @"gles" : (_vulkan != nil ? @"vulkan" : @"software"),
+    @"hardwareRendering" : [self rendererName],
     @"jitCapable" : @(LibretroJitUsableByCores()),
   };
   dispatch_async(dispatch_get_main_queue(), ^{
     self->_started = YES;
-    [self->_controller setLoading:NO];
     [self finishStartWithResult:success];
   });
-  [self runLoop];
-  @autoreleasepool {
-    [self unloadCore];
+}
+
+/// Emulation thread, after a frame of the startup period.
+- (void)countStartupFrame:(uint64_t *)lastFrame {
+  static mach_timebase_info_data_t timebase;
+  if (timebase.denom == 0) mach_timebase_info(&timebase);
+  uint64_t now = mach_absolute_time();
+  if (*lastFrame != 0) {
+    double seconds = (double)(now - *lastFrame) * timebase.numer / timebase.denom / 1e9;
+    _startupSeconds += MIN(seconds, kStartupFrameCap);
   }
-  dispatch_async(dispatch_get_main_queue(), ^{
-    [self finishStop];
-  });
+  *lastFrame = now;
+  _startupFrames++;
+  if (_host.shutdownRequested) return;
+  if (_startupFrames >= kStartupFrames && _startupSeconds >= kStartupSeconds) [self confirmStartup];
+}
+
+/// LIBRETRO_CORE_STOPPED: the core asked to shut down (RETRO_ENVIRONMENT_SHUTDOWN)
+/// before the startup period ended. The message quotes the core's last error
+/// lines (PPSSPP logs why its boot failed); the log is added by the caller.
+- (NSDictionary<NSString *, id> *)coreStoppedFailure {
+  NSArray<NSString *> *errors = [_host recentErrors:kStartupErrorLines];
+  NSString *detail = errors.count > 0
+                         ? [errors componentsJoinedByString:@"\n"]
+                         : [NSString stringWithFormat:@"%@ requested RETRO_ENVIRONMENT_SHUTDOWN after %lu frames",
+                                                      _host.libraryName ?: @"the core",
+                                                      (unsigned long)_startupFrames];
+  return [self failureWithCode:@"LIBRETRO_CORE_STOPPED" detail:detail];
 }
 
 - (NSDictionary<NSString *, id> *)failureWithCode:(NSString *)code detail:(NSString *)detail {
@@ -439,7 +556,18 @@ static void LibretroRestoreAppOrientations(UIViewController *presenter) {
   _host.lockedSessionOverrides = configuration.lockedOptions.count > 0 ? configuration.lockedOptions : nil;
   NSError *error = nil;
   if (![_host loadCore:&error]) return [self failureFromError:error];
+  [_journal note:[NSString stringWithFormat:@"load: core %@ %@ initialised", _host.libraryName ?: @"",
+                                            _host.libraryVersion ?: @""]];
+  if ([_host.libraryName isEqualToString:@"PPSSPP"]) {
+    // PPSSPP maps the PSP memory at fixed addresses between 4 and 6 GiB
+    // while it boots: record whether this process leaves room for it.
+    NSString *report = LibretroPPSSPPAddressSpaceReport();
+    [_host appendLog:report];
+    [_journal note:report];
+  }
   if (![_host loadContentAtPath:configuration.contentPath error:&error]) return [self failureFromError:error];
+  [_journal note:[NSString stringWithFormat:@"load: content accepted (%@)",
+                                            _host.usesHardwareRendering ? @"hardware rendering" : @"software"]];
   struct retro_system_av_info av = _host.avInfo;
   [self applyGeometry:av.geometry];
   _presenter.rotation = _host.rotation;
@@ -481,6 +609,7 @@ static void LibretroRestoreAppOrientations(UIViewController *presenter) {
       }
     }
     if (!prepared) return [self failureWithCode:@"LIBRETRO_HARDWARE_RENDER_FAILED" detail:error.localizedDescription];
+    [_journal note:[NSString stringWithFormat:@"load: %@ context ready, context_reset called", [self rendererName]]];
     [_host hardwareContextReset];
   } else {
     [_presenter presentBlack];
@@ -512,25 +641,29 @@ static void LibretroRestoreAppOrientations(UIViewController *presenter) {
   static mach_timebase_info_data_t timebase;
   if (timebase.denom == 0) mach_timebase_info(&timebase);
   uint64_t next = mach_absolute_time();
+  // Previous frame of the startup period; 0 after a pause.
+  uint64_t lastStartupFrame = 0;
   while (YES) {
     @autoreleasepool {
       [_condition lock];
-      while ((_menuPaused || _backgroundPaused) && !_stopRequested && _commands.count == 0) {
+      while ((_menuPaused || _backgroundPaused) && !_stopRequested && !_coreStopRequested && _commands.count == 0) {
         [_achievements idle];
         [_condition waitUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.5]];
       }
       NSArray<dispatch_block_t> *commands = [_commands copy];
       [_commands removeAllObjects];
-      BOOL stop = _stopRequested || _host.shutdownRequested;
+      BOOL stop = _stopRequested || _coreStopRequested || _host.shutdownRequested;
       BOOL paused = _menuPaused || _backgroundPaused;
       [_condition unlock];
       for (dispatch_block_t command in commands) command();
       if (stop) break;
       if (paused) {
         next = mach_absolute_time();
+        lastStartupFrame = 0;
         continue;
       }
       [self runOneFrame];
+      if (!_startupConfirmed) [self countStartupFrame:&lastStartupFrame];
       double fps = _host.avInfo.timing.fps > 1.0 ? _host.avInfo.timing.fps : 60.0;
       bool fast = atomic_load(&_fastForward);
       double seconds = 1.0 / (fps * (fast ? 3.0 : 1.0));
@@ -589,7 +722,14 @@ static void LibretroRestoreAppOrientations(UIViewController *presenter) {
   [_achievements doFrame];
 }
 
+/// Emulation thread. RetroArch's order: context_destroy, then
+/// retro_unload_game and retro_deinit with the GL context current or the
+/// Vulkan device alive (the core frees its renderer there: Azahar destroys
+/// its Vulkan objects through this device in retro_unload_game), then the
+/// renderer is released. Releasing the device first made the core use a
+/// destroyed VkDevice when a 3DS game was closed.
 - (void)unloadCore {
+  [_journal note:@"teardown: started"];
   [_achievements shutdown];
   _achievements = nil;
   [_audio stop];
@@ -598,25 +738,40 @@ static void LibretroRestoreAppOrientations(UIViewController *presenter) {
   LibretroVulkanRenderer *vulkan = _vulkan;
   LibretroCoreHost *host = _host;
   LibretroMetalPresenter *presenter = _presenter;
+  LibretroSessionJournal *journal = _journal;
   dispatch_semaphore_t semaphore = _glFrameSemaphore;
-  [_host unloadWithHardwareTeardown:^{
+  __block BOOL glFrameHeld = NO;
+  host.teardownObserver = ^(NSString *step, BOOL finished) {
+    [journal note:[NSString stringWithFormat:@"teardown: %@ %@", step, finished ? @"returned" : @"called"]];
+  };
+  [host unloadWithContextDestroy:^{
     if (gl != nil) {
-      // Waits for the frame the GPU may still read, then drops the
-      // presenter's reference before the IOSurface goes away.
-      long waited = dispatch_semaphore_wait(semaphore, dispatch_time(DISPATCH_TIME_NOW, (int64_t)NSEC_PER_SEC));
+      // Waits for the frame the GPU may still read and drops the presenter's
+      // reference; no frame is presented until the IOSurface is released.
+      glFrameHeld =
+          dispatch_semaphore_wait(semaphore, dispatch_time(DISPATCH_TIME_NOW, (int64_t)NSEC_PER_SEC)) == 0;
       [presenter invalidateLastFrame];
       [gl makeCurrent];
-      [host hardwareContextDestroy];
-      [gl teardown];
-      if (waited == 0) dispatch_semaphore_signal(semaphore);
     }
     if (vulkan != nil) {
       vulkan.frameHandler = nil;
       [vulkan waitIdle];
-      [host hardwareContextDestroy];
-      [vulkan teardown];
     }
-  }];
+    [journal note:@"teardown: context_destroy called"];
+    [host hardwareContextDestroy];
+    [journal note:@"teardown: context_destroy returned"];
+  }
+      contextRelease:^{
+        [journal note:[NSString stringWithFormat:@"teardown: releasing the %@ renderer",
+                                                 gl != nil ? @"OpenGL ES" : (vulkan != nil ? @"Vulkan" : @"software")]];
+        if (gl != nil) {
+          [gl teardown];
+          if (glFrameHeld) dispatch_semaphore_signal(semaphore);
+        }
+        if (vulkan != nil) [vulkan teardown];
+        [journal note:@"teardown: renderer released"];
+      }];
+  host.teardownObserver = nil;
   _finalLog = _host.recentLog;
 }
 
@@ -706,8 +861,9 @@ static void LibretroRestoreAppOrientations(UIViewController *presenter) {
 }
 
 - (void)coreHostRequestedShutdown:(LibretroCoreHost *)host {
+  // Kept apart from a user stop: during the startup period it is a failure.
   [_condition lock];
-  _stopRequested = YES;
+  _coreStopRequested = YES;
   [_condition signal];
   [_condition unlock];
 }

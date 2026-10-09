@@ -51,6 +51,28 @@ static int failures = 0;
 }
 @end
 
+/// A delegate with a hardware context: its render interface exists from
+/// context creation until the frontend releases the context.
+@interface HardwareDelegate : TestDelegate
+@property(nonatomic) BOOL contextAlive;
+@end
+
+@implementation HardwareDelegate
+- (BOOL)coreHost:(LibretroCoreHost *)host prepareHardwareRender:(struct retro_hw_render_callback *)callback {
+  self.contextAlive = YES;
+  return YES;
+}
+- (const struct retro_hw_render_interface *)hardwareRenderInterfaceForCoreHost:(LibretroCoreHost *)host {
+  static const struct retro_hw_render_interface interface = {RETRO_HW_RENDER_INTERFACE_VULKAN, 5};
+  return self.contextAlive ? &interface : NULL;
+}
+@end
+
+static NSUInteger LogIndex(NSArray<NSString *> *log, NSString *line) {
+  NSUInteger index = [log indexOfObject:line];
+  return index == NSNotFound ? NSUIntegerMax : index;
+}
+
 static LibretroCoreHost *MakeHost(NSString *core, NSString *work) {
   return [[LibretroCoreHost alloc] initWithCorePath:core
                                     systemDirectory:[work stringByAppendingPathComponent:@"System"]
@@ -122,7 +144,7 @@ int main(int argc, const char *argv[]) {
     CHECK([[host labelForDisk:1] isEqualToString:@"Test disc 2"], "disk label read");
     [host runFrame];
     NSString *saveRAM = host.saveRAMPath;
-    [host unloadWithHardwareTeardown:nil];
+    [host unloadWithContextDestroy:nil contextRelease:nil];
     NSData *sram = [NSData dataWithContentsOfFile:saveRAM];
     const uint8_t *bytes = sram.bytes;
     CHECK(sram.length == 2048, "save RAM written on unload");
@@ -163,7 +185,7 @@ int main(int argc, const char *argv[]) {
     CHECK([LibretroStateCodec coreStateFromFileData:[NSData dataWithBytes:zstd length:20] error:&decodeError] == nil &&
               decodeError.code == LibretroStateCodecErrorUnsupportedCompression,
           "zstd states are reported, not guessed");
-    [again unloadWithHardwareTeardown:nil];
+    [again unloadWithContextDestroy:nil contextRelease:nil];
 
     NSData *options = [NSData dataWithContentsOfFile:[work stringByAppendingPathComponent:@"Config/NeoTest.json"]];
     CHECK(options != nil && [[[NSString alloc] initWithData:options encoding:NSUTF8StringEncoding]
@@ -210,12 +232,84 @@ int main(int argc, const char *argv[]) {
     CHECK(!configured.options.updatePending, "a default under a stored user value is not flagged");
     [configured.options applyDefaults:@{@"neotest_default" : @"core"}];
     CHECK(configured.options.updatePending, "a default changing a declared option is flagged for the core");
-    [configured unloadWithHardwareTeardown:nil];
+    [configured unloadWithContextDestroy:nil contextRelease:nil];
     NSData *stored = [NSData dataWithContentsOfFile:[work stringByAppendingPathComponent:@"Config/NeoTest.json"]];
     id storedJSON = stored != nil ? [NSJSONSerialization JSONObjectWithData:stored options:0 error:nil] : nil;
     NSDictionary *storedValues = [storedJSON isKindOfClass:[NSDictionary class]] ? storedJSON[@"values"] : nil;
     CHECK([storedValues[@"neotest_locked"] isEqual:@"user"], "the refused change was not stored");
     CHECK([storedValues[@"neotest_init"] isEqual:@"three"], "session overrides are never stored");
+
+    // Session 4: RetroArch's teardown order. context_destroy first, then
+    // retro_unload_game and retro_deinit while the hardware context and its
+    // interface still exist (Azahar destroys its Vulkan renderer through the
+    // frontend's VkDevice in retro_unload_game), then the frontend releases
+    // the context, and dlclose last. Releasing the context before
+    // retro_unload_game crashed NeoStation when a 3DS game was closed.
+    HardwareDelegate *hardware = [HardwareDelegate new];
+    LibretroCoreHost *rendered = MakeHost(core, work);
+    rendered.delegate = hardware;
+    rendered.initialSessionOverrides = @{@"neotest_hw" : @"on"};
+    CHECK([rendered loadCore:&error], "core loads for the hardware context session");
+    CHECK([rendered loadContentAtPath:content error:&error], "content loads with a hardware context");
+    CHECK(rendered.usesHardwareRendering, "the core registered its hardware context");
+    [rendered hardwareContextReset];
+    [rendered runFrame];
+    NSMutableArray<NSString *> *steps = [NSMutableArray array];
+    rendered.teardownObserver = ^(NSString *step, BOOL finished) {
+      [steps addObject:[NSString stringWithFormat:@"%@ %@", step, finished ? @"returned" : @"called"]];
+    };
+    __block NSArray<NSString *> *logAtRelease = @[];
+    [rendered unloadWithContextDestroy:^{
+      [steps addObject:@"frontend destroys the context"];
+      [rendered hardwareContextDestroy];
+    }
+        contextRelease:^{
+          [steps addObject:@"frontend releases the context"];
+          logAtRelease = rendered.recentLog;
+          hardware.contextAlive = NO;
+        }];
+    NSArray<NSString *> *expectedSteps = @[
+      @"frontend destroys the context", @"retro_unload_game called", @"retro_unload_game returned",
+      @"retro_deinit called", @"retro_deinit returned", @"frontend releases the context", @"dlclose called",
+      @"dlclose returned"
+    ];
+    CHECK([steps isEqualToArray:expectedSteps], "teardown runs context_destroy, unload, deinit, release, dlclose");
+    if (![steps isEqualToArray:expectedSteps]) printf("  steps: %s\n", [steps description].UTF8String);
+    NSArray<NSString *> *log = rendered.recentLog;
+    NSUInteger destroyed = LogIndex(log, @"[INFO] neotest context_destroy interface=1");
+    NSUInteger unloaded = LogIndex(log, @"[INFO] neotest unload_game interface=1");
+    NSUInteger deinitialized = LogIndex(log, @"[INFO] neotest deinit interface=1");
+    CHECK(destroyed != NSUIntegerMax, "context_destroy runs while the context exists");
+    CHECK(unloaded != NSUIntegerMax, "retro_unload_game still reaches the hardware render interface");
+    CHECK(deinitialized != NSUIntegerMax, "retro_deinit still reaches the hardware render interface");
+    CHECK(destroyed < unloaded && unloaded < deinitialized, "context_destroy, then retro_unload_game, then retro_deinit");
+    CHECK([logAtRelease containsObject:@"[INFO] neotest deinit interface=1"],
+          "the frontend releases its context only after retro_deinit returned");
+    if (destroyed == NSUIntegerMax || unloaded == NSUIntegerMax || deinitialized == NSUIntegerMax) {
+      printf("  log: %s\n", [log description].UTF8String);
+    }
+
+    // Session 5: a core that stops by itself (PPSSPP when its boot fails)
+    // raises shutdownRequested and leaves its error line, which the session
+    // quotes in a LIBRETRO_CORE_STOPPED launch failure.
+    TestDelegate *fifth = [TestDelegate new];
+    LibretroCoreHost *stopping = MakeHost(core, work);
+    stopping.delegate = fifth;
+    stopping.initialSessionOverrides = @{@"neotest_shutdown_frame" : @"3"};
+    CHECK([stopping loadCore:&error], "core loads for the shutdown session");
+    CHECK([stopping loadContentAtPath:content error:&error], "content loads for the shutdown session");
+    int frames = 0;
+    while (frames < 10 && !stopping.shutdownRequested) {
+      [stopping runFrame];
+      frames++;
+    }
+    CHECK(stopping.shutdownRequested && frames == 3, "the core's shutdown request is seen at the frame it is made");
+    NSArray<NSString *> *errors = [stopping recentErrors:4];
+    CHECK(errors.count == 1 && [errors.firstObject isEqualToString:@"[ERROR] neotest boot failed: simulated"],
+          "the core's error line is available for the failure message");
+    [stopping appendLog:@"[HOST] note"];
+    CHECK([[stopping recentLog].lastObject isEqualToString:@"[HOST] note"], "frontend notes join the log");
+    [stopping unloadWithContextDestroy:nil contextRelease:nil];
   }
   if (failures > 0) {
     printf("%d libretro host check(s) failed\n", failures);

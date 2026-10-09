@@ -442,6 +442,23 @@ FRONTEND_DELTA = {
     'test/libretro_playlist_actions_test.dart',
 }
 DELTA |= FRONTEND_DELTA
+# 3DS close and PSP start (maintainer report of 10 October 2026, video
+# ScreenRecording_10-10-2026 01-04-54): RetroArch's teardown order (the
+# hardware context outlives retro_unload_game and retro_deinit), core stops
+# during startup reported as launch failures, the session journal, the
+# PPSSPP memory window report, their macOS tests and the iOS Simulator probe
+# with the real cores. See docs/libretro-3ds-psp-lifecycle.md.
+LIFECYCLE_DELTA = {
+    'packages/libretro_internal_bridge/ios/Classes/LibretroAddressSpace.h',
+    'packages/libretro_internal_bridge/ios/Classes/LibretroAddressSpace.m',
+    'packages/libretro_internal_bridge/ios/Classes/LibretroSessionJournal.h',
+    'packages/libretro_internal_bridge/ios/Classes/LibretroSessionJournal.m',
+    'test/libretro_host/frontend/address_space_test.m',
+    'test/libretro_host/frontend/session_journal_test.m',
+    'test/libretro_simulator/probe.m',
+    'test/libretro_simulator_probe.py',
+}
+DELTA |= LIFECYCLE_DELTA
 INPUT_ROOTS = ('lib/', 'packages/', 'native/', 'build-utils/', 'assets/', 'test/')
 
 def sha(data):

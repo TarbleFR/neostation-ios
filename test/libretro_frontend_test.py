@@ -3,8 +3,8 @@
 
 Every test/libretro_host/frontend/*_test.m becomes one executable linked with
 the portable frontend sources (geometry, input map, preferences, skins,
-skin and chrome layout, default skins, shader library) and the FRAMEWORKS
-below, built with -Werror.
+skin and chrome layout, default skins, shader library, address space
+report, session journal) and the FRAMEWORKS below, built with -Werror.
 Each executable runs with two arguments: an empty work directory of its own
 and the repository root (for fixtures). It prints PASS / FAIL lines and
 returns non-zero on failure. A test needing more link flags declares them on
@@ -28,6 +28,8 @@ PORTABLE_FRONTEND = (
     'LibretroChromeLayout.m',
     'LibretroDefaultSkins.m',
     'LibretroShaderLibrary.m',
+    'LibretroAddressSpace.m',
+    'LibretroSessionJournal.m',
 )
 FRAMEWORKS = ('Foundation',)
 LINK_MARKER = '// LINK:'

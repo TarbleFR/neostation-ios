@@ -146,10 +146,28 @@ typedef struct {
 
 - (BOOL)flushSaveRAM:(NSError *_Nullable *_Nullable)error;
 
-/// Writes save RAM, then retro_unload_game, retro_deinit and dlclose.
-/// `beforeUnload` runs first so a hardware context can be torn down while
-/// the core is still loaded.
-- (void)unloadWithHardwareTeardown:(void (^_Nullable)(void))beforeUnload;
+/// Unloads the core in RetroArch's order. Save RAM is written, then
+/// `destroyContext` runs: the delegate stops presenting and calls
+/// -hardwareContextDestroy while its context is still usable. Then
+/// retro_unload_game and retro_deinit run while the hardware context and
+/// every interface given to the core still exist: Azahar destroys its
+/// Vulkan renderer in retro_unload_game through the frontend's VkDevice,
+/// PPSSPP deletes its OpenGL objects there. `releaseContext` (the delegate
+/// destroys its GL context or Vulkan device) and dlclose come last.
+- (void)unloadWithContextDestroy:(void (^_Nullable)(void))destroyContext
+                  contextRelease:(void (^_Nullable)(void))releaseContext;
+
+/// Teardown milestones for the session journal: called before (`finished`
+/// NO) and after (`finished` YES) retro_unload_game, retro_deinit and
+/// dlclose, on the unloading thread.
+@property(nonatomic, copy, nullable) void (^teardownObserver)(NSString *step, BOOL finished);
+
+/// Adds a frontend line ("[HOST] ...") to recentLog, next to the core's.
+- (void)appendLog:(NSString *)line;
+
+/// The last `limit` error lines of recentLog ("[ERROR]" lines of the core),
+/// oldest first: what a core logged before stopping by itself.
+- (NSArray<NSString *> *)recentErrors:(NSUInteger)limit;
 
 @property(nonatomic, readonly) BOOL supportsDiskControl;
 @property(nonatomic, readonly) unsigned diskCount;

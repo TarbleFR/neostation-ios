@@ -102,6 +102,11 @@ abstract final class LibretroInternalService {
   /// One directory per imported skin (`Skins/<id>`).
   static Future<Directory> skinsDirectory() => _child('Skins');
 
+  /// Journal of the last sessions, written by the native session as it goes
+  /// (`session.log`, `previous-session.log`, `unfinished-session.log`), for
+  /// diagnosing a launch failure or a session the process did not survive.
+  static Future<Directory> logsDirectory() => _child('Logs');
+
   /// Per-console frontend settings, written only by the native
   /// LibretroFrontendStore (`Config/Frontend/<console>.json`).
   static Future<Directory> frontendDirectory() async =>
@@ -122,6 +127,7 @@ abstract final class LibretroInternalService {
       await frontendDirectory(),
       await cheatsDirectory(),
       await skinsDirectory(),
+      await logsDirectory(),
       await cacheDirectory(),
     ]) {
       await directory.create(recursive: true);
@@ -226,6 +232,7 @@ abstract final class LibretroInternalService {
       'cacheDirectory': (await cacheDirectory()).path,
       'skinsDirectory': (await skinsDirectory()).path,
       'frontendDirectory': (await frontendDirectory()).path,
+      'logsDirectory': (await logsDirectory()).path,
       'consoleGeometry': LibretroCoreCatalog.consoleGeometry(),
       'uiLocale': locale.toLanguageTag(),
       'retroLanguage': LibretroLocale.retroLanguage(locale),

@@ -502,6 +502,12 @@ static NSDictionary<NSString *, id> *Failure(NSString *code, NSString *message) 
       return;
     }
   }
+  // Optional: where the session journal goes (Documents/Libretro/Logs).
+  NSString *logsDirectory = StringArgument(arguments, @"logsDirectory");
+  if (logsDirectory.length > 0 && !IsAbsolutePath(logsDirectory)) {
+    result(Failure(@"LIBRETRO_INVALID_REQUEST", @"logsDirectory"));
+    return;
+  }
   // NeoStation console: key of the frontend settings file and of the skins.
   NSString *console = StringArgument(arguments, @"console");
   if (console.length == 0 || [console rangeOfCharacterFromSet:invalid].location != NSNotFound) {
@@ -534,6 +540,7 @@ static NSDictionary<NSString *, id> *Failure(NSString *code, NSString *message) 
   configuration.frontendDirectory = StringArgument(arguments, @"frontendDirectory");
   configuration.consoleGeometry = GeometryArgument(arguments, @"consoleGeometry");
   configuration.lockedOptions = StringDictionaryArgument(arguments, @"lockedOptions");
+  configuration.logsDirectory = logsDirectory;
   configuration.systemDirectory = StringArgument(arguments, @"systemDirectory");
   configuration.saveDirectory = StringArgument(arguments, @"saveDirectory");
   configuration.stateDirectory = StringArgument(arguments, @"stateDirectory");

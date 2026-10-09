@@ -1,0 +1,67 @@
+name: Libretro simulator probe
+# NeoStation's embedded libretro session with real cores in the iOS
+# Simulator: launch, run, "Quit game" and relaunch with PPSSPP (a PSP test
+# program, directly and inside an ISO), Azahar (ftpd.3dsx) and the NeoTest
+# core, including a core that stops while starting. See
+# test/libretro_simulator_probe.py. A simulator run is not an iPhone test.
+'on':
+  push:
+    branches:
+    - Claude
+    paths:
+    - .github/workflows/libretro-simulator.yml
+    - packages/libretro_internal_bridge/ios/**
+    - lib/services/libretro_core_catalog.dart
+    - test/libretro_simulator/**
+    - test/libretro_simulator_probe.py
+    - test/libretro_host/test_core.c
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: libretro-simulator-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  probe:
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        persist-credentials: false
+    - name: Select Xcode 26.3
+      uses: maxim-lobanov/setup-xcode@v1
+      with:
+        xcode-version: '26.3'
+    - name: Download the libretro cores pinned by the delivery
+      uses: actions/download-artifact@v4
+      with:
+        name: LibretroCores-48635465f4bdb324db4ff41b8b9815ff101ad360
+        run-id: '37945318237'
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        path: dist/libretro
+    - name: Fetch the pinned MoltenVK simulator slice and test content
+      run: python3 test/libretro_simulator_probe.py fetch --into "$RUNNER_TEMP/probe-inputs"
+    - name: Launch, close and relaunch every scenario on this commit
+      run: |
+        python3 test/libretro_simulator_probe.py run --cores dist/libretro --inputs "$RUNNER_TEMP/probe-inputs" \
+          --evidence evidence/this-commit --label "${GITHUB_SHA}"
+    - name: Close a 3DS game with the sources before the teardown fix (informational)
+      if: ${{ !cancelled() }}
+      run: |
+        git worktree add "$RUNNER_TEMP/before-fix" 940f114975c9ae4761b227e5efa9381ef9fa976e
+        python3 test/libretro_simulator_probe.py run --cores dist/libretro --inputs "$RUNNER_TEMP/probe-inputs" \
+          --sources "$RUNNER_TEMP/before-fix/packages/libretro_internal_bridge/ios" --only azahar-1 \
+          --expect unfixed --evidence evidence/before-fix --label 940f114975c9ae4761b227e5efa9381ef9fa976e \
+          --timeout 300
+    - uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: libretro-simulator-probe-${{ github.sha }}
+        path: |
+          evidence/
+          ${{ runner.temp }}/probe-inputs/identities.json
+        if-no-files-found: warn
+        retention-days: 14
