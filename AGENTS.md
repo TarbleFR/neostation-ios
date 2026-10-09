@@ -8,9 +8,10 @@ Ces règles expriment les exigences du mainteneur du 18 septembre 2026 et s'appl
 - Travailler sur une seule version candidate clairement identifiée pendant le cycle de correction. Chaque modification crée naturellement un nouveau SHA : consigner ce SHA exact, ne pas mélanger des binaires ou des résultats de tests provenant de révisions différentes.
 - Ne jamais réutiliser le nom d'un artefact pour faire passer une autre révision pour celle déjà testée. Associer version, SHA, entrées natives et résultats de validation.
 
-## Branche réservée à Claude — consigne du 9 octobre 2026
+## Branche de travail unique — dernière consigne du mainteneur du 9 octobre 2026
 
-- La branche `Claude` (ancienne `experimental`, renommée à la demande du mainteneur au commit `0bf904a`, source de la Build 423) est réservée aux travaux de Claude. Claude y fait toutes ses modifications, commits, CI et builds, et ne consulte ni n'utilise aucune autre branche.
+- À la demande du mainteneur, tous les assistants, y compris ChatGPT/Codex et Claude, travaillent désormais uniquement sur la branche `Claude` (ancienne `experimental`, renommée au commit `0bf904a`, source de la Build 423). Toutes les modifications, commits, CI et builds de travail se font sur cette branche. Cette consigne remplace la réservation précédente de cette branche à l'assistant Claude.
+- Les branches de travail `ChatGPT` et `neoplay-v2-frames` ont été supprimées ; aucune branche NeoSwap n'était présente. Ne pas recréer de branches de travail ChatGPT, NeoSwap ou NeoPlay sans demande explicite du mainteneur. La règle existante exigeant une demande explicite pour modifier `main`, `backup` ou les références de baseline reste applicable.
 - Les workflows déclenchés par push filtrent encore `experimental` : sur `Claude`, une build ou un contrôle se lance par `workflow_dispatch` avec `--ref Claude`.
 
 ## Décision du mainteneur — lancement RetroArch, 9 octobre 2026 après-midi
