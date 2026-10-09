@@ -1,5 +1,5 @@
-name: NeoStation RetroArch • Build 425 • SideStore
-run-name: NeoStation Build 425 • ${{ github.sha }} • RetroArch network command launch
+name: NeoStation RetroArch • Build 423 • SideStore
+run-name: NeoStation Build 423 • ${{ github.sha }} • folder registration
 'on':
   push:
     branches:
@@ -9,7 +9,7 @@ run-name: NeoStation Build 425 • ${{ github.sha }} • RetroArch network comma
       build_number:
         description: New delivery build number
         required: true
-        default: '425'
+        default: '423'
         type: string
       benchmark:
         description: Measure a cold and a cached build on comparable macOS runners
@@ -84,7 +84,7 @@ jobs:
         PYTHON
     - name: Validate changed library, callback, launch and restart behavior
       run: |
-        flutter test test/rom_folder_registration_test.dart test/library_scan_restart_test.dart test/retroarch_library_protocol_test.dart test/retroarch_library_cache_test.dart test/retroarch_launch_diagnostics_test.dart test/retroarch_sync_locale_test.dart test/rom_scan_symlink_alias_test.dart test/rom_scan_emulator_default_test.dart test/ios_selective_rollback_test.dart test/armsx2_retroarch_routing_isolation_test.dart test/game_repository_test.dart test/system_repository_test.dart test/config_repository_test.dart test/scraper_repository_test.dart test/sqlite_database_service_hidden_files_test.dart test/ios_rom_library_root_resolver_test.dart test/retroarch_command_launch_entry_test.dart
+        flutter test test/rom_folder_registration_test.dart test/library_scan_restart_test.dart test/retroarch_library_protocol_test.dart test/retroarch_library_cache_test.dart test/retroarch_launch_diagnostics_test.dart test/retroarch_sync_locale_test.dart test/rom_scan_symlink_alias_test.dart test/rom_scan_emulator_default_test.dart test/ios_selective_rollback_test.dart test/armsx2_retroarch_routing_isolation_test.dart test/game_repository_test.dart test/system_repository_test.dart test/config_repository_test.dart test/scraper_repository_test.dart test/sqlite_database_service_hidden_files_test.dart test/ios_rom_library_root_resolver_test.dart
         python3 - <<'PY'
         import json,os
         from pathlib import Path
@@ -108,7 +108,7 @@ jobs:
     - name: Preserve validation provenance
       uses: actions/upload-artifact@v4
       with:
-        name: NeoStation-425-validation-${{ github.sha }}
+        name: NeoStation-423-validation-${{ github.sha }}
         path: build/delivery/
         if-no-files-found: error
         retention-days: 14
@@ -131,12 +131,8 @@ jobs:
         import json,os,subprocess
         from pathlib import Path
         reference='55aaba962b04c125db0b215afbe1120a9c953c32'
-        paths=['packages/external_folder_access/ios/Classes/RetroArchURLHandoff.swift','packages/external_folder_access/ios/Classes/ExternalFolderAccessPlugin.swift','test/retroarch_url_handoff_test.swift','packages/external_folder_access/ios/Classes/RetroArchCommandLaunch.swift','test/retroarch_command_launch_test.swift']
-        def unchanged(p):
-            # A file absent from the reference is a new input, never reused.
-            try: return subprocess.check_output(['git','show',reference+':'+p],stderr=subprocess.DEVNULL)==Path(p).read_bytes()
-            except subprocess.CalledProcessError: return False
-        same=all(unchanged(p) for p in paths)
+        paths=['packages/external_folder_access/ios/Classes/RetroArchURLHandoff.swift','packages/external_folder_access/ios/Classes/ExternalFolderAccessPlugin.swift','test/retroarch_url_handoff_test.swift']
+        same=all(subprocess.check_output(['git','show',reference+':'+p])==Path(p).read_bytes() for p in paths)
         same=same and subprocess.check_output(['xcodebuild','-version']).decode().strip()=='Xcode 26.3\nBuild version 17C529'
         same=same and subprocess.check_output(['xcrun','--sdk','iphoneos','--show-sdk-version']).decode().strip()=='26.2'
         reused=False
@@ -153,10 +149,7 @@ jobs:
       run: |-
         swiftc -warnings-as-errors packages/external_folder_access/ios/Classes/RetroArchURLHandoff.swift test/retroarch_url_handoff_test.swift -o "$RUNNER_TEMP/retroarch-handoff"
         "$RUNNER_TEMP/retroarch-handoff"
-        swiftc -warnings-as-errors packages/external_folder_access/ios/Classes/RetroArchCommandLaunch.swift test/retroarch_command_launch_test.swift -o "$RUNNER_TEMP/retroarch-commands"
-        "$RUNNER_TEMP/retroarch-commands"
-        xcrun swiftc -typecheck -target arm64-apple-ios18.0 -sdk "$(xcrun --sdk iphoneos --show-sdk-path)" packages/external_folder_access/ios/Classes/RetroArchCommandLaunch.swift
-        xcrun swiftc -parse -target arm64-apple-ios18.0 -sdk "$(xcrun --sdk iphoneos --show-sdk-path)" packages/external_folder_access/ios/Classes/ExternalFolderAccessPlugin.swift packages/external_folder_access/ios/Classes/RetroArchURLHandoff.swift packages/external_folder_access/ios/Classes/RetroArchCommandLaunch.swift
+        xcrun swiftc -parse -target arm64-apple-ios18.0 -sdk "$(xcrun --sdk iphoneos --show-sdk-path)" packages/external_folder_access/ios/Classes/ExternalFolderAccessPlugin.swift packages/external_folder_access/ios/Classes/RetroArchURLHandoff.swift
   cold:
     name: Release device build • cold
     runs-on: macos-15
@@ -165,10 +158,10 @@ jobs:
     - checks
     - native
     env:
-      BUILD_NUMBER: ${{ inputs.build_number || '425' }}
+      BUILD_NUMBER: ${{ inputs.build_number || '423' }}
       DELIVERY_RECIPIENT: build-utils/delivery-424-recipient.pem
       IPA_NAME: NeoStation
-      ARTIFACT_NAME: NeoStation-Build-425-${{ github.sha }}-cold
+      ARTIFACT_NAME: NeoStation-Build-423-${{ github.sha }}-cold
       KARTPAD_CORE_RUN_ID: ${{ inputs.kartpad_core_run_id || '36322395443' }}
       KARTPAD_CORE_HOST_SHA: ${{ inputs.kartpad_core_host_sha || '3934ac9d333247d5374b9fb7d71f8ef49bbcd79e' }}
       KARTPAD_CANDIDATE: '1'
@@ -909,7 +902,6 @@ jobs:
         cp dist/NeoStation.ipa "build/delivery-artifact/NeoStation-Build${BUILD_NUMBER}-${GITHUB_SHA}-${DELIVERY_MODE}.ipa"
         cp build/delivery/*.json build/delivery-artifact/
         cp docs/retroarch-rollback-2026-10-08.md build/delivery-artifact/
-        cp docs/retroarch-build425-network-launch.md build/delivery-artifact/
         shasum -a 256 build/delivery-artifact/*.ipa > build/delivery-artifact/SHA256SUMS
 
         python3 build-utils/delivery_metrics.py artifact_encryption python3 build-utils/delivery_cipher.py artifact build/delivery-artifact build/encrypted-delivery
@@ -960,10 +952,10 @@ jobs:
     needs:
     - cold
     env:
-      BUILD_NUMBER: ${{ inputs.build_number || '425' }}
+      BUILD_NUMBER: ${{ inputs.build_number || '423' }}
       DELIVERY_RECIPIENT: build-utils/delivery-424-recipient.pem
       IPA_NAME: NeoStation
-      ARTIFACT_NAME: NeoStation-Build-425-${{ github.sha }}-warm
+      ARTIFACT_NAME: NeoStation-Build-423-${{ github.sha }}-warm
       KARTPAD_CORE_RUN_ID: ${{ inputs.kartpad_core_run_id || '36322395443' }}
       KARTPAD_CORE_HOST_SHA: ${{ inputs.kartpad_core_host_sha || '3934ac9d333247d5374b9fb7d71f8ef49bbcd79e' }}
       KARTPAD_CANDIDATE: '1'
@@ -1188,7 +1180,6 @@ jobs:
         cp dist/NeoStation.ipa "build/delivery-artifact/NeoStation-Build${BUILD_NUMBER}-${GITHUB_SHA}-${DELIVERY_MODE}.ipa"
         cp build/delivery/*.json build/delivery-artifact/
         cp docs/retroarch-rollback-2026-10-08.md build/delivery-artifact/
-        cp docs/retroarch-build425-network-launch.md build/delivery-artifact/
         shasum -a 256 build/delivery-artifact/*.ipa > build/delivery-artifact/SHA256SUMS
 
         python3 build-utils/delivery_metrics.py artifact_encryption python3 build-utils/delivery_cipher.py artifact build/delivery-artifact build/encrypted-delivery

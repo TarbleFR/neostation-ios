@@ -13,10 +13,11 @@ Ces règles expriment les exigences du mainteneur du 18 septembre 2026 et s'appl
 - La branche `Claude` (ancienne `experimental`, renommée à la demande du mainteneur au commit `0bf904a`, source de la Build 423) est réservée aux travaux de Claude. Claude y fait toutes ses modifications, commits, CI et builds, et ne consulte ni n'utilise aucune autre branche.
 - Les workflows déclenchés par push filtrent encore `experimental` : sur `Claude`, une build ou un contrôle se lance par `workflow_dispatch` avec `--ref Claude`.
 
-## Choix du mainteneur — lancement RetroArch, 9 octobre 2026 après-midi
+## Décision du mainteneur — lancement RetroArch, 9 octobre 2026 après-midi
 
-- La bibliothèque s'affiche ; le défaut restant est qu'un jeu lancé depuis NeoStation ouvre RetroArch sans démarrer quand RetroArch était fermé. Le mainteneur choisit la voie des commandes réseau de RetroArch (réglage « Commandes réseau » activé une fois dans RetroArch) et demande de proposer le correctif du récepteur au dépôt RetroArch, texte montré avant publication.
-- Le lien `retroarch://game/` reste la voie tant que le port de commandes n'a jamais répondu ; aucune autre voie n'envoie deux URL (mesure `37927541605` : le second lien est refusé par iOS). Les changements bibliothèque de la 424, jamais livrée, sont retirés. Voir `docs/retroarch-build425-network-launch.md`.
+- La bibliothèque s'affiche avec la Build 423. Le défaut restant : un jeu lancé depuis NeoStation ouvre RetroArch sans le démarrer quand RetroArch était fermé.
+- Exigence : l'utilisateur ne fait aucune manipulation (ni réglage RetroArch, ni raccourci) ; il lance simplement son jeu depuis NeoStation. La voie des commandes réseau de RetroArch, désactivées par défaut, est donc écartée. Les essais 424 et 425 ont été annulés avant toute IPA et retirés ; les sources produit restent celles de la 423.
+- Démontré : `RetroArchSceneDelegate` ignore l'URL qui démarre RetroArch (de `630b36bd` à `master` `df16ef1`) ; iOS refuse un second lien envoyé dans le même passage au premier plan (run `37927541605`) ; commandes réseau et serveur MCP de RetroArch sont désactivés par défaut. Aucun changement de NeoStation seul ne démarre le jeu à froid sans réglage : le correctif appartient au récepteur RetroArch (`docs/upstream/retroarch-initial-scene-url.patch`).
 
 ## Précision du mainteneur — 9 octobre 2026, 13 h
 

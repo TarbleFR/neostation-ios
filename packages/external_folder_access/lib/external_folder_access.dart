@@ -138,39 +138,23 @@ class ExternalFolderAccess {
   }
 
   /// Sends one library/game URL while NeoStation is in the foreground.
+  /// No preliminary app-opening URL is sent before the actual request.
   /// True means only that iOS accepted the functional URL, not that a game
   /// launched or that a library callback arrived.
-  ///
-  /// [commandLaunch] carries the exported entry (`gameId`, `filename`,
-  /// `coreName`). Once RetroArch's network command port has answered, a game
-  /// is instead opened with RetroArch's harmless start route and loaded
-  /// through commands, which RetroArch also reads after a cold start.
   static Future<bool> openRetroArchUrl(
     String url, {
     bool preserveErrors = false,
-    Map<String, String>? commandLaunch,
   }) async {
     if (!Platform.isIOS) return false;
     try {
       return await _channel.invokeMethod<bool>('openRetroArchUrl', {
             'url': url,
             'reportErrors': preserveErrors,
-            'commandLaunch': ?commandLaunch,
           }) ??
           false;
     } on PlatformException {
       if (preserveErrors) rethrow;
       return false;
-    }
-  }
-
-  /// Native route and outcome of the latest RetroArch launch, for diagnostics.
-  static Future<String?> retroArchLaunchReport() async {
-    if (!Platform.isIOS) return null;
-    try {
-      return await _channel.invokeMethod<String>('retroArchLaunchReport');
-    } on PlatformException {
-      return null;
     }
   }
 
