@@ -383,6 +383,12 @@ RPCS3_UNUSED_DELTA = {
     'test/rpcs3_telemetry_comparison_test.py',
 }
 DELTA |= RPCS3_UNUSED_DELTA
+# Same day: the Armsx2 action builder left from the retired contextual
+# UIMenu, and the command handler and overload only it invoked.
+ARMSX2_UNUSED_DELTA = {
+    'packages/armsx2_internal_bridge/ios/Classes/Armsx2InternalBridgePlugin.mm',
+}
+DELTA |= ARMSX2_UNUSED_DELTA
 INPUT_ROOTS = ('lib/', 'packages/', 'native/', 'build-utils/', 'assets/', 'test/')
 
 def sha(data):
