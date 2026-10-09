@@ -139,8 +139,6 @@ class HomeMusicService extends ChangeNotifier with WidgetsBindingObserver {
     await _syncPlayback();
   }
 
-  bool get mainMenuActiveForTesting => _mainMenuActive;
-
   /// Removes the stored custom music file and disables menu music.
   Future<void> clearMusic() async {
     if (!_initialized) await init();

@@ -9,23 +9,11 @@ class UserDataLocationService {
   static const String customPathKey = 'custom_user_data_path';
   static final _log = LoggerService.instance;
 
-  static Future<String?> getCustomPath() async {
-    final prefs = await SharedPreferences.getInstance();
-    final value = prefs.getString(customPathKey);
-    return (value != null && value.isNotEmpty) ? value : null;
-  }
-
   static Future<void> setCustomPath(String customPath) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(customPathKey, customPath);
     // A new location invalidates any "storage unavailable" verdict cached for
     // the previous one, which would otherwise fail fast for the whole session.
-    ConfigService.resetStorageAvailability();
-  }
-
-  static Future<void> clearCustomPath() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(customPathKey);
     ConfigService.resetStorageAvailability();
   }
 

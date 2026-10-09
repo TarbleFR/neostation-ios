@@ -94,10 +94,6 @@ mixin LoginFormSelection<T extends StatefulWidget> on State<T> {
     setState(() => _selectedSlot = 0);
   }
 
-  /// [resetSelection] for use inside an enclosing [setState] — typically a mode
-  /// switch that is already rebuilding, where a nested setState would throw.
-  void resetSelectionInPlace() => _selectedSlot = 0;
-
   /// Keeps the highlight on whichever field the platform focused.
   ///
   /// [moveSelection] is not the only thing that moves focus: the IME "next"

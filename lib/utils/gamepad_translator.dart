@@ -905,17 +905,6 @@ class GamepadEventTranslator {
     _lastDirectionByKey.clear();
   }
 
-  /// Clears all internal state caches.
-  void clearStates() {
-    _previousStates.clear();
-    _lastKeycodeDownTimes.clear();
-    _connectionTypeCache.clear();
-    _systemInfoCache.clear();
-    _lastDirectionByKey.clear();
-    _gamepadNameCache.clear();
-    _gamepadUsesAxisHat.clear();
-  }
-
   /// Checks if an input type represents a directional (D-pad or stick) movement.
   static bool isDirectionalInput(GamepadInputType inputType) {
     switch (inputType) {
@@ -925,32 +914,6 @@ class GamepadEventTranslator {
       case GamepadInputType.dpadRight:
       case GamepadInputType.leftStickX:
       case GamepadInputType.leftStickY:
-        return true;
-      default:
-        return false;
-    }
-  }
-
-  /// Checks if an input type represents a primary action button (A, B, X, Y).
-  static bool isActionButton(GamepadInputType inputType) {
-    switch (inputType) {
-      case GamepadInputType.buttonA:
-      case GamepadInputType.buttonB:
-      case GamepadInputType.buttonX:
-      case GamepadInputType.buttonY:
-        return true;
-      default:
-        return false;
-    }
-  }
-
-  /// Checks if an input type represents a shoulder button or trigger.
-  static bool isShoulderButton(GamepadInputType inputType) {
-    switch (inputType) {
-      case GamepadInputType.buttonLB:
-      case GamepadInputType.buttonRB:
-      case GamepadInputType.buttonLT:
-      case GamepadInputType.buttonRT:
         return true;
       default:
         return false;

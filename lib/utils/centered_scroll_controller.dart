@@ -48,12 +48,6 @@ class CenteredScrollController with WindowListener, WidgetsBindingObserver {
     this.animationCurve = Curves.easeInOut,
   }) : scrollController = scrollController ?? ScrollController();
 
-  /// Sets the total vertical padding of the ListView (top + bottom).
-  /// Used to improve scroll centering accuracy.
-  void setListPadding(double padding) {
-    _totalPadding = padding;
-  }
-
   /// Sets the fixed height of each list item and the top padding of the list.
   ///
   /// When provided, scroll calculations use this exact extent instead of
@@ -281,48 +275,6 @@ class CenteredScrollController with WindowListener, WidgetsBindingObserver {
         _log.e('CenteredScrollController: Error scrolling to index: $e');
       }
     });
-  }
-
-  /// Calculates the index of the item currently closest to the [centerPosition].
-  int? getCenteredItemIndex(int maxItems) {
-    if (!scrollController.hasClients || _totalItems == 0 || maxItems == 0) {
-      return null;
-    }
-
-    try {
-      final viewportHeight = scrollController.position.viewportDimension;
-      final currentOffset = scrollController.offset;
-      final scrollableHeight = scrollController.position.maxScrollExtent;
-
-      if (scrollableHeight == 0) {
-        return 0;
-      }
-
-      final itemHeight = _resolveItemHeight(viewportHeight, scrollableHeight);
-      if (itemHeight == null) {
-        return null;
-      }
-      final centerPositionInContent =
-          currentOffset + (viewportHeight * centerPosition);
-
-      int closestIndex = 0;
-      double closestDistance = double.infinity;
-
-      for (int i = 0; i < _totalItems; i++) {
-        final itemCenter = _paddingTop + (i * itemHeight) + (itemHeight / 2);
-        final distance = (itemCenter - centerPositionInContent).abs();
-
-        if (distance < closestDistance) {
-          closestDistance = distance;
-          closestIndex = i;
-        }
-      }
-
-      return closestIndex.clamp(0, maxItems - 1).toInt();
-    } catch (e) {
-      _log.e('CenteredScrollController: Error identifying centered index: $e');
-      return null;
-    }
   }
 
   /// Manually updates the tracked selected index without triggering a scroll.

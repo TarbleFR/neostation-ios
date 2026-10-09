@@ -22,9 +22,6 @@ class LibraryMetadataProviderDefinition {
   final String transport;
   final Map<String, dynamic> raw;
 
-  bool get isManga => kind == 'manga_database';
-  bool get isBooks => kind == 'books_metadata';
-
   factory LibraryMetadataProviderDefinition.fromJson(
     Map<String, dynamic> json,
   ) {

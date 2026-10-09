@@ -27,10 +27,6 @@ class GameViewModeDropdownState extends State<GameViewModeDropdown> {
     _showDropdown(context, _buttonKey);
   }
 
-  void showDropdownFrom(GlobalKey anchorKey) {
-    _showDropdown(context, anchorKey);
-  }
-
   void _showDropdown(BuildContext context, GlobalKey anchorKey) async {
     final RenderBox? renderBox =
         anchorKey.currentContext?.findRenderObject() as RenderBox?;

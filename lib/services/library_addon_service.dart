@@ -760,37 +760,6 @@ class LibraryAddonService {
     return result;
   }
 
-  Future<LibraryAddonInstallResult> installFromUrl(String manifestUrl) async {
-    final batch = await installDocumentFromUrl(manifestUrl);
-    if (batch.format != LibraryAddonDocumentFormat.neoStationManifest ||
-        batch.addons.length != 1) {
-      throw const LibraryAddonException(
-        'This URL contains a repository. Use the repository import API.',
-      );
-    }
-    return LibraryAddonInstallResult(
-      addon: batch.addons.single,
-      updated: batch.updatedCount == 1,
-    );
-  }
-
-  Future<LibraryAddonInstallResult> installFromJson(
-    String rawJson, {
-    required String origin,
-  }) async {
-    final batch = await installDocumentFromJson(rawJson, origin: origin);
-    if (batch.format != LibraryAddonDocumentFormat.neoStationManifest ||
-        batch.addons.length != 1) {
-      throw const LibraryAddonException(
-        'This JSON contains a repository. Use the repository import API.',
-      );
-    }
-    return LibraryAddonInstallResult(
-      addon: batch.addons.single,
-      updated: batch.updatedCount == 1,
-    );
-  }
-
   void _rejectKnownExternalManifest(Map<String, dynamic> manifest) {
     if (manifest.containsKey('schema')) return;
 

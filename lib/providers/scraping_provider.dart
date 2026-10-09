@@ -290,17 +290,6 @@ class ScrapingProvider extends ChangeNotifier {
     );
   }
 
-  /// Transitions a thread back to the [ThreadStatus.idle] state, clearing its data.
-  void markThreadIdle(int threadId) {
-    updateThreadProgress(
-      threadId: threadId,
-      isActive: false,
-      status: ThreadStatus.idle,
-      gameName: null,
-      systemName: null,
-    );
-  }
-
   /// Resets all completed threads to prepare them for the next processing batch.
   void clearCompletedThreads() {
     for (var thread in _threads) {

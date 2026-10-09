@@ -33,7 +33,6 @@ class AudioPolicyService with WidgetsBindingObserver {
   int _applicationCount = 0;
 
   bool get isInitialized => _initialized;
-  int get applicationCountForTesting => _applicationCount;
 
   Future<void> initialize() async {
     if (_initialized) return;

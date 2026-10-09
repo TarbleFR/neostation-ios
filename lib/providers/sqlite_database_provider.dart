@@ -40,7 +40,6 @@ class SqliteDatabaseProvider extends ChangeNotifier {
   Map<String, List<DatabaseGameModel>> get database => _database;
   bool get isLoading => _isLoading;
   String? get error => _error;
-  DateTime? get lastUpdate => _lastUpdate;
   bool get initialized => _initialized;
 
   /// Initializes the provider by performing an initial full load of the database.
@@ -65,16 +64,6 @@ class SqliteDatabaseProvider extends ChangeNotifier {
     }
   }
 
-  /// Updates the current ROM folder configuration and available systems metadata.
-  void updateConfig({
-    List<String>? romFolders,
-    List<SystemModel>? availableSystems,
-  }) {
-    if (romFolders != null) _romFolders = romFolders;
-    if (availableSystems != null) _availableSystems = availableSystems;
-    notifyListeners();
-  }
-
   /// Performs a full reload of all systems and their games from the SQLite database.
   Future<void> loadDatabase() async {
     _setLoading(true);
@@ -91,11 +80,6 @@ class SqliteDatabaseProvider extends ChangeNotifier {
     } finally {
       _setLoading(false);
     }
-  }
-
-  /// Retrieves the list of games associated with a specific system from the in-memory cache.
-  List<DatabaseGameModel> getGamesForSystem(String systemFolderName) {
-    return _database[systemFolderName] ?? [];
   }
 
   /// Loads games for a specific system from SQLite and updates the internal cache.
@@ -246,17 +230,6 @@ class SqliteDatabaseProvider extends ChangeNotifier {
     }
   }
 
-  /// Returns a consolidated list of all favorite games across all systems.
-  List<DatabaseGameModel> getAllFavoriteGames() {
-    final favoriteGames = <DatabaseGameModel>[];
-
-    for (final games in _database.values) {
-      favoriteGames.addAll(games.where((game) => game.isFavorite));
-    }
-
-    return favoriteGames;
-  }
-
   /// Returns a list of recently played games across all systems, sorted by timestamp.
   List<DatabaseGameModel> getRecentlyPlayedGames([int limit = 10]) {
     final playedGames = <DatabaseGameModel>[];
@@ -268,43 +241,6 @@ class SqliteDatabaseProvider extends ChangeNotifier {
     playedGames.sort((a, b) => b.lastPlayed!.compareTo(a.lastPlayed!));
 
     return playedGames.take(limit).toList();
-  }
-
-  /// Returns a list of the most frequently played games across all systems.
-  List<DatabaseGameModel> getMostPlayedGames([int limit = 10]) {
-    final playedGames = <DatabaseGameModel>[];
-
-    for (final games in _database.values) {
-      playedGames.addAll(games.where((game) => (game.playTime ?? 0) > 0));
-    }
-
-    playedGames.sort((a, b) => (b.playTime ?? 0).compareTo(a.playTime ?? 0));
-
-    return playedGames.take(limit).toList();
-  }
-
-  /// Performs a case-insensitive search for games by filename.
-  ///
-  /// Can be restricted to a specific [systemFolderName].
-  List<DatabaseGameModel> searchGames(
-    String query, [
-    String? systemFolderName,
-  ]) {
-    final lowerQuery = query.toLowerCase();
-    final allGames = <DatabaseGameModel>[];
-
-    if (systemFolderName != null) {
-      final games = _database[systemFolderName] ?? [];
-      allGames.addAll(games);
-    } else {
-      for (final games in _database.values) {
-        allGames.addAll(games);
-      }
-    }
-
-    return allGames
-        .where((game) => game.filename.toLowerCase().contains(lowerQuery))
-        .toList();
   }
 
   /// Retrieves a mapping of system folder names to their respective ROM counts.
@@ -331,12 +267,6 @@ class SqliteDatabaseProvider extends ChangeNotifier {
   /// Forces a full reload of the entire database state.
   Future<void> refresh() async {
     await loadDatabase();
-  }
-
-  /// Whether any games are currently loaded for the specified system.
-  bool hasGamesForSystem(String systemFolderName) {
-    final games = _database[systemFolderName];
-    return games != null && games.isNotEmpty;
   }
 
   /// Returns the total number of games currently indexed in the database.

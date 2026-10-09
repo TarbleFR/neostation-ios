@@ -255,6 +255,3 @@ class SystemInfo {
       ? primaryFolderName!
       : (folderName ?? 'all');
 }
-
-/// Global list of active systems displayed in the UI.
-List mySystems = [];

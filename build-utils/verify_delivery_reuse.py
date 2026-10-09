@@ -239,6 +239,61 @@ CLEANUP_DELTA = {
     'test/selection_grid_test.dart',
 }
 DELTA |= CLEANUP_DELTA
+# Second pass, same day: declarations nothing calls (found by reference
+# counts over the whole repository, iterated to a fixed point), the
+# RetroAchievements hash strategies left without caller, imports they used,
+# and the unused Dart wrapper of the Dolphin plugin.
+UNUSED_CODE_DELTA = {
+    'lib/data/datasources/sqlite_config_service.dart',
+    'lib/l10n/dusklight_locale.dart',
+    'lib/l10n/fork_onboarding_locale.dart',
+    'lib/models/database_game_model.dart',
+    'lib/models/my_systems.dart',
+    'lib/providers/file_provider.dart',
+    'lib/providers/menu_app_provider.dart',
+    'lib/providers/neo_assets_provider.dart',
+    'lib/providers/retro_achievements_provider.dart',
+    'lib/providers/retroachievements/console_lookup_hash_strategy.dart',
+    'lib/providers/retroachievements/default_md5_hash_strategy.dart',
+    'lib/providers/retroachievements/ds_hash_strategy.dart',
+    'lib/providers/retroachievements/nes_hash_strategy.dart',
+    'lib/providers/retroachievements/retro_achievements_hash_strategy.dart',
+    'lib/providers/retroachievements/strategy_factory.dart',
+    'lib/providers/scraping_provider.dart',
+    'lib/providers/sqlite_config_provider/mutators.dart',
+    'lib/providers/sqlite_database_provider.dart',
+    'lib/responsive.dart',
+    'lib/screens/app_screen.dart',
+    'lib/services/audio_policy_service.dart',
+    'lib/services/game_service.dart',
+    'lib/services/game_session_persistence.dart',
+    'lib/services/home_music_service.dart',
+    'lib/services/library_addon_service.dart',
+    'lib/services/library_metadata_provider_service.dart',
+    'lib/services/melonx_library_service.dart',
+    'lib/services/music_player_service.dart',
+    'lib/services/neo_assets_service.dart',
+    'lib/services/permission_service.dart',
+    'lib/services/retro_achievements_service.dart',
+    'lib/services/saf_directory_service.dart',
+    'lib/services/screenscraper/media_resolver.dart',
+    'lib/services/screenscraper_service.dart',
+    'lib/services/systems_update_service.dart',
+    'lib/services/user_data_location_service.dart',
+    'lib/themes/app_themes.dart',
+    'lib/themes/corner_radii.dart',
+    'lib/utils/centered_scroll_controller.dart',
+    'lib/utils/color.dart',
+    'lib/utils/gamepad_mapping.dart',
+    'lib/utils/gamepad_nav.dart',
+    'lib/utils/gamepad_translator.dart',
+    'lib/utils/login_form_selection.dart',
+    'lib/utils/optimized_md5_utils.dart',
+    'lib/widgets/custom_notification.dart',
+    'lib/widgets/game_view_mode_dropdown.dart',
+    'packages/dolphin_internal_bridge/lib/dolphin_internal_bridge.dart',
+}
+DELTA |= UNUSED_CODE_DELTA
 INPUT_ROOTS = ('lib/', 'packages/', 'native/', 'build-utils/', 'assets/', 'test/')
 
 def sha(data):

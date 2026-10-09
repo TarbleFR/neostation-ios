@@ -330,81 +330,9 @@ class GamepadMappingDetector {
     );
   }
 
-  /// Checks if a button event matches the logical button for the current mapping.
-  bool isButtonMatch(
-    GamepadMapping mapping,
-    String logicalButton,
-    String eventKey,
-    double eventValue,
-  ) {
-    final mappedKey = mapping.buttonMapping[logicalButton];
-    if (mappedKey == null) return false;
-
-    return eventKey == mappedKey && eventValue > 0.5;
-  }
-
-  /// Checks if a D-pad event matches the logical direction for the current mapping.
-  bool isDpadMatch(
-    GamepadMapping mapping,
-    String logicalDirection,
-    String eventKey,
-    double eventValue,
-  ) {
-    if (Platform.isWindows && eventKey == 'pov') {
-      final mappedValue = mapping.dpadMapping[logicalDirection];
-      return mappedValue != null && eventValue == mappedValue;
-    }
-
-    if (Platform.isAndroid) {
-      if (logicalDirection == 'up' || logicalDirection == 'down') {
-        if (eventKey == 'axis_hat_y') {
-          final mappedValue = mapping.dpadMapping[logicalDirection];
-          return mappedValue != null && eventValue == mappedValue;
-        }
-      } else if (logicalDirection == 'left' || logicalDirection == 'right') {
-        if (eventKey == 'axis_hat_x') {
-          final mappedValue = mapping.dpadMapping[logicalDirection];
-          return mappedValue != null && eventValue == mappedValue;
-        }
-      }
-    }
-
-    if (Platform.isLinux) {
-      if (logicalDirection == 'up' || logicalDirection == 'down') {
-        if (eventKey == 'axis_7' || eventKey == '7') {
-          final mappedValue = mapping.dpadMapping[logicalDirection];
-          return mappedValue != null && eventValue == mappedValue;
-        }
-      } else if (logicalDirection == 'left' || logicalDirection == 'right') {
-        if (eventKey == 'axis_6' || eventKey == '6') {
-          final mappedValue = mapping.dpadMapping[logicalDirection];
-          return mappedValue != null && eventValue == mappedValue;
-        }
-      }
-    }
-
-    return false;
-  }
-
   /// Clears internal mapping and statistical caches.
   void clearCache() {
     _mappingCache.clear();
     _buttonEventCounts.clear();
-  }
-
-  /// Generates a debug string containing current mapping state and statistics.
-  String getDebugInfo(String gamepadId) {
-    final mapping = _mappingCache[gamepadId];
-    if (mapping == null) return 'No mapping found for gamepad $gamepadId';
-
-    final buffer = StringBuffer();
-    buffer.writeln('Gamepad Mapping Debug Info for ID: $gamepadId');
-    buffer.writeln('Connection Type: ${mapping.connectionType.displayName}');
-    buffer.writeln('Platform: ${mapping.platform}');
-    buffer.writeln(
-      'Button Events Counted: ${_buttonEventCounts[gamepadId] ?? {}}',
-    );
-
-    return buffer.toString();
   }
 }

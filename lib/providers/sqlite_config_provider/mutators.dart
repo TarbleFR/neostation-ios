@@ -17,17 +17,6 @@ extension SqliteConfigMutators on SqliteConfigProvider {
     _notify();
   }
 
-  /// Convenience method to update the primary ROM folder.
-  Future<void> updateRomFolder(String path) async {
-    if (_config.romFolders.isNotEmpty) {
-      final newList = List<String>.from(_config.romFolders);
-      newList[0] = path;
-      await updateRomFolders(newList);
-    } else {
-      await addRomFolder(path);
-    }
-  }
-
   /// Updates the preferred UI layout mode for game lists.
   Future<void> updateGameViewMode(String gameViewMode) async {
     _config = _config.copyWith(gameViewMode: gameViewMode);
@@ -113,7 +102,6 @@ extension SqliteConfigMutators on SqliteConfigProvider {
     await SqliteConfigService.saveConfig(_config);
     _notify();
   }
-
 
   /// Toggles the visibility of detailed game metadata in the UI.
   Future<void> updateShowGameInfo(bool show) async {
@@ -258,18 +246,6 @@ extension SqliteConfigMutators on SqliteConfigProvider {
   /// Marks the initial application onboarding as completed.
   Future<void> completeSetup() async {
     _config = _config.copyWith(setupCompleted: true);
-    await SqliteConfigService.saveConfig(_config);
-    _notify();
-  }
-
-  Future<void> updateAutoUpdateApp(bool value) async {
-    _config = _config.copyWith(autoUpdateApp: value);
-    await SqliteConfigService.saveConfig(_config);
-    _notify();
-  }
-
-  Future<void> updateAutoUpdateSystems(bool value) async {
-    _config = _config.copyWith(autoUpdateSystems: value);
     await SqliteConfigService.saveConfig(_config);
     _notify();
   }

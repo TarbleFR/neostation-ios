@@ -40,47 +40,6 @@ class Responsive extends StatelessWidget {
       MediaQuery.of(context).size.width >= 1280; // era 1660
 
   // Métodos alternativos basados en tamaño físico (para DPI alto)
-  static bool isPhysicallyLarge(BuildContext context) {
-    final mediaQuery = MediaQuery.of(context);
-    final physicalWidth = mediaQuery.size.width * mediaQuery.devicePixelRatio;
-    return physicalWidth >= 1920; // 1920px físicos
-  }
-
-  static int getSystemsCrossAxisCount(BuildContext context) {
-    if (isHandheldXLarge(context)) return 7; // Desktop muy grande
-    if (isHandheldLarge(context)) return 6; // Desktop grande
-    if (isHandheldMedium(context)) return 5; // Desktop/tablet
-    if (isHandheldSmall(context)) return 4; // Tablet
-    return 4; // Móvil pequeño
-  }
-
-  /// Obtener el crossAxisCount para games grid
-  /// Grids de juegos usan más columnas para mostrar más contenido
-  static int getGamesCrossAxisCount(BuildContext context) {
-    if (isHandheldXLarge(context)) return 5; // Desktop muy grande
-    if (isHandheldLarge(context)) return 4; // Desktop grande
-    if (isHandheldMedium(context)) return 3; // Desktop/tablet
-    if (isHandheldSmall(context)) return 2; // Tablet
-    return 2; // Móvil pequeño
-  }
-
-  /// Obtener el crossAxisCount para settings grid
-  /// Grids de configuración usan menos columnas para mejor legibilidad
-  static int getSettingsCrossAxisCount(BuildContext context) {
-    if (isHandheldXS(context)) return 1;
-    if (isHandheldSmall(context)) return 2;
-    if (isHandheldMedium(context)) return 3;
-    if (isHandheldLarge(context)) return 3;
-    if (isHandheldXLarge(context)) return 3;
-    return 3; // Default fallback
-  }
-
-  /// Obtener el crossAxisCount para scraper options grid
-  /// Grid de opciones de scraper usa valores consistentes
-  static int getScraperOptionsCrossAxisCount(BuildContext context) {
-    if (isHandheldXS(context)) return 3; // Móvil pequeño
-    return 4; // Tablet y desktop usan 4 columnas
-  }
 
   /// Obtener el crossAxisCount para theme selection grid
   /// Grid de selección de temas optimizado para previews
@@ -90,11 +49,6 @@ class Responsive extends StatelessWidget {
     if (isHandheldMedium(context)) return 4; // Desktop/tablet
     if (isHandheldSmall(context)) return 4; // Tablet
     return 4; // Móvil pequeño
-  }
-
-  /// Función genérica - usa systems por defecto (mantiene compatibilidad)
-  static int getCrossAxisCount(BuildContext context) {
-    return getSystemsCrossAxisCount(context);
   }
 
   /// Convierte el tamaño de card del usuario ('S', 'M', 'L', 'XL') a columnas.

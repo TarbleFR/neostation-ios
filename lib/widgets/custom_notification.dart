@@ -64,26 +64,6 @@ class AppNotification {
     );
   }
 
-  /// Updates an active notification by id.
-  static void updateNotification(
-    BuildContext context,
-    String notificationId,
-    String message, {
-    String? title,
-    Uint8List? imageBytes,
-    IconData? icon,
-    NotificationType type = NotificationType.info,
-  }) {
-    GlobalNotificationService().update(
-      id: notificationId,
-      message: message,
-      title: title,
-      imageBytes: imageBytes,
-      icon: icon,
-      type: _mapType(type),
-    );
-  }
-
   /// Dismisses the notification with [notificationId], or all notifications if
   /// no id is provided.
   static void dismiss([String? notificationId]) {

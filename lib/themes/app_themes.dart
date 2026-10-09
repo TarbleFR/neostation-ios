@@ -19,10 +19,6 @@ import 'palenight_theme.dart' as palenight;
 import 'horizon_theme.dart' as horizon;
 
 class AppThemes {
-  static String getLogoPath() {
-    return 'assets/images/logo_transparent.png';
-  }
-
   // References to individual themes
   static ThemeData get darkTheme => dark.darkTheme;
   static ThemeData get lightTheme => light.lightTheme;
@@ -40,21 +36,6 @@ class AppThemes {
   static ThemeData get horizonTheme => horizon.horizonTheme;
 
   // References to custom colors for each theme
-  static dynamic get darkCustomColors => dark.DarkCustomColors();
-  static dynamic get lightCustomColors => light.LightCustomColors();
-  static dynamic get oledCustomColors => oled.OledCustomColors();
-  static dynamic get valentineCustomColors => valentine.ValentineCustomColors();
-  static dynamic get draculaCustomColors => dracula.DraculaCustomColors();
-  static dynamic get nordCustomColors => nord.NordCustomColors();
-  static dynamic get coffeeCustomColors => coffee.CoffeeCustomColors();
-  static dynamic get tokyoNightCustomColors =>
-      tokyo_night.TokyoNightCustomColors();
-  static dynamic get retroCustomColors => retro.RetroCustomColors();
-  static dynamic get abyssCustomColors => abyss.AbyssCustomColors();
-  static dynamic get cyberpunkCustomColors => cyberpunk.CyberpunkCustomColors();
-  static dynamic get aquaCustomColors => aqua.AquaCustomColors();
-  static dynamic get palenightCustomColors => palenight.PalenightCustomColors();
-  static dynamic get horizonCustomColors => horizon.HorizonCustomColors();
 
   /// Retrieves header colors based on the current context's theme.
   static dynamic getCustomColors(BuildContext context) {

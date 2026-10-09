@@ -60,14 +60,11 @@ class MusicPlayerService extends ChangeNotifier {
   String? get currentTitle => _currentTitle;
   String? get currentArtist => _currentArtist;
   String? get currentAlbum => _currentAlbum;
-  String? get currentYear => _currentYear;
   Uint8List? get currentPicture => _currentPicture;
 
   String? get activeTitle => _activeTitle;
   String? get activeArtist => _activeArtist;
   Uint8List? get activePicture => _activePicture;
-
-  Uint8List? getCachedPicture(String? path) => _pictureCache[path];
 
   /// Extracts embedded artwork from an audio file.
   ///
@@ -100,15 +97,6 @@ class MusicPlayerService extends ChangeNotifier {
     }
   }
 
-  /// Retrieves the track title from pre-scanned metadata.
-  String? getTrackTitle(String? path) {
-    if (path == null) return null;
-    if (currentTrack?.romPath == path && _currentTitle != null) {
-      return _currentTitle;
-    }
-    return _metadataTitles[path];
-  }
-
   bool get isPlaying => _isPlaying;
   int _currentIndex = 0;
   bool _isLooping = false;
@@ -120,7 +108,6 @@ class MusicPlayerService extends ChangeNotifier {
   int _currentScanTaskId = 0;
 
   bool get isLooping => _isLooping;
-  String? get loopingTrackPath => _loopingTrackPath;
   bool isLoopingFor(String? path) => _isLooping && _loopingTrackPath == path;
   bool get isCurrentTrackLooping => isLoopingFor(currentTrack?.romPath);
   bool get isActiveTrackLooping => isLoopingFor(activeTrack?.romPath);
@@ -148,7 +135,6 @@ class MusicPlayerService extends ChangeNotifier {
 
   Stream<Duration> get onPositionChanged => _positionController.stream;
   Stream<Duration> get onDurationChanged => _durationController.stream;
-  Stream<bool> get onPlayerStateChanged => _playerStateController.stream;
 
   void _startStreamTimers() {
     _positionTimer?.cancel();

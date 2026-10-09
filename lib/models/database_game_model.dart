@@ -315,9 +315,6 @@ class DatabaseGameModel {
     return lastDot != -1 ? filename.substring(0, lastDot) : filename;
   }
 
-  /// Whether a valid emulator configuration exists for this game.
-  bool get hasEmulator => emulatorPath != null && emulatorPath!.isNotEmpty;
-
   /// Retrieves the game description for the given [languageCode].
   ///
   /// Implements a fallback mechanism: requested language -> 'en' -> 'es' -> etc.

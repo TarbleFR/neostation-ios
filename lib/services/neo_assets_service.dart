@@ -415,15 +415,6 @@ class NeoAssetsService {
     return '${_themeBaseUrl(themeFolder)}/backgrounds/$systemFolderName.$ext';
   }
 
-  /// Returns the remote URL for a specific system logo within a theme.
-  static String getLogoUrl(
-    String themeFolder,
-    String systemFolderName, {
-    String ext = 'webp',
-  }) {
-    return '${_themeBaseUrl(themeFolder)}/logos/$systemFolderName.$ext';
-  }
-
   /// Returns the remote URL for a theme's metadata JSON file.
   static String getThemeMetadataUrl(String themeFolder) {
     return '${_themeBaseUrl(themeFolder)}/theme.json';
@@ -474,17 +465,6 @@ class NeoAssetsService {
     return path.join(dir, themeFolder, 'backgrounds', '$systemFolderName.$ext');
   }
 
-  /// Synchronous variant of logo path resolution, requires previous initialization.
-  static String? logoCachePathSync(
-    String themeFolder,
-    String systemFolderName, {
-    String ext = 'webp',
-  }) {
-    final dir = _cachedThemeDir;
-    if (dir == null) return null;
-    return path.join(dir, themeFolder, 'logos', '$systemFolderName.$ext');
-  }
-
   /// Resolves the cached background path checking both .webp and .gif formats.
   /// Returns the path to the existing file, preferring .webp over .gif.
   /// If neither exists, returns the .webp path as default.
@@ -522,16 +502,6 @@ class NeoAssetsService {
   }) async {
     final dir = await _cacheDir();
     return path.join(dir, themeFolder, 'backgrounds', '$systemFolderName.$ext');
-  }
-
-  /// Returns the local cache path for a specific logo.
-  static Future<String> logoCachePath(
-    String themeFolder,
-    String systemFolderName, {
-    String ext = 'webp',
-  }) async {
-    final dir = await _cacheDir();
-    return path.join(dir, themeFolder, 'logos', '$systemFolderName.$ext');
   }
 
   /// Returns the local cache path for a theme's metadata file.
@@ -748,16 +718,6 @@ class NeoAssetsService {
     // system is not re-probed on every re-selection of the theme.
     await _writeMissingMarker(themeFolder, systemFolderName);
     return null;
-  }
-
-  /// Retrieves a cached system logo image, downloading it if necessary.
-  static Future<String?> getCachedLogo(
-    String themeFolder,
-    String systemFolderName,
-  ) async {
-    final localPath = await logoCachePath(themeFolder, systemFolderName);
-    final url = getLogoUrl(themeFolder, systemFolderName);
-    return downloadAndCacheAsset(url, localPath);
   }
 
   /// Max background downloads in flight at once. Theme assets are small,
