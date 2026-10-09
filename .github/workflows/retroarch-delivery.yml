@@ -1,5 +1,5 @@
-name: NeoStation RetroArch • Build 426 • SideStore
-run-name: NeoStation Build ${{ inputs.build_number || '426' }} • ${{ github.sha }} • embedded libretro
+name: NeoStation RetroArch • Build 427 • SideStore
+run-name: NeoStation Build ${{ inputs.build_number || '427' }} • ${{ github.sha }} • embedded libretro
 'on':
   push:
     branches:
@@ -9,7 +9,7 @@ run-name: NeoStation Build ${{ inputs.build_number || '426' }} • ${{ github.sh
       build_number:
         description: New delivery build number
         required: true
-        default: '426'
+        default: '427'
         type: string
       benchmark:
         description: Measure a cold and a cached build on comparable macOS runners
@@ -113,7 +113,7 @@ jobs:
     - name: Preserve validation provenance
       uses: actions/upload-artifact@v4
       with:
-        name: NeoStation-${{ inputs.build_number || '426' }}-validation-${{ github.sha }}
+        name: NeoStation-${{ inputs.build_number || '427' }}-validation-${{ github.sha }}
         path: build/delivery/
         if-no-files-found: error
         retention-days: 14
@@ -167,10 +167,10 @@ jobs:
     - checks
     - native
     env:
-      BUILD_NUMBER: ${{ inputs.build_number || '426' }}
+      BUILD_NUMBER: ${{ inputs.build_number || '427' }}
       DELIVERY_RECIPIENT: build-utils/delivery-424-recipient.pem
       IPA_NAME: NeoStation
-      ARTIFACT_NAME: NeoStation-Build-${{ inputs.build_number || '426' }}-${{ github.sha }}-cold
+      ARTIFACT_NAME: NeoStation-Build-${{ inputs.build_number || '427' }}-${{ github.sha }}-cold
       KARTPAD_CORE_RUN_ID: ${{ inputs.kartpad_core_run_id || '36322395443' }}
       KARTPAD_CORE_HOST_SHA: ${{ inputs.kartpad_core_host_sha || '3934ac9d333247d5374b9fb7d71f8ef49bbcd79e' }}
       KARTPAD_CANDIDATE: '1'
@@ -1033,10 +1033,10 @@ jobs:
     needs:
     - cold
     env:
-      BUILD_NUMBER: ${{ inputs.build_number || '426' }}
+      BUILD_NUMBER: ${{ inputs.build_number || '427' }}
       DELIVERY_RECIPIENT: build-utils/delivery-424-recipient.pem
       IPA_NAME: NeoStation
-      ARTIFACT_NAME: NeoStation-Build-${{ inputs.build_number || '426' }}-${{ github.sha }}-warm
+      ARTIFACT_NAME: NeoStation-Build-${{ inputs.build_number || '427' }}-${{ github.sha }}-warm
       KARTPAD_CORE_RUN_ID: ${{ inputs.kartpad_core_run_id || '36322395443' }}
       KARTPAD_CORE_HOST_SHA: ${{ inputs.kartpad_core_host_sha || '3934ac9d333247d5374b9fb7d71f8ef49bbcd79e' }}
       KARTPAD_CANDIDATE: '1'
