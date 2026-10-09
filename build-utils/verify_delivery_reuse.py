@@ -292,6 +292,7 @@ UNUSED_CODE_DELTA = {
     'lib/widgets/custom_notification.dart',
     'lib/widgets/game_view_mode_dropdown.dart',
     'packages/dolphin_internal_bridge/lib/dolphin_internal_bridge.dart',
+    'packages/dolphin_internal_bridge/ios/Classes/TouchController/TCWiiPad.swift',
 }
 DELTA |= UNUSED_CODE_DELTA
 INPUT_ROOTS = ('lib/', 'packages/', 'native/', 'build-utils/', 'assets/', 'test/')

@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:path/path.dart' as path;
 import '../config_service.dart';
 
 /// Media resolution helpers for ScreenScraper downloads.
