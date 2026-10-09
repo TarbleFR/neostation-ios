@@ -8,6 +8,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:external_folder_access/external_folder_access.dart';
 import 'package:neostation/services/retroarch_library_service.dart';
+import 'package:neostation/services/retroarch_scan_root_registration.dart';
 import 'package:neostation/services/melonx_library_service.dart';
 import 'package:neostation/services/ios_shortcut_jit_launch_service.dart';
 import 'package:neostation/l10n/app_locale.dart';
@@ -558,8 +559,23 @@ class DirectoriesSettingsContentState
               ),
             )
           : activePath;
-      if (configProvider.config.romFolders.contains(scanRoot)) {
+      await _waitForIdleScan(configProvider);
+      final registered = configProvider.config.romFolders;
+      if (registered.contains(scanRoot)) {
         await configProvider.scanSystems();
+      } else if (bookmarkKey == ExternalFolderAccess.defaultBookmarkKey) {
+        // Same rule as at startup: an unreachable copy of this folder (an
+        // older RetroArch container) is replaced instead of kept beside it.
+        final folders = await RetroArchScanRootRegistration.foldersAfterLink(
+          registered,
+          scanRoot,
+        );
+        if (folders.length == registered.length + 1) {
+          await configProvider.addRomFolder(scanRoot, scan: true);
+        } else {
+          await configProvider.updateRomFolders(folders);
+          await configProvider.scanSystems();
+        }
       } else {
         await configProvider.addRomFolder(scanRoot, scan: true);
       }
@@ -568,7 +584,11 @@ class DirectoriesSettingsContentState
           configProvider.error ?? 'ROM folder registration did not complete',
         );
       }
-      _log.i('iOS emulator link: root=$activePath romScanRoot=$scanRoot');
+      _log.i(
+        'iOS emulator link: root=$activePath romScanRoot=$scanRoot '
+        'romFolders=${configProvider.config.romFolders.length} '
+        'games=${configProvider.totalGames}',
+      );
       if (!mounted) return;
 
       await _loadCurrentPaths();
@@ -592,6 +612,16 @@ class DirectoriesSettingsContentState
       }
     } finally {
       if (mounted) setState(() => _linkingFolderKey = null);
+    }
+  }
+
+  /// scanSystems() returns at once while another scan runs, so a folder
+  /// linked during the startup or sync scan stayed unscanned until relaunch.
+  Future<void> _waitForIdleScan(SqliteConfigProvider provider) async {
+    final deadline = DateTime.now().add(const Duration(minutes: 3));
+    while ((provider.isScanning || provider.isScanningRoms) &&
+        DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(const Duration(milliseconds: 250));
     }
   }
 

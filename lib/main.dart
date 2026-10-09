@@ -42,6 +42,10 @@ import 'package:external_folder_access/external_folder_access.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
 import 'package:neostation/services/retroarch_library_service.dart';
+// RETROARCH_RELINK_BEGIN: imports
+import 'package:neostation/services/retroarch_library_report.dart';
+import 'package:neostation/services/retroarch_scan_root_registration.dart';
+// RETROARCH_RELINK_END: imports
 import 'package:neostation/services/armsx2_library_service.dart';
 import 'package:neostation/services/armsx2_internal_service.dart';
 import 'package:neostation/services/melonx_library_service.dart';
@@ -355,6 +359,14 @@ void main() async {
     // Load the last exported emulator libraries so direct-launch matching
     // works immediately after a cold start without forcing a fresh sync.
     await RetroArchLibraryService.loadCachedLibrary();
+    // RETROARCH_RELINK_BEGIN: startup_root
+    // The bookmark follows RetroArch's container when it moves; register
+    // the resolved library root before the configuration is read for a scan.
+    final retroArchRoot = ConfigService.linkedExternalFolderPath;
+    if (retroArchRoot != null) {
+      await RetroArchScanRootRegistration.registerResolvedBookmark(retroArchRoot);
+    }
+    // RETROARCH_RELINK_END: startup_root
     await MelonxLibraryService.loadCachedLibrary();
     await Rpcs3LibraryService.initialize();
     await Rpcs3LaunchService.initialize();
@@ -480,6 +492,26 @@ void main() async {
   try {
     // 1. Initialize SqliteConfigProvider first so system state is synchronized.
     await sqliteConfigProvider.initialize();
+    // RETROARCH_RELINK_BEGIN: library_report
+    if (Platform.isIOS) {
+      // Diagnostics only: Files › NeoStation iOS › Diagnostics.
+      var wasScanning = sqliteConfigProvider.isScanning;
+      sqliteConfigProvider.addListener(() {
+        final scanning = sqliteConfigProvider.isScanning;
+        if (wasScanning && !scanning) {
+          unawaited(RetroArchLibraryReport.write(
+            'scan finished',
+            romFolders: sqliteConfigProvider.config.romFolders,
+          ));
+        }
+        wasScanning = scanning;
+      });
+      unawaited(RetroArchLibraryReport.write(
+        'startup',
+        romFolders: sqliteConfigProvider.config.romFolders,
+      ));
+    }
+    // RETROARCH_RELINK_END: library_report
 
     // Seed the game legend visibility from persisted config and wire its
     // persistence sink so the Select + B toggle survives restarts/upgrades.

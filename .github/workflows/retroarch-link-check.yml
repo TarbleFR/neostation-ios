@@ -25,9 +25,9 @@ jobs:
           cache: true
       - run: flutter pub get --enforce-lockfile
       - name: Analyze modified integration sources
-        run: flutter analyze --no-fatal-infos lib/services/retroarch_library_service.dart lib/services/retroarch_library_protocol.dart lib/providers/sqlite_config_provider.dart lib/screens/settings_screen/new_settings_options/directories_settings_content.dart packages/external_folder_access/lib/external_folder_access.dart test/retroarch_library_protocol_test.dart test/retroarch_library_cache_test.dart test/retroarch_launch_diagnostics_test.dart test/retroarch_sync_locale_test.dart
+        run: flutter analyze --no-fatal-infos lib/services/retroarch_library_service.dart lib/services/retroarch_library_protocol.dart lib/providers/sqlite_config_provider.dart lib/screens/settings_screen/new_settings_options/directories_settings_content.dart lib/services/retroarch_scan_root_registration.dart lib/services/retroarch_library_report.dart test/retroarch_scan_root_registration_test.dart packages/external_folder_access/lib/external_folder_access.dart test/retroarch_library_protocol_test.dart test/retroarch_library_cache_test.dart test/retroarch_launch_diagnostics_test.dart test/retroarch_sync_locale_test.dart
       - name: Exercise callback, direct launch, unchanged library rows and twelve locales
-        run: flutter test test/retroarch_library_protocol_test.dart test/retroarch_library_cache_test.dart test/retroarch_launch_diagnostics_test.dart test/retroarch_sync_locale_test.dart test/ios_selective_rollback_test.dart test/armsx2_retroarch_routing_isolation_test.dart test/rom_scan_symlink_alias_test.dart test/rom_scan_emulator_default_test.dart
+        run: flutter test test/retroarch_library_protocol_test.dart test/retroarch_library_cache_test.dart test/retroarch_launch_diagnostics_test.dart test/retroarch_sync_locale_test.dart test/ios_selective_rollback_test.dart test/armsx2_retroarch_routing_isolation_test.dart test/rom_scan_symlink_alias_test.dart test/rom_scan_emulator_default_test.dart test/retroarch_scan_root_registration_test.dart
       - name: Verify the restored library reference and native source identities
         run: python3 test/retroarch_baseline_scope_test.py
   native:

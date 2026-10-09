@@ -2,6 +2,7 @@
 import hashlib
 import json
 import pathlib
+import re
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -35,6 +36,14 @@ class RetroArchBaselineScope(unittest.TestCase):
                     for current, original in edits:
                         self.assertEqual(data.count(current), 1)
                         data = data.replace(current, original, 1)
+                if name == 'lib/main.dart':
+                    # Build424: startup registration of the RetroArch root and
+                    # the Files-visible library report are the only additions.
+                    # Remove exactly these marked blocks; the rest stays 419.
+                    data, count = re.subn(
+                        rb'(?m)^[ \t]*// RETROARCH_RELINK_BEGIN: (\w+)\n.*?^[ \t]*// RETROARCH_RELINK_END: \1\n',
+                        b'', data, flags=re.S)
+                    self.assertEqual(count, 3)
                 self.assertEqual(hashlib.sha256(data).hexdigest(), expected)
 
     def test_native_sources_keep_their_existing_identity(self):
