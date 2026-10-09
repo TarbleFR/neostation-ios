@@ -244,12 +244,12 @@ static void TestDualScreenDS(void) {
   CHECK(rep.items.count == 5, @"five items (got %lu)", (unsigned long)rep.items.count);
   if (rep.items.count == 5) {
     LibretroSkinItem *dpad = rep.items[0];
-    CHECK([dpad.identifier isEqualToString:@"item0"] && dpad.kind == LibretroSkinItemKindDPad &&
+    CHECK([dpad.identifier isEqualToString:@"iphone-edgeToEdge-portrait-item0"] && dpad.kind == LibretroSkinItemKindDPad &&
               [dpad.inputs isEqualToArray:(@[ @"up", @"down", @"left", @"right" ])],
           @"D-pad item with up, down, left, right");
     CHECK(RectNear(dpad.hitFrame, LibretroRectMake(7, 641, 188, 188)), @"D-pad hit frame grown by the default edges");
     LibretroSkinItem *a = rep.items[1];
-    CHECK([a.identifier isEqualToString:@"item1"] && [a.inputs isEqualToArray:@[ @"a" ]], @"A button");
+    CHECK([a.identifier isEqualToString:@"iphone-edgeToEdge-portrait-item1"] && [a.inputs isEqualToArray:@[ @"a" ]], @"A button");
     CHECK(RectNear(a.hitFrame, LibretroRectMake(339, 696, 68, 78)), @"per-edge extendedEdges override only the left edge");
     CHECK([rep.items[2].inputs isEqualToArray:@[ @"menu" ]] && [rep.items[3].inputs isEqualToArray:@[ @"toggleFastForward" ]],
           @"menu and fast-forward actions kept");
@@ -379,7 +379,7 @@ static void TestThreeDS(void) {
               RectNear(rep.screens[1].source, LibretroRectMake(0.1, 0.5, 0.8, 0.5)) && rep.screens[1].touchScreen,
           @"3DS bottom screen: region of the catalog, not the bogus inputFrame");
   }
-  LibretroSkinItem *stick = ItemNamed(rep, @"item0");
+  LibretroSkinItem *stick = ItemNamed(rep, @"iphone-edgeToEdge-portrait-item0");
   CHECK(stick.kind == LibretroSkinItemKindThumbstick &&
             [stick.inputs isEqualToArray:(@[ @"rightStickUp", @"rightStickDown", @"rightStickLeft", @"rightStickRight" ])],
         @"C-stick thumbstick with canonical inputs");

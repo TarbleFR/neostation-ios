@@ -124,7 +124,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
   bool get _isPortsLibrary =>
       Platform.isIOS && widget.system.folderName.toLowerCase() == 'ports';
   bool get _isLibretroLibrary =>
-      LibretroInternalService.handlesSystem(widget.system.folderName);
+      LibretroInternalService.handlesSystemModel(widget.system);
   int _selectedGameIndex = 0;
   late GamepadNavigation
   _gamepadNav; // Unified controller/keyboard input handler.

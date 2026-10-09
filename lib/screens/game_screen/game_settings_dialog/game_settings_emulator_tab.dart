@@ -74,16 +74,23 @@ class GameSettingsEmulatorTabState extends State<GameSettingsEmulatorTab> {
   /// Systems run by the embedded libretro engine offer their bundled cores
   /// and the RetroArch app; the choice is stored per game.
   bool get _isLibretroSystem =>
-      LibretroInternalService.handlesSystem(_systemFolder);
+      LibretroInternalService.handlesSystem(_libretroSystemKey);
+
+  /// Canonical system of the embedded engine: an alias folder (for instance
+  /// 'n3ds' during a scan) must reach the same cores and stored choice as
+  /// the launch does.
+  String get _libretroSystemKey => widget.isAllMode
+      ? _systemFolder
+      : LibretroInternalService.systemKey(widget.system);
   List<String> _libretroChoices = const <String>[];
   String? _libretroChoice;
 
   Future<void> _loadLibretroChoices() async {
-    final cores = LibretroCoreCatalog.coresFor(_systemFolder)
+    final cores = LibretroCoreCatalog.coresFor(_libretroSystemKey)
         .map((core) => core.id)
         .toList();
     final choice = await LibretroInternalService.coreChoiceFor(
-      _systemFolder,
+      _libretroSystemKey,
       widget.game.romname,
     );
     if (!mounted) return;
@@ -105,7 +112,7 @@ class GameSettingsEmulatorTabState extends State<GameSettingsEmulatorTab> {
     });
     try {
       await LibretroInternalService.setCoreChoice(
-        _systemFolder,
+        _libretroSystemKey,
         widget.game.romname,
         stored,
       );

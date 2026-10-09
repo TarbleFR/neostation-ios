@@ -24,4 +24,11 @@ FOUNDATION_EXPORT NSObject *const FlutterMethodNotImplemented;
 + (instancetype)methodChannelWithName:(NSString *)name binaryMessenger:(NSObject<FlutterBinaryMessenger> *)messenger;
 - (void)invokeMethod:(NSString *)method arguments:(id _Nullable)arguments;
 @end
+// FlutterCodecs.h (Flutter 3.47.2): PNG previews and refused arguments.
+@interface FlutterStandardTypedData : NSObject
++ (instancetype)typedDataWithBytes:(NSData *)data;
+@end
+@interface FlutterError : NSObject
++ (instancetype)errorWithCode:(NSString *)code message:(NSString *_Nullable)message details:(id _Nullable)details;
+@end
 NS_ASSUME_NONNULL_END

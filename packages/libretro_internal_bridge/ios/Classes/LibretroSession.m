@@ -4,23 +4,61 @@
 #import "LibretroAudioOutput.h"
 #import "LibretroCoreHost.h"
 #import "LibretroCoreOptions.h"
+#import "LibretroDefaultSkins.h"
+#import "LibretroFrontendMenu.h"
+#import "LibretroFrontendStore.h"
 #import "LibretroGLRenderer.h"
 #import "LibretroGameViewController.h"
+#import "LibretroGeometry.h"
+#import "LibretroInputMap.h"
 #import "LibretroInputState.h"
 #import "LibretroJit.h"
 #import "LibretroMetalPresenter.h"
+#import "LibretroOrientation.h"
 #import "LibretroSessionMenu.h"
+#import "LibretroShaderLibrary.h"
+#import "LibretroSkin.h"
+#import "LibretroSkinLayout.h"
+#import "LibretroSkinRenderer.h"
+#import "LibretroTouchOverlay.h"
 #import "LibretroVulkanRenderer.h"
 
 #include <mach/mach_time.h>
+#include <math.h>
 #include <stdatomic.h>
 
 static const NSInteger kStateSlots = 5;
+/// Quick save / quick load (frontend actions): slot 0, "<content>.state".
+static const NSInteger kQuickSlot = 0;
+/// Controls opacity while the user has chosen none: default skins, and
+/// translucent imported skins (Delta's default).
+static const double kDefaultSkinOpacity = 0.75;
+static const double kImportedSkinOpacity = 0.7;
+static const double kMinimumOpacity = 0.15;
+/// Redraws of the last frame used to measure a shader preset.
+static const NSUInteger kShaderMeasureIterations = 30;
+
+static NSString *SettingString(id value) {
+  return [value isKindOfClass:NSString.class] && ((NSString *)value).length > 0 ? value : nil;
+}
+
+static NSDictionary *SettingDictionary(id value) {
+  return [value isKindOfClass:NSDictionary.class] ? value : nil;
+}
+
+/// After the game is dismissed: the app's own orientations again
+/// (LibretroOrientation rules).
+static void LibretroRestoreAppOrientations(UIViewController *presenter) {
+  LibretroOrientationSetGameMask(0);
+  UIViewController *root = presenter.view.window.rootViewController;
+  [root setNeedsUpdateOfSupportedInterfaceOrientations];
+  if (presenter != nil && presenter != root) [presenter setNeedsUpdateOfSupportedInterfaceOrientations];
+}
 
 @implementation LibretroSessionConfiguration
 @end
 
-@interface LibretroSession () <LibretroCoreHostDelegate>
+@interface LibretroSession () <LibretroCoreHostDelegate, LibretroGameViewLayoutSource, LibretroFrontendMenuHost>
 @end
 
 @implementation LibretroSession {
@@ -60,6 +98,29 @@ static const NSInteger kStateSlots = 5;
   BOOL _touchControls;
   BOOL _started;
   NSArray<NSString *> *_finalLog;
+
+  // Frontend: skins, screens, format, shaders, controls (main thread unless noted).
+  NSString *_console;
+  LibretroFrontendStore *_store;  // thread-safe, also read on the emulation thread
+  LibretroInputMap *_inputMap;
+  LibretroSkin *_defaultSkin;
+  LibretroSkin *_currentSkin;
+  LibretroSkinRepresentation *_currentRepresentation;
+  LibretroSkinOrientation _currentOrientation;
+  LibretroSize _viewSize;
+  LibretroInsets _safeInsets;
+  BOOL _iPad;
+  NSMutableDictionary<NSString *, LibretroSkin *> *_skinCache;
+  NSMutableSet<NSString *> *_failedSkins;
+  BOOL _skinFailureShown;
+  NSArray<LibretroSkin *> *_availableSkins;
+  NSArray<LibretroPresenterScreen *> *_presenterScreens;
+  NSArray<NSValue *> *_lastTouchMappings;
+  LibretroFrontendMenu *_frontendMenu;
+  BOOL _screensAndShadersAvailable;
+  BOOL _editingControls;
+  BOOL _fastForwardHeld;
+  _Atomic bool _redrawPending;
 }
 
 - (instancetype)initWithConfiguration:(LibretroSessionConfiguration *)configuration {
@@ -73,6 +134,12 @@ static const NSInteger kStateSlots = 5;
     _glFrameSemaphore = dispatch_semaphore_create(1);
     _cheats = [NSMutableArray array];
     _diskLabels = @[];
+    _screensAndShadersAvailable = YES;
+    _currentOrientation = LibretroSkinOrientationLandscape;
+    _skinCache = [NSMutableDictionary dictionary];
+    _failedSkins = [NSMutableSet set];
+    _lastTouchMappings = @[];
+    _presenterScreens = @[];
     NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
     _smooth = [defaults objectForKey:@"libretro.smooth"] != nil ? [defaults boolForKey:@"libretro.smooth"] : NO;
     _touchControls =
@@ -105,16 +172,25 @@ static const NSInteger kStateSlots = 5;
 - (void)startFromViewController:(UIViewController *)presenter
                      completion:(void (^)(NSDictionary<NSString *, id> *result))completion {
   _startCompletion = [completion copy];
-  _controller = [[LibretroGameViewController alloc] initWithProfile:_configuration.profile ?: @"nes" input:_input];
+  [self prepareFrontend];
+  NSString *cacheDirectory =
+      _configuration.cacheDirectory.length > 0 ? _configuration.cacheDirectory : NSTemporaryDirectory();
+  _controller = [[LibretroGameViewController alloc] initWithInput:_input cacheDirectory:cacheDirectory];
   _controller.title = _configuration.gameTitle;
   _controller.menuAccessibilityLabel = [self text:@"menu"];
   _controller.touchControlsEnabled = _touchControls;
+  _controller.allowedOrientations = UIInterfaceOrientationMaskAllButUpsideDown;
+  _controller.layoutSource = self;
   __weak LibretroSession *weakSelf = self;
   _controller.menuHandler = ^{
     [weakSelf openMenu];
   };
   _controller.activeHandler = ^(BOOL active) {
     [weakSelf applicationActive:active];
+  };
+  _controller.screenMappingsProvider = ^NSArray<NSValue *> * {
+    LibretroSession *session = weakSelf;
+    return session != nil ? [session touchScreenMappings] : @[];
   };
   [_controller loadViewIfNeeded];
   _metalLayer = _controller.metalLayer;
@@ -125,16 +201,15 @@ static const NSInteger kStateSlots = 5;
     return;
   }
   _presenter.smooth = _smooth;
-  LibretroMetalPresenter *metal = _presenter;
-  _controller.layoutHandler = ^(CGSize size) {
-    [metal setDrawableSize:size];
+  void (^actions)(LibretroFrontendAction, BOOL) = ^(LibretroFrontendAction action, BOOL pressed) {
+    [weakSelf performFrontendAction:action pressed:pressed];
   };
-  _controller.videoRectProvider = ^CGRect {
-    LibretroSession *session = weakSelf;
-    LibretroVulkanRenderer *vulkan = session != nil ? session->_vulkan : nil;
-    return vulkan != nil ? vulkan.normalizedVideoRect : metal.normalizedVideoRect;
-  };
+  _controller.overlay.actionHandler = actions;
+  _input.actionHandler = actions;
   [_controller setLoading:YES];
+  // Portrait and landscape while the game is shown; restored to the app's
+  // orientations only in the dismissal completion.
+  LibretroOrientationSetGameMask(UIInterfaceOrientationMaskAllButUpsideDown);
   [presenter presentViewController:_controller
                           animated:NO
                         completion:^{
@@ -148,6 +223,17 @@ static const NSInteger kStateSlots = 5;
                           session->_thread.stackSize = 16 * 1024 * 1024;
                           [session->_thread start];
                         }];
+}
+
+/// Console preferences: store, logical input map, default skin.
+- (void)prepareFrontend {
+  _console = [_configuration.console copy] ?: @"";
+  _store = [LibretroFrontendStore storeWithDirectory:_configuration.frontendDirectory ?: @""];
+  _inputMap = [LibretroInputMap mapForConsole:_console];
+  _defaultSkin = [LibretroDefaultSkins skinForConsole:_console];
+  _defaultSkin.name = [self text:@"skinDefaultName"];
+  _currentSkin = _defaultSkin;
+  [_input setInputMap:_inputMap gamepadRemap:[self gamepadRemap]];
 }
 
 - (void)finishStartWithResult:(NSDictionary<NSString *, id> *)result {
@@ -174,16 +260,20 @@ static const NSInteger kStateSlots = 5;
   LibretroGameViewController *controller = _controller;
   _controller = nil;
   _menu = nil;
+  _frontendMenu = nil;
+  _editingControls = NO;
+  _input.actionHandler = nil;
   [controller stopInputPolling];
   NSArray<dispatch_block_t> *completions = [_stopCompletions copy];
   [_stopCompletions removeAllObjects];
   BOOL notify = _started;
   _started = NO;
+  UIViewController *presenter = controller.presentingViewController;
   dispatch_block_t done = ^{
+    LibretroRestoreAppOrientations(presenter);
     for (dispatch_block_t completion in completions) completion();
     if (notify && self.endedHandler != nil) self.endedHandler();
   };
-  UIViewController *presenter = controller.presentingViewController;
   if (presenter != nil) {
     [presenter dismissViewControllerAnimated:NO completion:done];
   } else {
@@ -196,9 +286,11 @@ static const NSInteger kStateSlots = 5;
   _finalLog = result[@"log"];
   LibretroGameViewController *controller = _controller;
   _controller = nil;
+  _input.actionHandler = nil;
   [controller stopInputPolling];
   UIViewController *presenter = controller.presentingViewController;
   dispatch_block_t done = ^{
+    LibretroRestoreAppOrientations(presenter);
     [self finishStartWithResult:result];
   };
   if (presenter != nil) {
@@ -302,16 +394,20 @@ static const NSInteger kStateSlots = 5;
                                             language:configuration.retroLanguage
                                           jitCapable:LibretroJitUsableByCores()];
   _host.delegate = self;
+  // Given to the option store before retro_set_environment and retro_init:
+  // DeSmuME reads its options only in retro_init. Locked options (DS / 3DS
+  // screen layout and pointer) win over everything and stay read-only.
+  _host.initialOptionDefaults = configuration.optionDefaults.count > 0 ? configuration.optionDefaults : nil;
+  _host.initialSessionOverrides =
+      !LibretroJitUsableByCores() && configuration.noJitOverrides.count > 0 ? configuration.noJitOverrides : nil;
+  _host.lockedSessionOverrides = configuration.lockedOptions.count > 0 ? configuration.lockedOptions : nil;
   NSError *error = nil;
   if (![_host loadCore:&error]) return [self failureFromError:error];
-  if (configuration.optionDefaults.count > 0) [_host.options applyDefaults:configuration.optionDefaults];
-  if (!LibretroJitUsableByCores() && configuration.noJitOverrides.count > 0) {
-    [_host.options applySessionOverrides:configuration.noJitOverrides];
-  }
   if (![_host loadContentAtPath:configuration.contentPath error:&error]) return [self failureFromError:error];
   struct retro_system_av_info av = _host.avInfo;
   [self applyGeometry:av.geometry];
   _presenter.rotation = _host.rotation;
+  BOOL shadersAvailable = YES;
   if (_host.usesHardwareRendering) {
     BOOL prepared = NO;
     if (_gl != nil) {
@@ -322,13 +418,37 @@ static const NSInteger kStateSlots = 5;
       if (_negotiation != NULL) [_vulkan setNegotiationInterface:_negotiation];
       _vulkan.smooth = _smooth;
       _vulkan.aspectRatio = _presenter.aspectRatio;
+      // Frames copied to host memory reach Metal like every other core.
+      __weak LibretroMetalPresenter *weakPresenter = _presenter;
+      _vulkan.frameHandler = ^(const void *pixels, unsigned width, unsigned height, size_t bytesPerRow,
+                               MTLPixelFormat pixelFormat) {
+        [weakPresenter presentPixels:pixels
+                               width:width
+                              height:height
+                         bytesPerRow:bytesPerRow
+                         pixelFormat:pixelFormat];
+      };
       prepared = [_vulkan prepare:&error];
+      if (prepared && !_vulkan.handsOffFrames) {
+        // Legacy presentation on the layer: no screens, format or shaders.
+        _vulkan.frameHandler = nil;
+        shadersAvailable = NO;
+        NSLog(@"[Libretro] Vulkan frames cannot reach Metal: legacy presentation without screens or shaders");
+        __weak LibretroSession *weakSelf = self;
+        dispatch_async(dispatch_get_main_queue(), ^{
+          LibretroSession *session = weakSelf;
+          if (session == nil) return;
+          session->_screensAndShadersAvailable = NO;
+          [session->_controller setNeedsSkinLayout];
+        });
+      }
     }
     if (!prepared) return [self failureWithCode:@"LIBRETRO_HARDWARE_RENDER_FAILED" detail:error.localizedDescription];
     [_host hardwareContextReset];
   } else {
     [_presenter presentBlack];
   }
+  if (shadersAvailable) [self applyStoredShader];
   _audio = [[LibretroAudioOutput alloc] initWithInputRate:av.timing.sample_rate];
   NSError *audioError = nil;
   if (![_audio start:&audioError]) {
@@ -421,7 +541,12 @@ static const NSInteger kStateSlots = 5;
     if (_glNeedsResize) {
       _glNeedsResize = NO;
       struct retro_system_av_info av = _host.avInfo;
+      // The presenter keeps the last texture for redraws: it is released, and
+      // the GPU has finished with it, before the IOSurface is reallocated.
+      dispatch_semaphore_wait(_glFrameSemaphore, DISPATCH_TIME_FOREVER);
+      [_presenter invalidateLastFrame];
       [_gl prepareWithWidth:av.geometry.max_width height:av.geometry.max_height error:nil];
+      dispatch_semaphore_signal(_glFrameSemaphore);
     }
   }
   [_achievements doFrame];
@@ -435,13 +560,21 @@ static const NSInteger kStateSlots = 5;
   LibretroGLRenderer *gl = _gl;
   LibretroVulkanRenderer *vulkan = _vulkan;
   LibretroCoreHost *host = _host;
+  LibretroMetalPresenter *presenter = _presenter;
+  dispatch_semaphore_t semaphore = _glFrameSemaphore;
   [_host unloadWithHardwareTeardown:^{
     if (gl != nil) {
+      // Waits for the frame the GPU may still read, then drops the
+      // presenter's reference before the IOSurface goes away.
+      long waited = dispatch_semaphore_wait(semaphore, dispatch_time(DISPATCH_TIME_NOW, (int64_t)NSEC_PER_SEC));
+      [presenter invalidateLastFrame];
       [gl makeCurrent];
       [host hardwareContextDestroy];
       [gl teardown];
+      if (waited == 0) dispatch_semaphore_signal(semaphore);
     }
     if (vulkan != nil) {
+      vulkan.frameHandler = nil;
       [vulkan waitIdle];
       [host hardwareContextDestroy];
       [vulkan teardown];
@@ -558,6 +691,7 @@ static const NSInteger kStateSlots = 5;
       [host flushSaveRAM:nil];
     }];
   }
+  if (active) [self requestRedraw];
 }
 
 - (void)setMenuPaused:(BOOL)paused {
@@ -567,10 +701,710 @@ static const NSInteger kStateSlots = 5;
   [_condition unlock];
   if (paused && _loaded) {
     LibretroCoreHost *host = _host;
+    LibretroVulkanRenderer *vulkan = _vulkan;
     [self enqueue:^{
+      // The newest Vulkan frame is the one kept on screen while paused.
+      if (vulkan.handsOffFrames) [vulkan flushPendingFrame];
       [host flushSaveRAM:nil];
     }];
   }
+}
+
+#pragma mark - Redraws while paused
+
+/// Coalesced redraw of the last frame (format, screens, shader or skin
+/// changed while the game is paused). Main thread.
+- (void)requestRedraw {
+  if (!_loaded || !_screensAndShadersAvailable || _presenter == nil) return;
+  if (atomic_exchange(&_redrawPending, true)) return;
+  __weak LibretroSession *weakSelf = self;
+  [self enqueue:^{
+    LibretroSession *session = weakSelf;
+    if (session == nil) return;
+    atomic_store(&session->_redrawPending, false);
+    [session redrawLastFrameIfPaused];
+  }];
+}
+
+/// Emulation thread. A running game redraws at its next frame; Metal work
+/// is never submitted while the application is inactive.
+- (void)redrawLastFrameIfPaused {
+  [_condition lock];
+  BOOL redraw = _menuPaused && !_backgroundPaused && !_stopRequested;
+  [_condition unlock];
+  if (!redraw || !_loaded) return;
+  if (_vulkan != nil) {
+    if (!_vulkan.handsOffFrames) return;
+    [_vulkan flushPendingFrame];
+  }
+  if (_gl != nil) {
+    // The OpenGL frame is shared with the core: no core frame may render into
+    // it while the presenter reads it.
+    dispatch_semaphore_wait(_glFrameSemaphore, DISPATCH_TIME_FOREVER);
+    dispatch_semaphore_t drawn = dispatch_semaphore_create(0);
+    if ([_presenter representLastFrameWithCompletion:^{
+          dispatch_semaphore_signal(drawn);
+        }]) {
+      dispatch_semaphore_wait(drawn, dispatch_time(DISPATCH_TIME_NOW, (int64_t)NSEC_PER_SEC));
+    }
+    dispatch_semaphore_signal(_glFrameSemaphore);
+    return;
+  }
+  [_presenter representLastFrameWithCompletion:nil];
+}
+
+#pragma mark - Frontend settings
+
+- (NSString *)gameScopeKey {
+  return _configuration.gameKey.length > 0 ? _configuration.gameKey : nil;
+}
+
+/// Resolved value: game, else console, else nil (NeoStation default).
+/// Thread-safe.
+- (id)settingValue:(NSString *)key {
+  return [_store valueForKey:key console:_console game:[self gameScopeKey] scope:NULL];
+}
+
+- (NSDictionary<NSString *, NSString *> *)gamepadRemap {
+  NSDictionary *stored = SettingDictionary([self settingValue:LibretroSettingGamepad]);
+  NSMutableDictionary<NSString *, NSString *> *remap = [NSMutableDictionary dictionary];
+  for (id element in stored) {
+    id input = stored[element];
+    if ([element isKindOfClass:NSString.class] && [input isKindOfClass:NSString.class]) remap[element] = input;
+  }
+  return remap;
+}
+
+- (NSDictionary<NSString *, NSArray<NSString *> *> *)touchRemapForSkin:(LibretroSkin *)skin {
+  NSString *skinId = skin.installedIdentifier;
+  if (skinId.length == 0) return @{};
+  NSDictionary *stored = SettingDictionary([self settingValue:LibretroSettingTouchRemapKey(skinId)]);
+  NSMutableDictionary<NSString *, NSArray<NSString *> *> *remap = [NSMutableDictionary dictionary];
+  for (id item in stored) {
+    id inputs = stored[item];
+    if (![item isKindOfClass:NSString.class] || ![inputs isKindOfClass:NSArray.class]) continue;
+    NSMutableArray<NSString *> *names = [NSMutableArray array];
+    for (id input in (NSArray *)inputs) {
+      if ([input isKindOfClass:NSString.class]) [names addObject:input];
+    }
+    remap[item] = names;
+  }
+  return remap;
+}
+
+- (NSDictionary<NSString *, NSDictionary *> *)layoutOverridesForSkin:(LibretroSkin *)skin
+                                                         orientation:(LibretroSkinOrientation)orientation {
+  NSString *skinId = skin.installedIdentifier;
+  if (skinId.length == 0) return @{};
+  NSString *key = LibretroSettingLayoutKey(skinId, LibretroSkinOrientationName(orientation));
+  NSDictionary *stored = SettingDictionary([self settingValue:key]);
+  NSMutableDictionary<NSString *, NSDictionary *> *overrides = [NSMutableDictionary dictionary];
+  for (id item in stored) {
+    id value = stored[item];
+    if ([item isKindOfClass:NSString.class] && [value isKindOfClass:NSDictionary.class]) overrides[item] = value;
+  }
+  return overrides;
+}
+
+- (CGFloat)opacityForRepresentation:(LibretroSkinRepresentation *)representation {
+  id stored = [self settingValue:LibretroSettingOpacity];
+  if ([stored isKindOfClass:NSNumber.class]) {
+    double opacity = [stored doubleValue];
+    if (isfinite(opacity)) return MIN(MAX(opacity, kMinimumOpacity), 1.0);
+  }
+  return representation.generated ? kDefaultSkinOpacity : kImportedSkinOpacity;
+}
+
+- (BOOL)screensSwapped {
+  id stored = [self settingValue:LibretroSettingScreensSwapped];
+  return [stored isKindOfClass:NSNumber.class] && [stored boolValue];
+}
+
+- (NSDictionary *)consoleGeometryEntry {
+  return SettingDictionary(_configuration.consoleGeometry[_console]);
+}
+
+- (NSDictionary<NSString *, NSArray<NSNumber *> *> *)consoleRegions {
+  return SettingDictionary([self consoleGeometryEntry][@"regions"]);
+}
+
+/// Console pixels of the whole core picture ({0, 0} when unknown, arcade).
+- (LibretroSize)consoleNominalSize {
+  NSArray *size = [self consoleGeometryEntry][@"size"];
+  if (![size isKindOfClass:NSArray.class] || size.count < 2 || ![size[0] isKindOfClass:NSNumber.class] ||
+      ![size[1] isKindOfClass:NSNumber.class]) {
+    return (LibretroSize){0, 0};
+  }
+  double width = [size[0] doubleValue], height = [size[1] doubleValue];
+  if (!isfinite(width) || !isfinite(height) || width <= 0 || height <= 0) return (LibretroSize){0, 0};
+  return (LibretroSize){width, height};
+}
+
+#pragma mark - Skins
+
+/// Imported skin `identifier` compatible with this console, parsed once per
+/// session; nil when missing or unparsable (logged, and announced once
+/// when `report`).
+- (LibretroSkin *)importedSkinWithIdentifier:(NSString *)identifier report:(BOOL)report {
+  if (!LibretroSkinIdentifierIsValid(identifier) || [identifier isEqualToString:LibretroDefaultSkinIdentifier]) {
+    return nil;
+  }
+  LibretroSkin *cached = _skinCache[identifier];
+  if (cached != nil) return cached;
+  if (![_failedSkins containsObject:identifier]) {
+    NSString *root = _configuration.skinsDirectory;
+    NSString *code = nil;
+    LibretroSkin *skin = nil;
+    if (root.length > 0) {
+      skin = [LibretroSkin skinWithDirectory:[root stringByAppendingPathComponent:identifier]
+                             consoleGeometry:_configuration.consoleGeometry
+                                   errorCode:&code];
+    }
+    if (skin != nil && [skin.consoles containsObject:_console]) {
+      _skinCache[identifier] = skin;
+      return skin;
+    }
+    NSLog(@"[Libretro] skin %@ not usable for %@: %@", identifier, _console, code ?: @"other console");
+    [_failedSkins addObject:identifier];
+  }
+  if (report && !_skinFailureShown) {
+    _skinFailureShown = YES;
+    __weak LibretroSession *weakSelf = self;
+    dispatch_async(dispatch_get_main_queue(), ^{
+      LibretroSession *session = weakSelf;
+      if (session == nil) return;
+      [session showStatus:[session text:@"skinLoadFailed"]];
+    });
+  }
+  return nil;
+}
+
+/// Skin chosen for an orientation (game, else console); the default skin
+/// when none is chosen or the chosen one cannot be loaded.
+- (LibretroSkin *)selectedSkinForOrientation:(LibretroSkinOrientation)orientation {
+  NSString *key =
+      orientation == LibretroSkinOrientationPortrait ? LibretroSettingSkinPortrait : LibretroSettingSkinLandscape;
+  NSString *identifier = SettingString([self settingValue:key]);
+  if (identifier == nil || [identifier isEqualToString:LibretroDefaultSkinIdentifier]) return _defaultSkin;
+  return [self importedSkinWithIdentifier:identifier report:YES] ?: _defaultSkin;
+}
+
+/// NeoStation's skin generated for the view: DS / 3DS arrangement and
+/// swap from the settings, screen regions from the core catalog.
+- (LibretroSkinRepresentation *)defaultRepresentationForOrientation:(LibretroSkinOrientation)orientation
+                                                           viewSize:(LibretroSize)size
+                                                         safeInsets:(LibretroInsets)insets
+                                                               iPad:(BOOL)iPad {
+  NSString *arrangement = nil;
+  if ([LibretroDefaultSkins isDualScreenConsole:_console]) {
+    NSString *key = orientation == LibretroSkinOrientationPortrait ? LibretroSettingArrangementPortrait
+                                                                    : LibretroSettingArrangementLandscape;
+    NSString *stored = SettingString([self settingValue:key]);
+    if (stored != nil &&
+        [[LibretroDefaultSkins arrangementsForConsole:_console orientation:orientation] containsObject:stored]) {
+      arrangement = stored;
+    }
+  }
+  return [LibretroDefaultSkins representationForConsole:_console
+                                            orientation:orientation
+                                               viewSize:size
+                                             safeInsets:insets
+                                                   iPad:iPad
+                                            arrangement:arrangement
+                                                swapped:[self screensSwapped]
+                                                regions:[self consoleRegions]];
+}
+
+/// View size and safe insets for an orientation: the current ones, or
+/// the rotated view with typical insets (previews of the other orientation).
+- (void)viewSize:(LibretroSize *)size insets:(LibretroInsets *)insets forOrientation:(LibretroSkinOrientation)orientation {
+  if (orientation == _currentOrientation) {
+    *size = _viewSize;
+    *insets = _safeInsets;
+    return;
+  }
+  *size = (LibretroSize){_viewSize.h, _viewSize.w};
+  LibretroInsets current = _safeInsets;
+  BOOL notched = current.top + current.left + current.bottom + current.right > 0;
+  if (_iPad || !notched) {
+    *insets = current;
+  } else if (orientation == LibretroSkinOrientationPortrait) {
+    *insets = (LibretroInsets){MAX(current.left, current.right), 0, current.bottom > 0 ? 34 : 0, 0};
+  } else {
+    *insets = (LibretroInsets){0, current.top, current.bottom > 0 ? 21 : 0, current.top};
+  }
+}
+
+#pragma mark - LibretroGameViewLayoutSource (main thread)
+
+- (LibretroSkinRepresentation *)representationForOrientation:(LibretroSkinOrientation)orientation
+                                                    viewSize:(LibretroSize)size
+                                                  safeInsets:(LibretroInsets)insets
+                                                        iPad:(BOOL)iPad {
+  _currentOrientation = orientation;
+  _viewSize = size;
+  _safeInsets = insets;
+  _iPad = iPad;
+  LibretroSkin *skin = [self selectedSkinForOrientation:orientation];
+  LibretroSkinRepresentation *representation = nil;
+  if (skin != _defaultSkin) {
+    // No orientation fallback inside a skin: the default skin is used for
+    // an orientation the chosen skin lacks (the Skins page says so).
+    representation = [skin representationForOrientation:orientation iPad:iPad edgeToEdge:insets.bottom > 0];
+    if (representation == nil) skin = _defaultSkin;
+  }
+  if (representation == nil) {
+    representation = [self defaultRepresentationForOrientation:orientation viewSize:size safeInsets:insets iPad:iPad];
+  }
+  _currentSkin = skin;
+  _currentRepresentation = representation;
+  return representation;
+}
+
+- (NSDictionary<NSString *, NSDictionary *> *)layoutOverridesForRepresentation:
+    (LibretroSkinRepresentation *)representation {
+  LibretroSkin *skin = representation.generated ? _defaultSkin : (_currentSkin ?: _defaultSkin);
+  return [self layoutOverridesForSkin:skin orientation:representation.orientation];
+}
+
+- (void)gameViewDidLayout:(LibretroSkinLayoutResult *)layout
+           representation:(LibretroSkinRepresentation *)representation
+             drawableSize:(CGSize)drawableSize
+                   points:(CGSize)pointSize {
+  LibretroScreenFormat format =
+      LibretroScreenFormatFromIdentifier(SettingString([self settingValue:LibretroSettingScreenFormat]));
+  LibretroSize nominal = [self consoleNominalSize];
+  double width = pointSize.width > 0 ? pointSize.width : 1;
+  double height = pointSize.height > 0 ? pointSize.height : 1;
+  NSMutableArray<LibretroPresenterScreen *> *screens = [NSMutableArray array];
+  for (LibretroLaidOutScreen *screen in layout.screens) {
+    LibretroRect points = screen.container;
+    LibretroRect container = LibretroRectMake(points.x / width, points.y / height, points.w / width, points.h / height);
+    LibretroPresenterScreen *entry = [LibretroPresenterScreen screenWithSource:screen.source
+                                                                      container:container
+                                                                         format:format
+                                                                    touchScreen:screen.touchScreen];
+    // Console pixels of this screen for the shaders: DS 256x192 each, 3DS
+    // top 400x240 and bottom 320x240, PSP 480x272 even when upscaled.
+    if (nominal.w > 0 && nominal.h > 0) {
+      entry.nominalSize = (LibretroSize){screen.source.w * nominal.w, screen.source.h * nominal.h};
+    }
+    [screens addObject:entry];
+  }
+  _presenterScreens = [screens copy];
+  [_presenter setDrawableSize:drawableSize screens:_presenterScreens];
+  LibretroSkin *skin = representation.generated ? _defaultSkin : (_currentSkin ?: _defaultSkin);
+  [_controller.overlay applyLayout:layout inputMap:_inputMap touchRemap:[self touchRemapForSkin:skin]];
+  [_input setInputMap:_inputMap gamepadRemap:[self gamepadRemap]];
+  _controller.controlsOpacity = [self opacityForRepresentation:representation];
+  [self requestRedraw];
+}
+
+/// Touch-screen mappings of the last presented frame, normalized to the
+/// drawable (LibretroGameViewController converts them to overlay points).
+- (NSArray<NSValue *> *)touchScreenMappings {
+  if (!_screensAndShadersAvailable) {
+    // Legacy Vulkan presentation: the whole picture, aspect-fitted by the
+    // renderer, is one touch screen for DS / 3DS.
+    LibretroVulkanRenderer *vulkan = _vulkan;
+    if (vulkan == nil || !_inputMap.hasTouchScreen) return @[];
+    CGRect rect = vulkan.normalizedVideoRect;
+    LibretroScreenMapping mapping;
+    mapping.output = LibretroRectMake(rect.origin.x, rect.origin.y, rect.size.width, rect.size.height);
+    mapping.source = LibretroRectUnit;
+    mapping.rotation = 0;
+    return @[ [NSValue valueWithBytes:&mapping objCType:@encode(LibretroScreenMapping)] ];
+  }
+  NSArray<NSValue *> *mappings = [_presenter screenMappings];
+  NSArray<LibretroPresenterScreen *> *screens = _presenterScreens;
+  // The last frame was drawn with an older layout: keep the previous mappings.
+  if (mappings.count != screens.count) return _lastTouchMappings;
+  NSMutableArray<NSValue *> *touch = [NSMutableArray array];
+  for (NSUInteger index = 0; index < screens.count; index++) {
+    if (screens[index].touchScreen) [touch addObject:mappings[index]];
+  }
+  _lastTouchMappings = [touch copy];
+  return _lastTouchMappings;
+}
+
+#pragma mark - LibretroFrontendMenuHost (main thread)
+
+- (NSString *)uiLocale {
+  return _configuration.uiLocale.length > 0 ? _configuration.uiLocale : @"en";
+}
+
+- (NSString *)console {
+  return _console ?: @"";
+}
+
+- (NSString *)consoleName {
+  return _configuration.consoleName ?: @"";
+}
+
+- (NSString *)gameKey {
+  return _configuration.gameKey ?: @"";
+}
+
+- (LibretroFrontendStore *)frontendStore {
+  return _store;
+}
+
+- (LibretroInputMap *)inputMap {
+  return _inputMap;
+}
+
+- (NSArray<LibretroSkin *> *)availableSkins {
+  if (_availableSkins != nil) return _availableSkins;
+  NSMutableArray<LibretroSkin *> *imported = [NSMutableArray array];
+  NSString *root = _configuration.skinsDirectory;
+  NSArray<NSString *> *entries =
+      root.length > 0 ? [NSFileManager.defaultManager contentsOfDirectoryAtPath:root error:nil] : nil;
+  for (NSString *entry in entries) {
+    if (!LibretroSkinIdentifierIsValid(entry) || [entry isEqualToString:LibretroDefaultSkinIdentifier]) continue;
+    // neostation-skin.json (written by Dart at import) names the consoles.
+    NSString *metadataPath =
+        [[root stringByAppendingPathComponent:entry] stringByAppendingPathComponent:@"neostation-skin.json"];
+    NSData *data = [NSData dataWithContentsOfFile:metadataPath];
+    NSDictionary *metadata =
+        SettingDictionary(data.length > 0 ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil);
+    NSArray *consoles = [metadata[@"consoles"] isKindOfClass:NSArray.class] ? metadata[@"consoles"] : nil;
+    if (![consoles containsObject:_console]) continue;
+    LibretroSkin *skin = [self importedSkinWithIdentifier:entry report:NO];
+    if (skin != nil) [imported addObject:skin];
+  }
+  [imported sortUsingComparator:^NSComparisonResult(LibretroSkin *first, LibretroSkin *second) {
+    NSComparisonResult byName = [first.name localizedStandardCompare:second.name];
+    return byName != NSOrderedSame ? byName : [first.installedIdentifier compare:second.installedIdentifier];
+  }];
+  NSMutableArray<LibretroSkin *> *skins = [NSMutableArray arrayWithObject:_defaultSkin];
+  [skins addObjectsFromArray:imported];
+  _availableSkins = [skins copy];
+  return _availableSkins;
+}
+
+- (LibretroSkinRepresentation *)previewRepresentationForSkin:(LibretroSkin *)skin
+                                                orientation:(LibretroSkinOrientation)orientation {
+  LibretroSize size;
+  LibretroInsets insets;
+  [self viewSize:&size insets:&insets forOrientation:orientation];
+  if (skin == nil || [skin.installedIdentifier isEqualToString:LibretroDefaultSkinIdentifier]) {
+    return [self defaultRepresentationForOrientation:orientation viewSize:size safeInsets:insets iPad:_iPad];
+  }
+  return [skin representationForOrientation:orientation iPad:_iPad edgeToEdge:insets.bottom > 0];
+}
+
+- (void)renderPreviewForRepresentation:(LibretroSkinRepresentation *)representation
+                                  size:(CGSize)size
+                            completion:(void (^)(UIImage *image))completion {
+  LibretroSize viewSize;
+  LibretroInsets insets;
+  [self viewSize:&viewSize insets:&insets forOrientation:representation.orientation];
+  // Safe insets in the preview's points.
+  double factor = viewSize.w > 0 && size.width > 0 ? size.width / viewSize.w : 1;
+  UIEdgeInsets safe = UIEdgeInsetsMake(insets.top * factor, insets.left * factor, insets.bottom * factor,
+                                       insets.right * factor);
+  CGFloat scale = _controller.view.window.screen.scale;
+  NSString *cacheDirectory =
+      _configuration.cacheDirectory.length > 0 ? _configuration.cacheDirectory : NSTemporaryDirectory();
+  [LibretroSkinRenderer renderPreviewForRepresentation:representation
+                                                  size:size
+                                                 scale:scale > 0 ? scale : 2
+                                            safeInsets:safe
+                                        cacheDirectory:cacheDirectory
+                                            completion:completion];
+}
+
+- (LibretroSkinOrientation)currentOrientation {
+  return _currentOrientation;
+}
+
+- (LibretroSkin *)currentSkin {
+  return _currentSkin ?: _defaultSkin;
+}
+
+- (LibretroSkinRepresentation *)currentRepresentation {
+  if (_currentRepresentation != nil) return _currentRepresentation;
+  return [self defaultRepresentationForOrientation:_currentOrientation
+                                          viewSize:_viewSize
+                                        safeInsets:_safeInsets
+                                              iPad:_iPad];
+}
+
+- (double)coreAspectRatio {
+  return _presenter != nil ? (double)_presenter.aspectRatio : 0;
+}
+
+- (BOOL)screensAndShadersAvailable {
+  return _screensAndShadersAvailable;
+}
+
+- (BOOL)physicalControllerConnected {
+  return _input.hasPhysicalController;
+}
+
+- (void)frontendSettingsDidChange {
+  [_input setInputMap:_inputMap gamepadRemap:[self gamepadRemap]];
+  // Layout, screens, format, touch remaps and opacity are resolved again by
+  // the layout pass, which ends with a coalesced redraw.
+  [_controller setNeedsSkinLayout];
+}
+
+- (void)applyShaderPreset:(NSString *)presetIdentifier
+               parameters:(NSDictionary<NSString *, NSNumber *> *)parameters
+               completion:(void (^)(BOOL success))completion {
+  void (^done)(BOOL) = [completion copy];
+  if (!_loaded || !_screensAndShadersAvailable) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+      done(NO);
+    });
+    return;
+  }
+  NSString *identifier = [presetIdentifier copy];
+  NSDictionary<NSString *, NSNumber *> *values = [parameters copy];
+  __weak LibretroSession *weakSelf = self;
+  [self enqueue:^{
+    LibretroSession *session = weakSelf;
+    BOOL success = NO;
+    if (session != nil) {
+      success = [session activateShaderPreset:identifier parameters:values];
+      [session redrawLastFrameIfPaused];
+    }
+    dispatch_async(dispatch_get_main_queue(), ^{
+      done(success);
+    });
+  }];
+}
+
+- (void)previewShaderParameter:(NSString *)identifier value:(float)value {
+  [_presenter setShaderParameter:identifier value:value];
+  [self requestRedraw];
+}
+
+- (void)measureShaderWithCompletion:(void (^)(double milliseconds))completion {
+  void (^done)(double) = [completion copy];
+  if (!_loaded || !_screensAndShadersAvailable) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+      done(0);
+    });
+    return;
+  }
+  __weak LibretroSession *weakSelf = self;
+  [self enqueue:^{
+    LibretroSession *session = weakSelf;
+    double milliseconds = session != nil ? [session measureLastFrame] : 0;
+    dispatch_async(dispatch_get_main_queue(), ^{
+      done(milliseconds);
+    });
+  }];
+}
+
+- (void)beginControlsEditingForGame:(NSString *)gameKey {
+  LibretroGameViewController *controller = _controller;
+  if (controller == nil || _editingControls) return;
+  _editingControls = YES;
+  NSString *scopeGame = gameKey.length > 0 ? [gameKey copy] : nil;
+  // The overrides belong to the skin and orientation on screen now (the
+  // game view keeps the orientation while editing).
+  NSString *layoutKey =
+      LibretroSettingLayoutKey(self.currentSkin.installedIdentifier, LibretroSkinOrientationName(_currentOrientation));
+  __weak LibretroSession *weakSelf = self;
+  dispatch_block_t start = ^{
+    LibretroSession *session = weakSelf;
+    LibretroGameViewController *view = session != nil ? session->_controller : nil;
+    if (view == nil) return;
+    [view beginEditingControlsWithDoneTitle:[session text:@"controlsEditDone"]
+                                 resetTitle:[session text:@"controlsReset"]
+                                       hint:[session text:@"controlsEditHint"]
+                                   finished:^{
+                                     [weakSelf finishControlsEditingWithKey:layoutKey game:scopeGame];
+                                   }
+                                      reset:^{
+                                        [weakSelf resetControlsLayoutWithKey:layoutKey game:scopeGame];
+                                      }];
+  };
+  // The menu closes without resuming: the game stays paused while editing.
+  UINavigationController *menu = _menu;
+  if (menu == nil) {
+    start();
+    return;
+  }
+  [menu dismissViewControllerAnimated:YES
+                           completion:^{
+                             LibretroSession *session = weakSelf;
+                             if (session == nil) return;
+                             session->_menu = nil;
+                             session->_frontendMenu = nil;
+                             start();
+                           }];
+}
+
+- (void)finishControlsEditingWithKey:(NSString *)layoutKey game:(NSString *)gameKey {
+  NSDictionary<NSString *, NSDictionary *> *overrides = _controller.overlay.editOverrides;
+  if (![_store setValue:overrides.count > 0 ? overrides : nil forKey:layoutKey console:_console game:gameKey]) {
+    NSLog(@"[Libretro] controls layout %@ not saved", layoutKey);
+  }
+  _editingControls = NO;
+  [self setMenuPaused:NO];
+}
+
+- (void)resetControlsLayoutWithKey:(NSString *)layoutKey game:(NSString *)gameKey {
+  [_store setValue:nil forKey:layoutKey console:_console game:gameKey];
+}
+
+- (void)showStatus:(NSString *)message {
+  if (NSThread.isMainThread) {
+    [_controller showStatus:message];
+  } else {
+    dispatch_async(dispatch_get_main_queue(), ^{
+      [self->_controller showStatus:message];
+    });
+  }
+}
+
+#pragma mark - Shaders (emulation thread)
+
+- (NSDictionary<NSString *, NSNumber *> *)storedShaderParameters {
+  NSDictionary *stored = SettingDictionary([self settingValue:LibretroSettingShaderParameters]);
+  NSMutableDictionary<NSString *, NSNumber *> *parameters = [NSMutableDictionary dictionary];
+  for (id identifier in stored) {
+    id value = stored[identifier];
+    if ([identifier isKindOfClass:NSString.class] && [value isKindOfClass:NSNumber.class]) parameters[identifier] = value;
+  }
+  return parameters;
+}
+
+/// Shader of the game, else of the console, at load. A preset that cannot
+/// be compiled leaves the standard picture and is announced; the stored
+/// choice is not changed.
+- (void)applyStoredShader {
+  id enabled = [self settingValue:LibretroSettingShaderEnabled];
+  NSString *identifier = SettingString([self settingValue:LibretroSettingShaderPreset]);
+  if (![enabled isKindOfClass:NSNumber.class] || ![enabled boolValue] || identifier == nil) return;
+  if (![self activateShaderPreset:identifier parameters:[self storedShaderParameters]]) {
+    [self showStatus:[self text:@"shaderFailed"]];
+  }
+}
+
+- (BOOL)activateShaderPreset:(NSString *)identifier parameters:(NSDictionary<NSString *, NSNumber *> *)parameters {
+  LibretroShaderPreset *preset = identifier.length > 0 ? [LibretroShaderLibrary presetWithIdentifier:identifier] : nil;
+  NSError *error = nil;
+  if (identifier.length > 0 && preset == nil) {
+    [_presenter setShaderPreset:nil parameters:nil error:NULL];
+    NSLog(@"[Libretro] unknown shader preset %@: standard picture", identifier);
+    return NO;
+  }
+  BOOL success = [_presenter setShaderPreset:preset parameters:parameters error:&error];
+  if (!success) NSLog(@"[Libretro] shader preset %@ unavailable: %@", identifier, error.localizedDescription);
+  return success;
+}
+
+- (double)measureLastFrame {
+  [_condition lock];
+  BOOL active = !_backgroundPaused && !_stopRequested;
+  [_condition unlock];
+  if (!active) return 0;
+  BOOL gl = _gl != nil;
+  if (gl) dispatch_semaphore_wait(_glFrameSemaphore, DISPATCH_TIME_FOREVER);
+  double milliseconds = [_presenter measureLastFrameGPUTime:kShaderMeasureIterations];
+  if (gl) dispatch_semaphore_signal(_glFrameSemaphore);
+  NSLog(@"[Libretro] shader %@: median presenter GPU time %.3f ms over %lu redraws",
+        _presenter.activePresetIdentifier ?: @"none", milliseconds, (unsigned long)kShaderMeasureIterations);
+  return milliseconds;
+}
+
+#pragma mark - Frontend actions (main thread)
+
+/// Skin items and remapped controller buttons: menu, quick save / load,
+/// fast forward (held or toggled), swap the DS / 3DS screens.
+- (void)performFrontendAction:(LibretroFrontendAction)action pressed:(BOOL)pressed {
+  if (action == LibretroFrontendActionFastForward) {
+    if (pressed && _loaded && _menu == nil && !_editingControls) {
+      _fastForwardHeld = YES;
+      [self setFastForward:YES];
+    } else if (!pressed && _fastForwardHeld) {
+      _fastForwardHeld = NO;
+      [self setFastForward:NO];
+    }
+    return;
+  }
+  if (!pressed || !_loaded || _menu != nil || _editingControls) return;
+  __weak LibretroSession *weakSelf = self;
+  switch (action) {
+    case LibretroFrontendActionMenu:
+      // Outside the overlay's touch handling, which the menu interrupts.
+      dispatch_async(dispatch_get_main_queue(), ^{
+        [weakSelf openMenu];
+      });
+      break;
+    case LibretroFrontendActionQuickSave:
+      [self quickState:YES];
+      break;
+    case LibretroFrontendActionQuickLoad:
+      [self quickState:NO];
+      break;
+    case LibretroFrontendActionToggleFastForward: {
+      BOOL on = !atomic_load(&_fastForward);
+      _fastForwardHeld = NO;
+      [self setFastForward:on];
+      [self showStatus:[self text:on ? @"fastForwardOn" : @"fastForwardOff"]];
+      break;
+    }
+    case LibretroFrontendActionSwapScreens:
+      dispatch_async(dispatch_get_main_queue(), ^{
+        [weakSelf swapScreens];
+      });
+      break;
+    default:
+      break;
+  }
+}
+
+- (void)setFastForward:(BOOL)on {
+  if (atomic_load(&_fastForward) == (bool)on) return;
+  atomic_store(&_fastForward, on);
+  LibretroCoreHost *host = _host;
+  LibretroAudioOutput *audio = _audio;
+  [self enqueue:^{
+    host.fastForwarding = on;
+    if (!on) [audio clear];
+  }];
+}
+
+- (void)quickState:(BOOL)saving {
+  LibretroCoreHost *host = _host;
+  __weak LibretroSession *weakSelf = self;
+  [self enqueue:^{
+    NSString *key = nil;
+    if (!saving && ![NSFileManager.defaultManager fileExistsAtPath:[host statePathForSlot:kQuickSlot]]) {
+      key = @"quickMissing";
+    } else {
+      NSError *error = nil;
+      BOOL ok = saving ? [host saveStateToSlot:kQuickSlot error:&error] : [host loadStateFromSlot:kQuickSlot error:&error];
+      if (!ok) NSLog(@"[Libretro] quick %@ failed: %@", saving ? @"save" : @"load", error);
+      key = ok ? (saving ? @"quickSaved" : @"quickLoaded") : @"stateFailed";
+    }
+    dispatch_async(dispatch_get_main_queue(), ^{
+      LibretroSession *session = weakSelf;
+      if (session == nil) return;
+      [session showStatus:[session text:key]];
+    });
+  }];
+}
+
+/// DS / 3DS: exchanges the places of the two screens of the default skins,
+/// where the value applies (the game's when it has one, else the console's).
+- (void)swapScreens {
+  if (![LibretroDefaultSkins isDualScreenConsole:_console]) return;
+  LibretroSettingScope scope = LibretroSettingScopeDefault;
+  id stored = [_store valueForKey:LibretroSettingScreensSwapped console:_console game:[self gameScopeKey] scope:&scope];
+  BOOL swapped = [stored isKindOfClass:NSNumber.class] && [stored boolValue];
+  NSString *game = scope == LibretroSettingScopeGame ? [self gameScopeKey] : nil;
+  // @YES / @NO (not @(int)) so the JSON file holds a boolean.
+  NSNumber *value = swapped ? @NO : @YES;
+  if (![_store setValue:value forKey:LibretroSettingScreensSwapped console:_console game:game]) {
+    NSLog(@"[Libretro] screen swap not saved for %@", _console);
+  }
+  [self frontendSettingsDidChange];
 }
 
 #pragma mark - Disks and cheats
@@ -649,9 +1483,19 @@ static const NSInteger kStateSlots = 5;
 #pragma mark - Menu (main thread)
 
 - (void)openMenu {
-  if (_menu != nil || !_loaded || _controller == nil) return;
+  if (_menu != nil || !_loaded || _controller == nil || _editingControls) return;
+  if (_controller.presentedViewController != nil) return;
+  if (_fastForwardHeld) {
+    _fastForwardHeld = NO;
+    [self setFastForward:NO];
+  }
+  [_controller.overlay releaseAllTouches];
   [self setMenuPaused:YES];
   [_input reset];
+  // Skins are listed again at each opening; the frontend pages live as long
+  // as this menu.
+  _availableSkins = nil;
+  _frontendMenu = [[LibretroFrontendMenu alloc] initWithHost:self];
   __weak LibretroSession *weakSelf = self;
   LibretroMenuPage *root = [[LibretroMenuPage alloc] initWithTitle:_configuration.gameTitle ?: @""
                                                            builder:^NSArray<LibretroMenuSection *> * {
@@ -661,7 +1505,9 @@ static const NSInteger kStateSlots = 5;
   root.closeHandler = ^{
     [weakSelf closeMenu];
   };
-  UINavigationController *navigation = [[UINavigationController alloc] initWithRootViewController:root];
+  // Follows the game's orientations (portrait and landscape).
+  LibretroMenuNavigationController *navigation =
+      [[LibretroMenuNavigationController alloc] initWithRootViewController:root];
   navigation.modalPresentationStyle = UIModalPresentationOverFullScreen;
   navigation.modalInPresentation = YES;
   navigation.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
@@ -675,18 +1521,9 @@ static const NSInteger kStateSlots = 5;
   [menu dismissViewControllerAnimated:YES
                            completion:^{
                              self->_menu = nil;
+                             self->_frontendMenu = nil;
                              [self setMenuPaused:NO];
                            }];
-}
-
-- (void)showStatus:(NSString *)message {
-  if (NSThread.isMainThread) {
-    [_controller showStatus:message];
-  } else {
-    dispatch_async(dispatch_get_main_queue(), ^{
-      [self->_controller showStatus:message];
-    });
-  }
 }
 
 - (NSArray<LibretroMenuSection *> *)rootSections {
@@ -763,22 +1600,22 @@ static const NSInteger kStateSlots = 5;
                                                         session->_vulkan.smooth = on;
                                                         [NSUserDefaults.standardUserDefaults setBool:on
                                                                                               forKey:@"libretro.smooth"];
+                                                        [session requestRedraw];
                                                       }];
   LibretroMenuRow *fast = [LibretroMenuRow toggleWithTitle:[self text:@"fastForward"]
                                                         on:atomic_load(&_fastForward)
                                                     toggle:^(__unused LibretroMenuPage *page, BOOL on) {
                                                       LibretroSession *session = weakSelf;
                                                       if (session == nil) return;
-                                                      atomic_store(&session->_fastForward, on);
-                                                      LibretroCoreHost *host = session->_host;
-                                                      LibretroAudioOutput *audio = session->_audio;
-                                                      [session enqueue:^{
-                                                        host.fastForwarding = on;
-                                                        if (!on) [audio clear];
-                                                      }];
+                                                      session->_fastForwardHeld = NO;
+                                                      [session setFastForward:on];
                                                     }];
-  LibretroMenuSection *display = [LibretroMenuSection sectionWithTitle:[self text:@"display"]
-                                                                  rows:@[ touch, smooth, fast ]];
+  // Skins, screen format, screen layout (DS / 3DS), shaders and controls
+  // first (LibretroFrontendMenu), then the existing display toggles.
+  NSMutableArray<LibretroMenuRow *> *displayRows = [NSMutableArray array];
+  if (_frontendMenu != nil) [displayRows addObjectsFromArray:[_frontendMenu rootRows]];
+  [displayRows addObjectsFromArray:@[ touch, smooth, fast ]];
+  LibretroMenuSection *display = [LibretroMenuSection sectionWithTitle:[self text:@"display"] rows:displayRows];
   [sections addObject:display];
 
   NSMutableArray<LibretroMenuRow *> *extras = [NSMutableArray array];
@@ -920,13 +1757,17 @@ static const NSInteger kStateSlots = 5;
             }];
 }
 
+/// Curated settings the core declares, without the options NeoStation
+/// locks for this session (DS / 3DS screen layout and pointer): those are
+/// read-only and never offered.
 - (NSArray<NSDictionary *> *)availableSettings {
   NSMutableSet<NSString *> *declared = [NSMutableSet set];
   for (LibretroCoreOption *option in _host.options.options) [declared addObject:option.key];
   NSMutableArray<NSDictionary *> *available = [NSMutableArray array];
   for (NSDictionary *setting in _configuration.coreSettings) {
     NSString *key = [setting[@"key"] isKindOfClass:NSString.class] ? setting[@"key"] : nil;
-    if (key != nil && [declared containsObject:key]) [available addObject:setting];
+    if (key == nil || ![declared containsObject:key] || [_host.options isLockedKey:key]) continue;
+    [available addObject:setting];
   }
   return available;
 }

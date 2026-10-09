@@ -358,8 +358,12 @@ static void TestScreens(void) {
   CHECK(swapped.screens.count == 2 && [swapped.screens[0].role isEqualToString:@"bottom"] &&
             Same(ItemNamed(swapped, @"touchScreen").frame, swapped.screens[0].outputFrame),
         @"swapped: the touch screen follows the bottom screen to the upper place");
-  CHECK(stacked.screens.count == 2 && Same(stacked.screens[0].outputFrame, swapped.screens[1].outputFrame) &&
-            Same(stacked.screens[1].outputFrame, swapped.screens[0].outputFrame),
+  // Screens are listed in place order (upper place first), so swapping keeps
+  // the two places and exchanges which screen fills them.
+  CHECK(stacked.screens.count == 2 && swapped.screens.count == 2 &&
+            Same(stacked.screens[0].outputFrame, swapped.screens[0].outputFrame) &&
+            Same(stacked.screens[1].outputFrame, swapped.screens[1].outputFrame) &&
+            [swapped.screens[1].role isEqualToString:@"top"],
         @"swapped: the two places are exchanged");
   LibretroSkinRepresentation *topOnly = Phone(@"nds", LibretroSkinOrientationPortrait, LibretroArrangementTopOnly, NO, nil);
   CHECK(topOnly.screens.count == 1 && [topOnly.screens[0].role isEqualToString:@"top"] &&

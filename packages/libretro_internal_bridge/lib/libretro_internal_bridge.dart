@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
 
@@ -137,7 +136,7 @@ class LibretroInternalBridge {
         'height': height,
         'consoleGeometry': consoleGeometry,
         'cacheDirectory': cacheDirectory,
-        if (scale != null) 'scale': scale,
+        'scale': ?scale,
       });
 
   /// Before a skin is deleted or replaced: removes its selections, touch

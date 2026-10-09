@@ -532,7 +532,7 @@ class LibretroSkinService {
     final message = _optionalText(inspected['message']);
     final details = <String>[
       if (code.isNotEmpty) code,
-      if (message != null) message,
+      ?message,
     ].join(': ');
     if (key != LibretroSkinMessages.consoleUnsupported) {
       return LibretroSkinImportFailed(key, technicalDetails: details);

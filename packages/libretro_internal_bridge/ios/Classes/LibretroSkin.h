@@ -34,9 +34,11 @@ typedef NS_ENUM(NSInteger, LibretroSkinItemShape) {
 /// One control of a skin representation. Coordinates are in mapping units
 /// of the representation.
 @interface LibretroSkinItem : NSObject <NSCopying>
-/// Stable within its representation: "item0", "item1"... for imported
-/// skins (index in info.json), semantic ids ("a", "dpad", "leftStick",
-/// "touchScreen") for default skins. Used by user remaps and layouts.
+/// Imported skins: "<device>-<displayType>-<orientation>-item<index in
+/// info.json>", unique across the skin's layouts so a remap made in one
+/// layout never applies to another layout's item. Default skins: semantic
+/// ids ("a", "dpad", "leftStick", "touchScreen"), the same in both
+/// orientations. Used by user remaps and layouts.
 @property(nonatomic, copy) NSString *identifier;
 @property(nonatomic, assign) LibretroSkinItemKind kind;
 @property(nonatomic, assign) LibretroRect frame;

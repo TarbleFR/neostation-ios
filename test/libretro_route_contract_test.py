@@ -43,8 +43,24 @@ bridge = read('packages/libretro_internal_bridge/lib/libretro_internal_bridge.da
 require('@"neostation/libretro_internal"' in plugin and "'neostation/libretro_internal'" in bridge, 'channel names match')
 for method in ('isSessionActive', 'availableCores', 'diagnostics', 'stop', 'launch'):
     require(f'@"{method}"' in plugin and f"'{method}'" in bridge, f'method {method} on both sides')
+# Skins, screen format, shaders and controls: the Flutter screens read and
+# write the frontend settings through the native store (its only writer),
+# and inspect, preview and forget skins with the native parser and renderer.
+# Each method must exist on both sides of the channel.
+for method in ('frontendSettings', 'setFrontendSetting', 'inspectSkin', 'skinPreview', 'forgetSkin'):
+    require(f'isEqualToString:@"{method}"' in plugin and f"'{method}'" in bridge, f'method {method} on both sides')
 require('invokeMethod:@"sessionEnded"' in plugin and "call.method != 'sessionEnded'" in bridge, 'session end event')
 require('retroarch://' not in plugin, 'the embedded engine never opens RetroArch')
+# The launch request names the console instead of the retired touch profile:
+# its skins and settings directories are checked like the other directories,
+# and portrait is installed when the plugin registers.
+require('@"profile"' not in plugin, 'the touch profile is retired from the launch request')
+for key in ('console', 'consoleName', 'gameKey', 'skinsDirectory', 'frontendDirectory', 'consoleGeometry',
+            'lockedOptions'):
+    require(f'@"{key}"' in plugin, f'launch key {key} parsed natively')
+require(re.search(r'directoryKeys = @\[[^\]]*@"skinsDirectory", @"frontendDirectory"', plugin) is not None,
+        'skins and frontend directories must be absolute paths')
+require('LibretroOrientationInstall();' in plugin, 'portrait support installed at plugin registration')
 
 pubspec = read('pubspec.yaml')
 require('  - packages/libretro_internal_bridge' in pubspec, 'workspace member')

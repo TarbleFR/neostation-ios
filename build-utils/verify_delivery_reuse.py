@@ -389,6 +389,55 @@ ARMSX2_UNUSED_DELTA = {
     'packages/armsx2_internal_bridge/ios/Classes/Armsx2InternalBridgePlugin.mm',
 }
 DELTA |= ARMSX2_UNUSED_DELTA
+# Embedded libretro frontend (maintainer request of 9 October 2026): PSP and
+# 3DS on the embedded cores, skins per console with Delta / Provenance
+# import, Metal shader presets, screen format, controls customisation,
+# portrait, twelve languages. New native modules, their macOS behaviour
+# tests, the Dart services and screens, and the call sites switched to the
+# canonical console key. Reviewed source changes; see
+# docs/libretro-skins-shaders.md.
+FRONTEND_DELTA = {
+    'lib/screens/libretro/libretro_consoles_screen.dart',
+    'lib/screens/libretro/libretro_skin_catalog_screen.dart',
+    'lib/screens/libretro/libretro_skin_manager_screen.dart',
+    'lib/services/libretro_skin_catalog_service.dart',
+    'lib/services/libretro_skin_service.dart',
+    'packages/libretro_internal_bridge/ios/Classes/LibretroDefaultSkins.h',
+    'packages/libretro_internal_bridge/ios/Classes/LibretroDefaultSkins.m',
+    'packages/libretro_internal_bridge/ios/Classes/LibretroFrontendMenu.h',
+    'packages/libretro_internal_bridge/ios/Classes/LibretroFrontendMenu.m',
+    'packages/libretro_internal_bridge/ios/Classes/LibretroFrontendStore.h',
+    'packages/libretro_internal_bridge/ios/Classes/LibretroFrontendStore.m',
+    'packages/libretro_internal_bridge/ios/Classes/LibretroGeometry.h',
+    'packages/libretro_internal_bridge/ios/Classes/LibretroGeometry.m',
+    'packages/libretro_internal_bridge/ios/Classes/LibretroInputMap.h',
+    'packages/libretro_internal_bridge/ios/Classes/LibretroInputMap.m',
+    'packages/libretro_internal_bridge/ios/Classes/LibretroOrientation.h',
+    'packages/libretro_internal_bridge/ios/Classes/LibretroOrientation.m',
+    'packages/libretro_internal_bridge/ios/Classes/LibretroShaderLibrary.h',
+    'packages/libretro_internal_bridge/ios/Classes/LibretroShaderLibrary.m',
+    'packages/libretro_internal_bridge/ios/Classes/LibretroSkin.h',
+    'packages/libretro_internal_bridge/ios/Classes/LibretroSkin.m',
+    'packages/libretro_internal_bridge/ios/Classes/LibretroSkinLayout.h',
+    'packages/libretro_internal_bridge/ios/Classes/LibretroSkinLayout.m',
+    'packages/libretro_internal_bridge/ios/Classes/LibretroSkinRenderer.h',
+    'packages/libretro_internal_bridge/ios/Classes/LibretroSkinRenderer.m',
+    'test/libretro_frontend_test.py',
+    'test/libretro_frontend_ui_contract_test.py',
+    'test/libretro_host/frontend/default_skins_test.m',
+    'test/libretro_host/frontend/frontend_store_test.m',
+    'test/libretro_host/frontend/geometry_test.m',
+    'test/libretro_host/frontend/input_map_test.m',
+    'test/libretro_host/frontend/skin_layout_test.m',
+    'test/libretro_host/frontend/skin_test.m',
+    'test/libretro_host/shader_test.m',
+    'test/libretro_shader_catalog_test.py',
+    'test/libretro_shader_test.py',
+    'test/libretro_skin_catalog_test.dart',
+    'test/libretro_skin_manager_test.dart',
+    'test/libretro_skin_service_test.dart',
+}
+DELTA |= FRONTEND_DELTA
 INPUT_ROOTS = ('lib/', 'packages/', 'native/', 'build-utils/', 'assets/', 'test/')
 
 def sha(data):

@@ -346,6 +346,10 @@ static NSString *SkinImagePath(NSString *root, id name) {
 @property(nonatomic, copy) NSString *console;
 @property(nonatomic, strong) LibretroInputMap *inputMap;
 @property(nonatomic, strong) NSMutableOrderedSet<NSString *> *warnings;
+/// "<device>-<displayType>-<orientation>-" of the representation being
+/// parsed: item identifiers are unique per layout, so a remap or a moved
+/// button of one layout never lands on another layout's item.
+@property(nonatomic, copy) NSString *itemPrefix;
 @property(nonatomic, assign) BOOL hasNominalSize;
 @property(nonatomic, assign) LibretroSize nominalSize;
 @property(nonatomic, assign) LibretroRect topRegion;
@@ -437,7 +441,7 @@ static NSString *SkinImagePath(NSString *root, id name) {
     return nil;
   }
   LibretroSkinItem *item = [LibretroSkinItem new];
-  item.identifier = [NSString stringWithFormat:@"item%lu", (unsigned long)index];
+  item.identifier = [NSString stringWithFormat:@"%@item%lu", self.itemPrefix ?: @"", (unsigned long)index];
   item.frame = frame;
   NSMutableArray<NSString *> *unsupported = [NSMutableArray array];
   id inputs = object[@"inputs"];
@@ -698,6 +702,8 @@ static NSString *SkinImagePath(NSString *root, id name) {
   BOOL translucent = NO;
   if (SkinBool(object[@"translucent"], &translucent)) representation.translucent = translucent;
   representation.backgroundPath = [self backgroundPathFromAssets:object[@"assets"]];
+  self.itemPrefix = [NSString stringWithFormat:@"%@-%@-%@-", device, displayType,
+                                               LibretroSkinOrientationName(orientation)];
   NSArray<LibretroSkinItem *> *items = [self itemsFromObject:object[@"items"]
                                                      mapping:mapping
                                                        edges:representation.extendedEdges];
