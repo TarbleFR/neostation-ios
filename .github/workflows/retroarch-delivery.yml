@@ -1,5 +1,5 @@
-name: NeoStation RetroArch • Build 424 • SideStore
-run-name: NeoStation Build 424 • ${{ github.sha }} • RetroArch library relink
+name: NeoStation RetroArch • Build 423 • SideStore
+run-name: NeoStation Build 423 • ${{ github.sha }} • folder registration
 'on':
   push:
     branches:
@@ -9,7 +9,7 @@ run-name: NeoStation Build 424 • ${{ github.sha }} • RetroArch library relin
       build_number:
         description: New delivery build number
         required: true
-        default: '424'
+        default: '423'
         type: string
       benchmark:
         description: Measure a cold and a cached build on comparable macOS runners
@@ -84,7 +84,7 @@ jobs:
         PYTHON
     - name: Validate changed library, callback, launch and restart behavior
       run: |
-        flutter test test/rom_folder_registration_test.dart test/retroarch_scan_root_registration_test.dart test/library_scan_restart_test.dart test/retroarch_library_protocol_test.dart test/retroarch_library_cache_test.dart test/retroarch_launch_diagnostics_test.dart test/retroarch_sync_locale_test.dart test/rom_scan_symlink_alias_test.dart test/rom_scan_emulator_default_test.dart test/ios_selective_rollback_test.dart test/armsx2_retroarch_routing_isolation_test.dart test/game_repository_test.dart test/system_repository_test.dart test/config_repository_test.dart test/scraper_repository_test.dart test/sqlite_database_service_hidden_files_test.dart test/ios_rom_library_root_resolver_test.dart
+        flutter test test/rom_folder_registration_test.dart test/library_scan_restart_test.dart test/retroarch_library_protocol_test.dart test/retroarch_library_cache_test.dart test/retroarch_launch_diagnostics_test.dart test/retroarch_sync_locale_test.dart test/rom_scan_symlink_alias_test.dart test/rom_scan_emulator_default_test.dart test/ios_selective_rollback_test.dart test/armsx2_retroarch_routing_isolation_test.dart test/game_repository_test.dart test/system_repository_test.dart test/config_repository_test.dart test/scraper_repository_test.dart test/sqlite_database_service_hidden_files_test.dart test/ios_rom_library_root_resolver_test.dart
         python3 - <<'PY'
         import json,os
         from pathlib import Path
@@ -108,7 +108,7 @@ jobs:
     - name: Preserve validation provenance
       uses: actions/upload-artifact@v4
       with:
-        name: NeoStation-424-validation-${{ github.sha }}
+        name: NeoStation-423-validation-${{ github.sha }}
         path: build/delivery/
         if-no-files-found: error
         retention-days: 14
@@ -158,10 +158,10 @@ jobs:
     - checks
     - native
     env:
-      BUILD_NUMBER: ${{ inputs.build_number || '424' }}
+      BUILD_NUMBER: ${{ inputs.build_number || '423' }}
       DELIVERY_RECIPIENT: build-utils/delivery-424-recipient.pem
       IPA_NAME: NeoStation
-      ARTIFACT_NAME: NeoStation-Build-424-${{ github.sha }}-cold
+      ARTIFACT_NAME: NeoStation-Build-423-${{ github.sha }}-cold
       KARTPAD_CORE_RUN_ID: ${{ inputs.kartpad_core_run_id || '36322395443' }}
       KARTPAD_CORE_HOST_SHA: ${{ inputs.kartpad_core_host_sha || '3934ac9d333247d5374b9fb7d71f8ef49bbcd79e' }}
       KARTPAD_CANDIDATE: '1'
@@ -902,7 +902,6 @@ jobs:
         cp dist/NeoStation.ipa "build/delivery-artifact/NeoStation-Build${BUILD_NUMBER}-${GITHUB_SHA}-${DELIVERY_MODE}.ipa"
         cp build/delivery/*.json build/delivery-artifact/
         cp docs/retroarch-rollback-2026-10-08.md build/delivery-artifact/
-        cp docs/retroarch-build424-relink.md build/delivery-artifact/
         shasum -a 256 build/delivery-artifact/*.ipa > build/delivery-artifact/SHA256SUMS
 
         python3 build-utils/delivery_metrics.py artifact_encryption python3 build-utils/delivery_cipher.py artifact build/delivery-artifact build/encrypted-delivery
@@ -953,10 +952,10 @@ jobs:
     needs:
     - cold
     env:
-      BUILD_NUMBER: ${{ inputs.build_number || '424' }}
+      BUILD_NUMBER: ${{ inputs.build_number || '423' }}
       DELIVERY_RECIPIENT: build-utils/delivery-424-recipient.pem
       IPA_NAME: NeoStation
-      ARTIFACT_NAME: NeoStation-Build-424-${{ github.sha }}-warm
+      ARTIFACT_NAME: NeoStation-Build-423-${{ github.sha }}-warm
       KARTPAD_CORE_RUN_ID: ${{ inputs.kartpad_core_run_id || '36322395443' }}
       KARTPAD_CORE_HOST_SHA: ${{ inputs.kartpad_core_host_sha || '3934ac9d333247d5374b9fb7d71f8ef49bbcd79e' }}
       KARTPAD_CANDIDATE: '1'
@@ -1181,7 +1180,6 @@ jobs:
         cp dist/NeoStation.ipa "build/delivery-artifact/NeoStation-Build${BUILD_NUMBER}-${GITHUB_SHA}-${DELIVERY_MODE}.ipa"
         cp build/delivery/*.json build/delivery-artifact/
         cp docs/retroarch-rollback-2026-10-08.md build/delivery-artifact/
-        cp docs/retroarch-build424-relink.md build/delivery-artifact/
         shasum -a 256 build/delivery-artifact/*.ipa > build/delivery-artifact/SHA256SUMS
 
         python3 build-utils/delivery_metrics.py artifact_encryption python3 build-utils/delivery_cipher.py artifact build/delivery-artifact build/encrypted-delivery
