@@ -187,3 +187,24 @@ named beside each code. Source: https://www.gc-forever.com/forums/viewtopic.php?
 The catalogue is not bundled in NeoStation. Imported entries retain the author
 and source URL; attribution is not an endorsement or a claim to relicense the
 creator's work. The source does not specify a disc revision.
+
+## Embedded Libretro cores — release 0.0.3
+
+NeoStation now embeds 14 libretro cores: Nestopia, Snes9x, Gambatte, mGBA,
+Genesis Plus GX, Genesis Plus GX Wide, PicoDrive, FinalBurn Neo, DeSmuME,
+Mupen64Plus-Next, Beetle PSX, Beetle PSX HW, PPSSPP and Azahar.
+
+Full core credits, original license texts, support-library notices, reference
+revisions and distribution restrictions are in `assets/legal/libretro/`.
+The IPA includes this collection in `Legal/Libretro/` and `Libretro-Licenses/`.
+See the [core license record](https://github.com/TarbleFR/neostation-ios/blob/main/assets/legal/libretro/LIBRETRO_CORES.md)
+and [0.0.3 provenance](https://github.com/TarbleFR/neostation-ios/blob/main/docs/RELEASE_0.0.3_SOURCE_MANIFEST.md).
+
+Snes9x, Genesis Plus GX/Wide, PicoDrive and FinalBurn Neo have non-commercial
+conditions; FBNeo additionally restricts monetary profit and donation solicitation.
+The exact source revisions for the prebuilt core binaries were not attested
+by their buildbot delivery. License-document snapshots are not a substitute
+for complete Corresponding Source and do not establish full license compliance.
+
+RetroArch itself remains an optional external application for routes using it;
+the newly embedded core implementations are credited separately above.

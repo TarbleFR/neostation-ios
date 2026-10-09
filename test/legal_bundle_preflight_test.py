@@ -23,6 +23,7 @@ class LegalBundlePreflightTests(unittest.TestCase):
             "build-utils/armsx2/source.json",
             "build-utils/dusklight/source.json",
             "build-utils/kartpad/source.json",
+            "build-utils/libretro/cores.json",
             "LICENSE.md", "NOTICE.md", "docs/LEGAL_AND_CREDITS.md",
         ):
             target = self.root / name
@@ -70,6 +71,14 @@ class LegalBundlePreflightTests(unittest.TestCase):
         self.assertEqual(identity["dusklight"]["submodules"], pins["submodules"])
         self.assertEqual((app / "Legal/Dusklight-CC0-1.0.txt").read_bytes(),
                          (self.root / "assets/legal/Dusklight-CC0-1.0.txt").read_bytes())
+        self.assertEqual((app / "Legal/Libretro/fbneo-src-license.txt").read_bytes(),
+                         (self.root / "assets/legal/libretro/fbneo-src-license.txt").read_bytes())
+
+    def test_missing_core_license_blocks_packaging(self):
+        (self.root / "assets/legal/libretro/mgba-LICENSE").unlink()
+        result = self.run_packager("--validate-only")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("mgba-LICENSE", result.stderr)
 
 
 if __name__ == "__main__":

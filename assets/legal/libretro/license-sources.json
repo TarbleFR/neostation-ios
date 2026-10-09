@@ -1,0 +1,281 @@
+{
+  "schema": 1,
+  "note": "Upstream license reference snapshots, not attestations of exact buildbot binary source revisions. Original notices and per-file terms remain authoritative.",
+  "components": [
+    {
+      "component": "nestopia",
+      "repository": "https://github.com/libretro/nestopia",
+      "license_reference_revision": "b9fdc9c4e6d374abacd1a678ae46ec7f963ef59a",
+      "binary_source_revision_attested": false,
+      "files": [
+        {
+          "path": "nestopia-COPYING",
+          "upstream_path": "COPYING",
+          "source_url": "https://raw.githubusercontent.com/libretro/nestopia/b9fdc9c4e6d374abacd1a678ae46ec7f963ef59a/COPYING",
+          "sha256": "df84246204e3c54cd24aebbc23714235f5fc41d754d53b65444a2afbf070130f"
+        },
+        {
+          "path": "nestopia-README",
+          "upstream_path": "README",
+          "source_url": "https://raw.githubusercontent.com/libretro/nestopia/b9fdc9c4e6d374abacd1a678ae46ec7f963ef59a/README",
+          "sha256": "dd1b17016ef01b76463c5df0d185233959633e1f9f0dd74856cc124c27ac7319"
+        }
+      ],
+      "cores": [
+        "nestopia"
+      ]
+    },
+    {
+      "component": "snes9x",
+      "repository": "https://github.com/libretro/snes9x",
+      "license_reference_revision": "fae2fea08f74180759ef540ee94259213f503480",
+      "binary_source_revision_attested": false,
+      "files": [
+        {
+          "path": "snes9x-LICENSE",
+          "upstream_path": "LICENSE",
+          "source_url": "https://raw.githubusercontent.com/libretro/snes9x/fae2fea08f74180759ef540ee94259213f503480/LICENSE",
+          "sha256": "70efeee282d82a6e9d26aeed5466d08c632369858371dc6a4644c8dcedc2be78"
+        }
+      ],
+      "cores": [
+        "snes9x"
+      ]
+    },
+    {
+      "component": "gambatte",
+      "repository": "https://github.com/libretro/gambatte-libretro",
+      "license_reference_revision": "d9d6cd06382d1ced30de34d56d3609452323dab1",
+      "binary_source_revision_attested": false,
+      "files": [
+        {
+          "path": "gambatte-COPYING",
+          "upstream_path": "COPYING",
+          "source_url": "https://raw.githubusercontent.com/libretro/gambatte-libretro/d9d6cd06382d1ced30de34d56d3609452323dab1/COPYING",
+          "sha256": "ab15fd526bd8dd18a9e77ebc139656bf4d33e97fc7238cd11bf60e2b9b8666c6"
+        }
+      ],
+      "cores": [
+        "gambatte"
+      ]
+    },
+    {
+      "component": "mgba",
+      "repository": "https://github.com/libretro/mgba",
+      "license_reference_revision": "7a12d6d4b9acb14c0ae62c9166b6a2f3d08007f6",
+      "binary_source_revision_attested": false,
+      "files": [
+        {
+          "path": "mgba-LICENSE",
+          "upstream_path": "LICENSE",
+          "source_url": "https://raw.githubusercontent.com/libretro/mgba/7a12d6d4b9acb14c0ae62c9166b6a2f3d08007f6/LICENSE",
+          "sha256": "fab3dd6bdab226f1c08630b1dd917e11fcb4ec5e1e020e2c16f83a0a13863e85"
+        }
+      ],
+      "cores": [
+        "mgba"
+      ]
+    },
+    {
+      "component": "genesis_plus_gx",
+      "repository": "https://github.com/libretro/Genesis-Plus-GX",
+      "license_reference_revision": "58c341487e5bfcf979ea68413c7987633adb0c56",
+      "binary_source_revision_attested": false,
+      "files": [
+        {
+          "path": "genesis_plus_gx-LICENSE.txt",
+          "upstream_path": "LICENSE.txt",
+          "source_url": "https://raw.githubusercontent.com/libretro/Genesis-Plus-GX/58c341487e5bfcf979ea68413c7987633adb0c56/LICENSE.txt",
+          "sha256": "642c163624269243d1f6b29d759d4e3a2d161bdc272c90d82ecbeec82ae26755"
+        }
+      ],
+      "cores": [
+        "genesis_plus_gx"
+      ]
+    },
+    {
+      "component": "genesis_plus_gx_wide",
+      "repository": "https://github.com/libretro/Genesis-Plus-GX-Wide",
+      "license_reference_revision": "b7ad005431f5f0b55e559f6d598d1ed2479bf13b",
+      "binary_source_revision_attested": false,
+      "files": [
+        {
+          "path": "genesis_plus_gx_wide-LICENSE.txt",
+          "upstream_path": "LICENSE.txt",
+          "source_url": "https://raw.githubusercontent.com/libretro/Genesis-Plus-GX-Wide/b7ad005431f5f0b55e559f6d598d1ed2479bf13b/LICENSE.txt",
+          "sha256": "c38ff8ea57f501f63a8e4a9e22a67be12eb006345ce2059f0419b69d8f7734cd"
+        }
+      ],
+      "cores": [
+        "genesis_plus_gx_wide"
+      ]
+    },
+    {
+      "component": "picodrive",
+      "repository": "https://github.com/libretro/picodrive",
+      "license_reference_revision": "1890c2932234c9d30f4cd3851d02228baae8f09e",
+      "binary_source_revision_attested": false,
+      "files": [
+        {
+          "path": "picodrive-COPYING",
+          "upstream_path": "COPYING",
+          "source_url": "https://raw.githubusercontent.com/libretro/picodrive/1890c2932234c9d30f4cd3851d02228baae8f09e/COPYING",
+          "sha256": "a36c54a119673c1b40233f55ff23c39042f35c3e798ce78aafba5d6bd9c19de4"
+        },
+        {
+          "path": "picodrive-AUTHORS",
+          "upstream_path": "AUTHORS",
+          "source_url": "https://raw.githubusercontent.com/libretro/picodrive/1890c2932234c9d30f4cd3851d02228baae8f09e/AUTHORS",
+          "sha256": "b690fa916f84f31585b71b71b46ea7b05e6e78fac32f80195ec3ccf1e25a782b"
+        }
+      ],
+      "cores": [
+        "picodrive"
+      ]
+    },
+    {
+      "component": "fbneo",
+      "repository": "https://github.com/libretro/FBNeo",
+      "license_reference_revision": "95153da1f113c56735bd9a818171f908df628421",
+      "binary_source_revision_attested": false,
+      "files": [
+        {
+          "path": "fbneo-LICENSE.md",
+          "upstream_path": "LICENSE.md",
+          "source_url": "https://raw.githubusercontent.com/libretro/FBNeo/95153da1f113c56735bd9a818171f908df628421/LICENSE.md",
+          "sha256": "70411cebf1c000ba6fe9e27a62e96691c8b6cc84665dffe6d85edb4a5a07a917"
+        },
+        {
+          "path": "fbneo-src-license.txt",
+          "upstream_path": "src/license.txt",
+          "source_url": "https://raw.githubusercontent.com/libretro/FBNeo/95153da1f113c56735bd9a818171f908df628421/src/license.txt",
+          "sha256": "bb2369f1b75f42242968a78191b47ee90f85682224d3ad1ef63044e244b3e202"
+        }
+      ],
+      "cores": [
+        "fbneo"
+      ]
+    },
+    {
+      "component": "desmume",
+      "repository": "https://github.com/libretro/desmume",
+      "license_reference_revision": "95b4d798731caa809125b6c3c11d17cc332ff6ef",
+      "binary_source_revision_attested": false,
+      "files": [
+        {
+          "path": "desmume-license.txt",
+          "upstream_path": "license.txt",
+          "source_url": "https://raw.githubusercontent.com/libretro/desmume/95b4d798731caa809125b6c3c11d17cc332ff6ef/license.txt",
+          "sha256": "9f2e250993c6206fac643824e05e5a0d7d3e0895d9e09a5ce4b12bc2610afc11"
+        }
+      ],
+      "cores": [
+        "desmume"
+      ]
+    },
+    {
+      "component": "mupen64plus_next",
+      "repository": "https://github.com/libretro/mupen64plus-libretro-nx",
+      "license_reference_revision": "12edd2c74a517ff86dfa8cfc71ad75e4c10486d5",
+      "binary_source_revision_attested": false,
+      "files": [
+        {
+          "path": "mupen64plus_next-LICENSE",
+          "upstream_path": "LICENSE",
+          "source_url": "https://raw.githubusercontent.com/libretro/mupen64plus-libretro-nx/12edd2c74a517ff86dfa8cfc71ad75e4c10486d5/LICENSE",
+          "sha256": "8177f97513213526df2cf6184d8ff986c675afb514d4e68a404010521b880643"
+        }
+      ],
+      "cores": [
+        "mupen64plus_next"
+      ]
+    },
+    {
+      "component": "beetle_psx",
+      "repository": "https://github.com/libretro/beetle-psx-libretro",
+      "license_reference_revision": "10e4b0c6ceae20daa65ddf436a4445dddd0982d2",
+      "binary_source_revision_attested": false,
+      "files": [
+        {
+          "path": "beetle_psx-COPYING",
+          "upstream_path": "COPYING",
+          "source_url": "https://raw.githubusercontent.com/libretro/beetle-psx-libretro/10e4b0c6ceae20daa65ddf436a4445dddd0982d2/COPYING",
+          "sha256": "a6996dcf0c334281f734560926e079b2dbbd5b78e81c0ca00a413ec01e1cd2fb"
+        }
+      ],
+      "cores": [
+        "mednafen_psx",
+        "mednafen_psx_hw"
+      ]
+    },
+    {
+      "component": "ppsspp",
+      "repository": "https://github.com/hrydgard/ppsspp",
+      "license_reference_revision": "761cf347e6177770e441eb3ab901033116de6a9b",
+      "binary_source_revision_attested": false,
+      "files": [
+        {
+          "path": "ppsspp-LICENSE.TXT",
+          "upstream_path": "LICENSE.TXT",
+          "source_url": "https://raw.githubusercontent.com/hrydgard/ppsspp/761cf347e6177770e441eb3ab901033116de6a9b/LICENSE.TXT",
+          "sha256": "ff265754cbb2e0d3b674f90a79ef5bbaa1f7f1075aec9f5e241524520e5049fa"
+        }
+      ],
+      "cores": [
+        "ppsspp"
+      ]
+    },
+    {
+      "component": "azahar",
+      "repository": "https://github.com/azahar-emu/azahar",
+      "license_reference_revision": "a5c3d4f8eb34493f37479158128de134c3e700a9",
+      "binary_source_revision_attested": false,
+      "files": [
+        {
+          "path": "azahar-LICENSE.txt",
+          "upstream_path": "LICENSE.txt",
+          "source_url": "https://raw.githubusercontent.com/azahar-emu/azahar/a5c3d4f8eb34493f37479158128de134c3e700a9/LICENSE.txt",
+          "sha256": "52b66866c785f554207a4685d3d6f5f067938050f61c4cdc0a05b4bf20c6e037"
+        }
+      ],
+      "cores": [
+        "azahar"
+      ]
+    },
+    {
+      "component": "MoltenVK",
+      "repository": "https://github.com/KhronosGroup/MoltenVK",
+      "license_reference_revision": "67b2682699d7903606b97a0392061d85d27d49e6",
+      "binary_source_revision_attested": false,
+      "files": [
+        {
+          "path": "MoltenVK-LICENSE",
+          "upstream_path": "LICENSE",
+          "source_url": "https://raw.githubusercontent.com/KhronosGroup/MoltenVK/67b2682699d7903606b97a0392061d85d27d49e6/LICENSE",
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+        },
+        {
+          "path": "MoltenVK-README.md",
+          "upstream_path": "README.md",
+          "source_url": "https://raw.githubusercontent.com/KhronosGroup/MoltenVK/67b2682699d7903606b97a0392061d85d27d49e6/README.md",
+          "sha256": "3db0e3134f03acddcf780caa5ba68767bf4a062e39976e753c45d27f2b3f3cc4"
+        }
+      ],
+      "cores": []
+    }
+  ],
+  "support_files": [
+    {
+      "path": "rcheevos-LICENSE.txt",
+      "sha256": "bf820c034966a3b6be050bb85f94ec841a0b972bd5d477e362337d0574b5c219"
+    },
+    {
+      "path": "Vulkan-Headers-LICENSE.md",
+      "sha256": "ac24e5ea920e4318e4d02c4086ae51f53cfb03feed06c18df1019e7ada1ec7bc"
+    },
+    {
+      "path": "libretro-api-MIT.txt",
+      "sha256": "eec543ed830432633ebea21686a8a0729bc6edb0f82e1a6d370fadef382b1b15"
+    }
+  ]
+}

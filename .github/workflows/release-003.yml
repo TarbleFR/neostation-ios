@@ -1,0 +1,47 @@
+name: Package NeoStation 0.0.3 from verified Build 427
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  package:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Validate license coverage and download the original draft assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$(gh release view 0.0.3 --json isDraft --jq .isDraft)" = true
+          python3 -m unittest discover -s test -p legal_bundle_preflight_test.py -v
+          gh release download 0.0.3 --pattern NeoStation-Build427-original.ipa --dir release-input
+          gh release download 0.0.3 --pattern NeoPlay-Setup-0.8.0.exe --dir release-input
+          echo 'acb17ed250b7149d9b38ee91d2eaf70c33d81fc82b006cf78b3ce497a2ea4ab9  release-input/NeoStation-Build427-original.ipa' | shasum -a 256 -c -
+          echo '4f611f9103cacbe8f3625b8f9e08814bc74425a992735b02d4936b062ca22960  release-input/NeoPlay-Setup-0.8.0.exe' | shasum -a 256 -c -
+      - name: Repackage metadata and notices; verify unchanged executable payloads
+        run: |
+          set -euo pipefail
+          python3 build-utils/package_release003.py release-input/NeoStation-Build427-original.ipa --output release-output
+          cp release-input/NeoPlay-Setup-0.8.0.exe release-output/
+          cd release-output
+          shasum -a 256 *.ipa *.exe *.zip *.tar.gz *.md *.json > NeoStation-0.0.3-SHA256SUMS.txt
+      - name: Upload verified files to the draft only
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$(gh release view 0.0.3 --json isDraft --jq .isDraft)" = true
+          gh release upload 0.0.3 release-output/*.ipa release-output/*.zip release-output/*.tar.gz release-output/*.md release-output/*.json release-output/*.txt
+          gh release edit 0.0.3 --target "$GITHUB_SHA" --title 'NeoStation iOS 0.0.3' --notes-file docs/RELEASE_0.0.3.md
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NeoStation-0.0.3-release-evidence
+          path: |
+            release-output/release-validation.json
+            release-output/signature.json
+            release-output/NeoStation-0.0.3-SHA256SUMS.txt
+          if-no-files-found: error

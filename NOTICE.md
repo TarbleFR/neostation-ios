@@ -244,7 +244,7 @@ redistributing MeloNX itself.
 
 ---
 
-RETROARCH / LIBRETRO — EXTERNAL EMULATOR INTEGRATION
+RETROARCH / LIBRETRO — EMBEDDED CORES AND OPTIONAL EXTERNAL INTEGRATION
 
 RetroArch:
 https://github.com/libretro/RetroArch
@@ -252,6 +252,11 @@ https://github.com/libretro/RetroArch
 NeoStation can link/synchronize a RetroArch library and use supported direct
 launch flows. RetroArch remains a separately maintained project with its own
 licenses, cores and third-party notices.
+
+Release 0.0.3 embeds 14 libretro cores in NeoStation. Their authors, complete
+license reference texts, non-commercial restrictions and source-provenance
+limitations are recorded in assets/legal/libretro/LIBRETRO_CORES.md. The host
+license does not relicense these components.
 
 ---
 

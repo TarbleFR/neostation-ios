@@ -7,6 +7,7 @@ This affects future builds only. It never rewrites an existing IPA asset.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import shutil
@@ -50,6 +51,26 @@ def copy_file(source: Path, destination: Path) -> None:
     shutil.copy2(source, destination)
 
 
+def validate_libretro_notices() -> None:
+    directory = LEGAL_ASSETS / "libretro"
+    manifest = load_json(directory / "license-sources.json")
+    expected = {c["id"] for c in load_json(ROOT / "build-utils/libretro/cores.json")["cores"]}
+    covered = {core for c in manifest["components"] for core in c["cores"]}
+    if covered != expected:
+        raise SystemExit(f"Libretro notice coverage mismatch: {covered ^ expected}")
+    files = list(manifest["support_files"])
+    for component in manifest["components"]:
+        if not component["files"]:
+            raise SystemExit(f"Missing license text: {component['component']}")
+        files.extend(component["files"])
+    for entry in files:
+        path = directory / entry["path"]
+        if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != entry["sha256"]:
+            raise SystemExit(f"Missing or changed Libretro notice: {entry['path']}")
+    if not (directory / "LIBRETRO_CORES.md").is_file():
+        raise SystemExit("Missing Libretro attribution record")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--app", type=Path)
@@ -69,6 +90,8 @@ def main() -> None:
     for name in REQUIRED_LEGAL_FILES:
         if not (LEGAL_ASSETS / name).is_file():
             raise SystemExit(f"Missing legal bundle file: assets/legal/{name}")
+
+    validate_libretro_notices()
 
     rpcs3 = load_json(ROOT / "build-utils/rpcs3/canonical-source.json")
     armsx2 = load_json(ROOT / "build-utils/armsx2/source.json")
@@ -117,6 +140,8 @@ def main() -> None:
 
     for name in REQUIRED_LEGAL_FILES:
         copy_file(LEGAL_ASSETS / name, destination / name)
+
+    shutil.copytree(LEGAL_ASSETS / "libretro", destination / "Libretro")
 
     dusklight_licenses = ROOT / "dist/dusklight/licenses"
     if dusklight_licenses.is_dir():

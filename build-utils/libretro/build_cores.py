@@ -242,9 +242,10 @@ def write_notices(output, cores, molten, assets):
         '- rcheevos (MIT) - https://github.com/RetroAchievements/rcheevos',
         '- libretro.h, libretro_vulkan.h (MIT) - https://github.com/libretro/RetroArch',
         '',
-        'Licence review is pending, as recorded in docs/retroarch-integre-architecture.md.',
+        'Full license reference texts and source-provenance limitations: Legal/Libretro/LIBRETRO_CORES.md.',
     ]
     (notices / 'LIBRETRO_CORES.txt').write_text('\n'.join(lines) + '\n')
+    shutil.copytree(ROOT / 'assets/legal/libretro', notices, dirs_exist_ok=True)
     shutil.copy2(ROOT / 'packages/libretro_internal_bridge/ios/ThirdParty/rcheevos/LICENSE', notices / 'rcheevos-LICENSE.txt')
     shutil.copy2(ROOT / 'packages/libretro_internal_bridge/ios/ThirdParty/include/vulkan/LICENSE.md',
                  notices / 'Vulkan-Headers-LICENSE.md')

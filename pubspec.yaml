@@ -19,7 +19,7 @@ workspace:
   - packages/neoplay_bridge
   - packages/libretro_internal_bridge
 
-version: 0.0.2+399
+version: 0.0.3+427
 environment:
   sdk: '>=3.9.2'
 
