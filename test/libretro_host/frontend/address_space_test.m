@@ -11,12 +11,17 @@
 // input. The live report runs on this process.
 //
 // The reservation runs on this process too: the span is reserved once at an
-// aligned base of the window and blocks other mappings; before a boot only
-// the three view ranges are freed (PPSSPP can map its views there, the
-// span's other pieces stay held); after PPSSPP unmapped them they are held
-// again at the same base; a view range taken meanwhile is left untouched,
-// only the pieces the reservation holds are released, and a new span is
-// reserved; the journal report follows each state.
+// aligned base of the window and blocks other mappings; before a boot the
+// three view ranges and the arena slot are freed (a 32 MiB game's arena
+// fits the slot, PPSSPP can map its views at the base, the guards stay
+// held); once PPSSPP's memory is set up the rest of the slot is held again
+// (the view ranges wait for the unload when PPSSPP took another base);
+// after PPSSPP unmapped everything the span is held whole again at the
+// same base; a
+// view range taken meanwhile is left untouched, only the pieces the
+// reservation holds are released, and a new span is reserved; the journal
+// report follows each state. PPSSPP's base is read from its system RAM
+// pointer.
 #import <Foundation/Foundation.h>
 
 #import "LibretroAddressSpace.h"
@@ -165,11 +170,16 @@ static const LibretroAddressRange kTestViews[] = {
     {0x04000000ull, 0x04800000ull},
     {0x08000000ull, 0x0C000000ull},
 };
-static const LibretroAddressRange kTestGaps[] = {
+/// The arena slot and the guards that stay held around it and the views.
+static const LibretroAddressRange kTestSlot = {0x00018000ull, 0x03FFC000ull};
+static const LibretroAddressRange kTestGuards[] = {
     {0x00000000ull, 0x00010000ull},
-    {0x00014000ull, 0x04000000ull},
+    {0x00014000ull, 0x00018000ull},
+    {0x03FFC000ull, 0x04000000ull},
     {0x04800000ull, 0x08000000ull},
 };
+/// PPSSPP's arena for the 32 MiB of commercial games.
+static const uint64_t kArena32 = 0x2804000ull;
 
 /// Whether an exact mapping of [start, end) can be made now (made, then
 /// removed): what PPSSPP's vm_remap at a fixed address needs.
@@ -207,17 +217,62 @@ static BOOL ViewsHeld(uint64_t base) {
   return YES;
 }
 
-static BOOL GapsHeld(uint64_t base) {
-  for (size_t gap = 0; gap < 3; gap++) {
-    if (!FullyMapped(base + kTestGaps[gap].start, base + kTestGaps[gap].end)) return NO;
+static BOOL GuardsHeld(uint64_t base) {
+  for (size_t guard = 0; guard < 4; guard++) {
+    if (!FullyMapped(base + kTestGuards[guard].start, base + kTestGuards[guard].end)) return NO;
   }
   return YES;
+}
+
+static BOOL SlotHeld(uint64_t base) {
+  return FullyMapped(base + kTestSlot.start, base + kTestSlot.end) &&
+         !CanMapExactly(base + kTestSlot.start, base + kTestSlot.start + 0x4000);
+}
+
+/// What PPSSPP does at `base`: its arena where the kernel's first fit puts
+/// it (the slot's start once the slot is the lowest hole that fits), then
+/// its views. Returns the arena.
+static vm_address_t BootLikePPSSPP(uint64_t base, uint64_t arenaAddress) {
+  vm_address_t arena = (vm_address_t)arenaAddress;
+  if (vm_allocate(mach_task_self(), &arena, (vm_size_t)kArena32, VM_FLAGS_FIXED) != KERN_SUCCESS) return 0;
+  ((volatile uint8_t *)arena)[0x100] = 0xA5;
+  for (size_t view = 0; view < 3; view++) {
+    vm_address_t address = (vm_address_t)(base + kTestViews[view].start);
+    vm_allocate(mach_task_self(), &address, (vm_size_t)(kTestViews[view].end - kTestViews[view].start),
+                VM_FLAGS_FIXED);
+  }
+  return arena;
+}
+
+static void ShutDownLikePPSSPP(uint64_t base, vm_address_t arena) {
+  for (size_t view = 0; view < 3; view++) {
+    vm_deallocate(mach_task_self(), (vm_address_t)(base + kTestViews[view].start),
+                  (vm_size_t)(kTestViews[view].end - kTestViews[view].start));
+  }
+  if (arena != 0) vm_deallocate(mach_task_self(), arena, (vm_size_t)kArena32);
+}
+
+static void TestSystemRAMBase(void) {
+  CHECK(LibretroPPSSPPBaseFromSystemRAM(NULL) == 0, @"no RAM pointer, no base");
+  CHECK(LibretroPPSSPPBaseFromSystemRAM((const void *)0x08000000ull) == 0,
+        @"a null base (memory not set up yet) gives no base");
+  CHECK(LibretroPPSSPPBaseFromSystemRAM((const void *)0x17C000000ull) == 0x174000000ull,
+        @"the PSP RAM is at base + 0x08000000");
+}
+
+static void TestViewsMapped(uint64_t base) {
+  CHECK(LibretroPPSSPPViewsMappedAt(base, 32 * kMiB) && LibretroPPSSPPViewsMappedAt(base, 64 * kMiB),
+        @"views mapped at the held span (32 and 64 MiB of RAM)");
+  CHECK(!LibretroPPSSPPViewsMappedAt(base, 0) && !LibretroPPSSPPViewsMappedAt(0, 32 * kMiB),
+        @"no RAM size or no base: not mapped");
 }
 
 static void TestReservation(void) {
   CHECK(LibretroPPSSPPReservedBase() == 0, @"nothing is reserved before the first call");
   CHECK([LibretroPPSSPPReservationReport() hasPrefix:@"[HOST] PPSSPP window not held (not attempted yet)"],
         @"the report says so: %@", LibretroPPSSPPReservationReport());
+  LibretroPPSSPPMemorySettled(0x150000000ull);
+  CHECK(LibretroPPSSPPReservedBase() == 0, @"a memory base without a reservation changes nothing");
   LibretroPPSSPPRestoreReservation();
   uint64_t first = LibretroPPSSPPReservedBase();
   CHECK(first != 0, @"restore with nothing held reserves a span (retry after a PSP session)");
@@ -239,34 +294,52 @@ static void TestReservation(void) {
   if (object != MACH_PORT_NULL) mach_port_deallocate(mach_task_self(), object);
   CHECK(region == KERN_SUCCESS && probe == base && info.protection == VM_PROT_NONE,
         @"without access: address space only, no memory");
-  NSString *heldPrefix = [NSString stringWithFormat:@"[HOST] PPSSPP window held at 0x%llx", base];
+  TestViewsMapped(base);
+  NSString *heldPrefix = [NSString stringWithFormat:@"[HOST] PPSSPP window held at 0x%llx, arena slot held", base];
   CHECK([LibretroPPSSPPReservationReport() hasPrefix:heldPrefix], @"held report: %@", LibretroPPSSPPReservationReport());
 
-  // Boot: views free at the base, the rest of the span still held.
+  // Boot: views and slot free, guards held.
   CHECK(LibretroPPSSPPReleaseViewsForBoot() == base, @"the views are released at the reserved base");
   CHECK(ViewsFree(base), @"PPSSPP can map its three views at that base");
-  CHECK(GapsHeld(base), @"the span's other pieces stay held during the boot");
-  CHECK([LibretroPPSSPPReservationReport() containsString:@"view ranges released for this boot"],
+  CHECK(CanMapExactly(base + kTestSlot.start, base + kTestSlot.end), @"the arena slot is free");
+  CHECK(kTestSlot.end - kTestSlot.start >= kArena32 && kTestSlot.end - kTestSlot.start < 0x4804000ull,
+        @"the slot takes a 32 MiB game's arena, not a 64 MiB game's");
+  CHECK(GuardsHeld(base), @"the guards around the views and the slot stay held during the boot");
+  CHECK([LibretroPPSSPPReservationReport() containsString:@"view ranges and arena slot released for this boot"],
         @"boot report: %@", LibretroPPSSPPReservationReport());
   CHECK(LibretroPPSSPPReleaseViewsForBoot() == base, @"a second release changes nothing");
-  // What PPSSPP does: its views at the base, removed in retro_unload_game.
-  for (size_t view = 0; view < 3; view++) {
-    vm_address_t address = (vm_address_t)(base + kTestViews[view].start);
-    vm_allocate(mach_task_self(), &address, (vm_size_t)(kTestViews[view].end - kTestViews[view].start),
-                VM_FLAGS_FIXED);
-  }
-  for (size_t view = 0; view < 3; view++) {
-    vm_deallocate(mach_task_self(), (vm_address_t)(base + kTestViews[view].start),
-                  (vm_size_t)(kTestViews[view].end - kTestViews[view].start));
-  }
+  CHECK(!LibretroPPSSPPViewsMappedAt(base, 32 * kMiB), @"released views are not mapped");
+  vm_address_t arena = BootLikePPSSPP(base, base + kTestSlot.start);
+  CHECK(arena == base + kTestSlot.start, @"PPSSPP's arena at the slot's start and its views at the base");
+  CHECK(LibretroPPSSPPViewsMappedAt(base, 32 * kMiB), @"PPSSPP's views are seen mapped at the base");
+  LibretroPPSSPPMemorySettled(base);
+  CHECK(FullyMapped(base + kTestSlot.start, base + kTestSlot.end) &&
+            !CanMapExactly(base + kTestSlot.start + kArena32, base + kTestSlot.start + kArena32 + 0x4000),
+        @"once PPSSPP's memory is set up the rest of the slot is held again");
+  CHECK(arena == 0 || ((volatile uint8_t *)arena)[0x100] == 0xA5, @"the arena kept its memory");
+  CHECK([LibretroPPSSPPReservationReport() containsString:@"at the reserved base"] &&
+            [LibretroPPSSPPReservationReport() containsString:@"of the 0x3fe4000-byte arena slot held"],
+        @"running report: %@", LibretroPPSSPPReservationReport());
+  ShutDownLikePPSSPP(base, arena);
   LibretroPPSSPPRestoreReservation();
-  CHECK(LibretroPPSSPPReservedBase() == base && ViewsHeld(base) && GapsHeld(base),
-        @"after the session the views are held again at the same base");
-  CHECK([LibretroPPSSPPReservationReport() containsString:@"reserved again"], @"restore report: %@",
+  CHECK(LibretroPPSSPPReservedBase() == base && ViewsHeld(base) && GuardsHeld(base) && SlotHeld(base),
+        @"after the session the views and the whole slot are held again at the same base");
+  CHECK([LibretroPPSSPPReservationReport() hasPrefix:heldPrefix] &&
+            [LibretroPPSSPPReservationReport() containsString:@"reserved again"],
+        @"restore report: %@", LibretroPPSSPPReservationReport());
+
+  // PPSSPP takes another base (room lower in the window): the slot is held
+  // again at once, the views after the session.
+  CHECK(LibretroPPSSPPReleaseViewsForBoot() == base, @"second boot");
+  LibretroPPSSPPMemorySettled(base - 0x10000000ull);
+  CHECK(SlotHeld(base) && ViewsFree(base), @"another base: the slot is held during the session, not the views");
+  CHECK([LibretroPPSSPPReservationReport() containsString:@"another base"], @"report: %@",
         LibretroPPSSPPReservationReport());
+  LibretroPPSSPPRestoreReservation();
+  CHECK(LibretroPPSSPPReservedBase() == base && ViewsHeld(base) && SlotHeld(base), @"both after it");
 
   // A view range taken meanwhile (another allocation) is never touched.
-  CHECK(LibretroPPSSPPReleaseViewsForBoot() == base, @"second boot");
+  CHECK(LibretroPPSSPPReleaseViewsForBoot() == base, @"third boot");
   vm_address_t foreign = (vm_address_t)(base + 0x4000000ull);
   kern_return_t taken = vm_allocate(mach_task_self(), &foreign, 0x800000, VM_FLAGS_FIXED);
   CHECK(taken == KERN_SUCCESS, @"another allocation takes the VRAM view range");
@@ -274,18 +347,22 @@ static void TestReservation(void) {
   LibretroPPSSPPRestoreReservation();
   uint64_t moved = LibretroPPSSPPReservedBase();
   CHECK(moved != 0 && moved != base, @"a new span is reserved elsewhere: 0x%llx", moved);
-  CHECK(moved == 0 || (FullyMapped(moved, moved + LibretroPPSSPPSpan) && ViewsHeld(moved)),
+  CHECK(moved == 0 || (FullyMapped(moved, moved + LibretroPPSSPPSpan) && ViewsHeld(moved) && SlotHeld(moved)),
         @"the new span is held whole");
   CHECK(taken != KERN_SUCCESS || ((volatile uint8_t *)foreign)[0x1234] == 0x5A,
         @"the other allocation kept its memory");
   BOOL oldPiecesFree = YES;
-  for (size_t gap = 0; gap < 3; gap++) {
-    uint64_t start = base + kTestGaps[gap].start;
-    uint64_t end = base + kTestGaps[gap].end;
+  for (size_t guard = 0; guard < 4; guard++) {
+    uint64_t start = base + kTestGuards[guard].start;
+    uint64_t end = base + kTestGuards[guard].end;
     if (moved != 0 && start < moved + LibretroPPSSPPSpan && moved < end) continue;
     if (!CanMapExactly(start, end)) oldPiecesFree = NO;
   }
-  CHECK(oldPiecesFree, @"the old span's pieces are released");
+  if (!(moved != 0 && base + kTestSlot.start < moved + LibretroPPSSPPSpan && moved < base + kTestSlot.end) &&
+      !CanMapExactly(base + kTestSlot.start, base + kTestSlot.end)) {
+    oldPiecesFree = NO;
+  }
+  CHECK(oldPiecesFree, @"the old span's guards and slot are released");
   CHECK([LibretroPPSSPPReservationReport() containsString:@"was taken"], @"moved report: %@",
         LibretroPPSSPPReservationReport());
   if (taken == KERN_SUCCESS) vm_deallocate(mach_task_self(), foreign, 0x800000);
@@ -299,6 +376,7 @@ int main(int argc, const char *argv[]) {
     TestSingleBase();
     TestUnsortedOverlappingInput();
     TestLiveReport();
+    TestSystemRAMBase();
     TestReservation();
   }
   printf("%s: %d failure(s)\n", failures == 0 ? "address_space_test passed" : "address_space_test FAILED", failures);

@@ -99,8 +99,12 @@ static void LibretroRestoreAppOrientations(UIViewController *presenter) {
   NSUInteger _startupFrames;
   double _startupSeconds;
   LibretroSessionJournal *_journal;
-  /// PPSSPP's view ranges released for this boot (emulation thread).
+  /// PPSSPP's view ranges released for this boot, its memory set up
+  /// (emulation thread).
   BOOL _ppssppViewsReleased;
+  BOOL _ppssppMemorySettled;
+  /// Base PPSSPP reported on the previous frame.
+  uint64_t _ppssppCandidateBase;
   BOOL _menuPaused;
   BOOL _backgroundPaused;
   _Atomic bool _fastForward;
@@ -436,6 +440,28 @@ static void LibretroRestoreAppOrientations(UIViewController *presenter) {
   });
 }
 
+/// Emulation thread, after each frame until PPSSPP's memory is set up (its
+/// boot runs on a thread of its own): holds the rest of the reserved window
+/// again and records the base PPSSPP took.
+- (void)notePPSSPPMemory {
+  size_t size = 0;
+  void *ram = [_host memoryDataForIdentifier:RETRO_MEMORY_SYSTEM_RAM size:&size];
+  uint64_t base = LibretroPPSSPPBaseFromSystemRAM(ram);
+  // PPSSPP sets its base to each candidate while it probes: the same base
+  // on two frames, with every view mapped there, is the one it kept.
+  uint64_t previous = _ppssppCandidateBase;
+  _ppssppCandidateBase = base;
+  if (base == 0 || base != previous || !LibretroPPSSPPViewsMappedAt(base, size)) return;
+  _ppssppMemorySettled = YES;
+  LibretroPPSSPPMemorySettled(base);
+  NSString *line = [NSString stringWithFormat:@"[HOST] PPSSPP memory base 0x%llx, %zu MiB of PSP RAM", base,
+                                              size >> 20];
+  NSString *report = LibretroPPSSPPReservationReport();
+  [_host appendLog:line];
+  [_host appendLog:report];
+  [_journal note:[NSString stringWithFormat:@"run: %@; %@", line, report]];
+}
+
 /// Emulation thread, after a frame of the startup period.
 - (void)countStartupFrame:(uint64_t *)lastFrame {
   static mach_timebase_info_data_t timebase;
@@ -566,11 +592,13 @@ static void LibretroRestoreAppOrientations(UIViewController *presenter) {
   if ([_host.libraryName isEqualToString:@"PPSSPP"]) {
     // PPSSPP maps the PSP memory at fixed addresses between 4 and 6 GiB
     // while it boots. The plugin reserved a free span there after launch
-    // (reserved now when that failed); its view ranges are released for
-    // this boot only, then reserved again once the core is unloaded.
+    // (reserved now when that failed); its view ranges and arena slot are
+    // released for this boot only, then reserved again.
     LibretroPPSSPPReserveWindow();
     LibretroPPSSPPReleaseViewsForBoot();
     _ppssppViewsReleased = YES;
+    _ppssppMemorySettled = NO;
+    _ppssppCandidateBase = 0;
     for (NSString *report in @[ LibretroPPSSPPReservationReport(), LibretroPPSSPPAddressSpaceReport() ]) {
       [_host appendLog:report];
       [_journal note:report];
@@ -674,6 +702,7 @@ static void LibretroRestoreAppOrientations(UIViewController *presenter) {
         continue;
       }
       [self runOneFrame];
+      if (_ppssppViewsReleased && !_ppssppMemorySettled) [self notePPSSPPMemory];
       if (!_startupConfirmed) [self countStartupFrame:&lastStartupFrame];
       double fps = _host.avInfo.timing.fps > 1.0 ? _host.avInfo.timing.fps : 60.0;
       bool fast = atomic_load(&_fastForward);
@@ -784,8 +813,9 @@ static void LibretroRestoreAppOrientations(UIViewController *presenter) {
       }];
   host.teardownObserver = nil;
   if (_ppssppViewsReleased) {
-    // PPSSPP unmapped its views in retro_unload_game.
+    // PPSSPP unmapped its views and freed its arena in retro_unload_game.
     _ppssppViewsReleased = NO;
+    _ppssppMemorySettled = NO;
     LibretroPPSSPPRestoreReservation();
     [journal note:[NSString stringWithFormat:@"teardown: %@", LibretroPPSSPPReservationReport()]];
   }

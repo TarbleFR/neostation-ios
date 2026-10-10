@@ -24,9 +24,11 @@ It boots a simulator, runs the scenarios (launch like the plugin, run,
 teardown order and that the game view is gone. Evidence (results, progress
 log, journals, simulator log, crash reports) goes to --evidence.
 
-`ppsspp-crowded` leaves no base of PPSSPP's memory window free except
-what the bridge reserved after launch (see probe.m), the iPhone's state when
-PSP games failed with "Memory init failed".
+`ppsspp-crowded` and `ppsspp-crowded-prx` leave no base of PPSSPP's memory
+window free except what the bridge reserved after launch (see probe.m), the
+iPhone's state when PSP games failed with "Memory init failed", and only
+holes smaller than 8 MiB below it: PPSSPP's arena must go to the reserved
+arena slot (32 MiB of RAM) or above the window (64 MiB).
 
 With --sources (another bridge tree, e.g. the commit before a fix) and
 --expect unfixed, it records whether that tree's process dies while a
@@ -88,6 +90,11 @@ INPUTS = {
         'https://github.com/mtheall/ftpd/releases/download/v3.2.1/ftpd.3dsx', None, 1408252, None),
 }
 
+# Journal lines of a PSP boot in a crowded window: the reserved span's view
+# ranges and arena slot released, PPSSPP's memory at that base, the span
+# held again after the session.
+CROWDED_LOG = ['view ranges and arena slot released for this boot', "PPSSPP's memory at the reserved base",
+               'teardown: [HOST] PPSSPP window held at']
 # Scenarios run in this order; a process that dies stops the rest.
 SCENARIOS = [
     {'name': 'neotest-1', 'core': 'neotest', 'content': 'content/Test Game.ntc', 'console': 'gb', 'expect': 'run'},
@@ -97,9 +104,14 @@ SCENARIOS = [
     {'name': 'ppsspp-prx', 'core': 'ppsspp', 'content': 'content/simple.prx', 'console': 'psp', 'expect': 'run'},
     {'name': 'ppsspp-iso-1', 'core': 'ppsspp', 'content': 'content/probe.iso', 'console': 'psp', 'expect': 'run'},
     {'name': 'ppsspp-iso-2', 'core': 'ppsspp', 'content': 'content/probe.iso', 'console': 'psp', 'expect': 'run'},
+    # A crowded window (see probe.m): the ISO boots with 32 MiB of RAM (a
+    # 40 MiB arena, which must go to the arena slot), the PRX with 64 MiB
+    # (PSP-2000 model; a 72 MiB arena, which fits neither slot nor RAM range).
     {'name': 'ppsspp-crowded', 'core': 'ppsspp', 'content': 'content/probe.iso', 'console': 'psp', 'expect': 'run',
-     'crowdWindow': True, 'requiredLog': ['[HOST] PPSSPP window held at', 'view ranges released for this boot',
-                                          'teardown: [HOST] PPSSPP window held at']},
+     'crowdWindow': True, 'requiredLog': CROWDED_LOG + ['PPSSPP memory base 0x', ', 32 MiB of PSP RAM']},
+    {'name': 'ppsspp-crowded-prx', 'core': 'ppsspp', 'content': 'content/simple.prx', 'console': 'psp',
+     'expect': 'run', 'crowdWindow': True,
+     'requiredLog': CROWDED_LOG + ['PPSSPP memory base 0x', ', 64 MiB of PSP RAM']},
     {'name': 'neovk-1', 'core': 'neovk', 'content': 'content/Test Game.ntc', 'console': 'gb', 'expect': 'run',
      'requiredLog': ['neovk create_device: device created by the core',
                      "neovk unload_game: resources destroyed through the frontend's device"]},

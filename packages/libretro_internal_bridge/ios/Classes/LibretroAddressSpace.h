@@ -58,6 +58,14 @@ NSData *LibretroMappedRanges(uint64_t start, uint64_t end);
 /// not the kernel's allocation policy boundaries.
 NSString *LibretroPPSSPPAddressSpaceReport(void);
 
+/// PPSSPP's memory base from its RETRO_MEMORY_SYSTEM_RAM pointer (the PSP
+/// RAM, base + 0x08000000); 0 while its memory is not set up (null base).
+/// While it probes, PPSSPP sets its base to each candidate before trying it:
+/// a base is settled once it stays the same and its views are mapped.
+uint64_t LibretroPPSSPPBaseFromSystemRAM(const void *_Nullable ram);
+/// Scratchpad, VRAM and `ramBytes` of RAM views are all mapped at `base`.
+BOOL LibretroPPSSPPViewsMappedAt(uint64_t base, uint64_t ramBytes);
+
 /// PPSSPP's window, reserved while the address space is still free.
 ///
 /// On the iPhone the 4-6 GiB window is crowded long before a PSP game
@@ -66,18 +74,31 @@ NSString *LibretroPPSSPPAddressSpaceReport(void);
 /// address space, VM_PROT_NONE: no memory is used) at the highest free
 /// 8 MiB-aligned base of the window shortly after launch, once the other
 /// plugins have made their early reservations (RPCS3's JIT escrow is taken
-/// while it registers). Right before PPSSPP boots, only the three view
-/// ranges are released: each is smaller than PPSSPP's 72 MiB arena, which
-/// therefore goes elsewhere, and PPSSPP's probe finds them free at that base.
-/// After the core is unloaded the view ranges are reserved again, or a new
-/// span is looked for when one of them was taken meanwhile. Thread-safe.
+/// while it registers).
+///
+/// Right before PPSSPP boots, the three view ranges are released, with an
+/// arena slot: the 64 MiB between the scratchpad and VRAM views, less a
+/// 16 KiB guard on each side. PPSSPP first allocates its arena anywhere
+/// (its RAM plus 8 MiB: 40 MiB for the 32 MiB of commercial games) and the
+/// kernel takes the lowest hole that fits: without the slot, a 40 MiB arena
+/// went into the released 64 MiB RAM range and no base was usable (iOS
+/// Simulator, crowded window). The slot lies below the RAM range, so the
+/// arena lands there or lower; a 64 MiB game's 72 MiB arena fits neither.
+/// PPSSPP's probe then finds its views free at the base. Once its memory is
+/// set up, the free part of the slot is held again; after the core is
+/// unloaded, the view ranges and the whole slot are. A view range taken
+/// meanwhile is never touched: only what this file holds is released and a
+/// new span is looked for. Thread-safe.
 
 /// Reserves the span if none is held. YES when one is held afterwards.
 BOOL LibretroPPSSPPReserveWindow(void);
-/// Releases the view ranges for a boot. Returns the base, 0 when no span is
-/// held.
+/// Releases the view ranges and the arena slot for a boot. Returns the base,
+/// 0 when no span is held.
 uint64_t LibretroPPSSPPReleaseViewsForBoot(void);
-/// After PPSSPP was unloaded: reserves the view ranges again.
+/// PPSSPP's memory is set up at `memoryBase`: holds the free part of the
+/// slot again.
+void LibretroPPSSPPMemorySettled(uint64_t memoryBase);
+/// After PPSSPP was unloaded: reserves the view ranges and the slot again.
 void LibretroPPSSPPRestoreReservation(void);
 /// Base of the held span, 0 when none.
 uint64_t LibretroPPSSPPReservedBase(void);
