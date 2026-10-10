@@ -869,8 +869,8 @@
     "test/rpcs3_build352_gow3_memory_test.py": "4f94744c8c905e64cb3cb593b19f24627fda3b643321e2b86e335f6c63b56450",
     "test/rpcs3_build435_core_delta_test.py": "648cabf9ff7cfe601c486928f40d3677b0c58991540f319d211b6c4092e8c8a0",
     "test/native/rpcs3_build435_core_delta_test.cpp": "8aef04558a2522899c5ed0b9d4b9dc7803a7d094d568c25c4c275fb15043e10a",
-    "test/rpcs3_xitrix_v011_native_test.py": "f2b44ac2199833da84a7934a6a5a930c6be108320f5dd926925d7f688bd8b4b8",
-    "docs/rpcs3-xitrix-v011-build436.md": "e0e90948060f83c8cb6c87c90d88ff6e5c47278b54ac6476162eea34f280f622",
+    "test/rpcs3_xitrix_v011_native_test.py": "a6b055c93589a065375a7f336599e2d2ae5e784b06a6cf5a3f6b5dfe6d33b4c0",
+    "docs/rpcs3-xitrix-v011-build436.md": "3e93c3388eb88f5a1f8da86217228d45255e588008e7e4c37e1898c23eac8161",
     "docs/rpcs3-build436-gow3-black-screen.md": "1f8d4f89d394719a5002c7955bcc90329da3853e152cc69532c31aed6d3396ee"
   },
   "support_git_modes": {

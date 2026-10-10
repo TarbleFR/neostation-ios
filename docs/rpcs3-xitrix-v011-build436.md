@@ -91,4 +91,16 @@ Les fixtures natives s'exécutent sur l'hôte macOS arm64 de `rpcs3-core.yml`
 avant la compilation du Core ; leur résultat est consigné avec le run. Elles
 établissent un comportement d'hôte, pas le rendu sur iPhone.
 
+Premier passage CI (run 38080865906, `53603f50`, Xcode 16.4) : sources de
+framebuffer et pool d'images réussis avec leurs contrôles négatifs,
+optimisation et sommets Minecraft réussis. La fixture fence avec le moteur
+d'attente de production n'a pas compilé : le fichier amont intact
+`rpcs3/util/atomic.cpp` se termine par `fmt::throw_exception`, dont le
+destructeur `[[noreturn]]` n'est pas reconnu comme terminal par ce clang, et
+`-Werror` transforme l'avertissement `-Wreturn-type` en erreur. Le Core n'a
+pas été compilé. Le test exécute désormais la fixture fence avec le moteur
+portable de la fixture (mode amont hors macOS) puis avec le moteur de
+production, `-Wreturn-type` restant un avertissement pour cette seule
+compilation ; toutes les fixtures s'exécutent et l'échec est signalé à la fin.
+
 Licence : XITRIX/rpcs3 et ses fixtures sont sous GPL-2.0-only.

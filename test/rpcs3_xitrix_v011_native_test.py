@@ -34,12 +34,18 @@ environment.pop('SDKROOT', None)
 if sdk := os.environ.get('HOST_MACOS_SDK'):
     environment['SDKROOT'] = sdk
 sanitize = ['--sanitize'] if args.sanitize else []
+failures = []
 
 
-def run(script, *arguments):
-    print(f'== {script} {" ".join(map(str, arguments))}'.rstrip(), flush=True)
-    subprocess.run([sys.executable, '-B', str(tests / script), *map(str, arguments), *sanitize],
-                   check=True, env=environment, timeout=600)
+def run(script, *arguments, compiler=None):
+    # Every runner executes; the test fails at the end if any of them failed.
+    label = f'{script} {" ".join(map(str, arguments))}'.rstrip()
+    print(f'== {label}', flush=True)
+    env = dict(environment, CXX=str(compiler)) if compiler else environment
+    result = subprocess.run([sys.executable, '-B', str(tests / script), *map(str, arguments), *sanitize],
+                            env=env, timeout=600)
+    if result.returncode:
+        failures.append(label)
 
 
 # 3dc496307: an equally recent complete source of the requested aspect wins.
@@ -57,10 +63,21 @@ with tempfile.TemporaryDirectory(prefix='rpcs3-v011-') as directory:
 # references (descriptors, fence wait, small quad indices, vertex layout).
 run('run-minecraft-optimization-tests.py')
 run('run-minecraft-vertex-tests.py')
+# The extracted fence wait/signal with the fixture's portable wait engine, as
+# upstream runs it outside macOS.
+run('run-minecraft-fence-tests.py')
 if platform.system() == 'Darwin':
-    run('run-minecraft-fence-tests.py', '--native-atomic')
-else:
-    run('run-minecraft-fence-tests.py')
+    # The same fence code with the production wait engine (rpcs3/util/atomic.cpp,
+    # untouched by the delta). Its allocator ends with fmt::throw_exception, whose
+    # [[noreturn]] destructor the Xcode 16.4 clang of the Core build does not treat
+    # as terminating: -Wreturn-type stays a warning for this compile only; every
+    # fixture assertion is unchanged.
+    with tempfile.TemporaryDirectory(prefix='rpcs3-v011-cxx-') as directory:
+        wrapper = Path(directory) / 'clang++'
+        real = os.environ.get('CXX', 'clang++')
+        wrapper.write_text(f'#!/bin/sh\nexec "{real}" "$@" -Wno-error=return-type\n')
+        wrapper.chmod(0o755)
+        run('run-minecraft-fence-tests.py', '--native-atomic', compiler=wrapper)
 run('run-minecraft-descriptor-tests.py')
 run('run-minecraft-index-tests.py')
 # 57ce3bf6a: divided vertex attributes keep the shader's integer range.
@@ -68,4 +85,6 @@ run('run-wrc4-vertex-range-tests.py')
 # 395636f5a: alpha-to-one after emulated alpha-to-coverage.
 run('run-rsx-alpha-coverage-tests.py')
 run('run-rsx-alpha-coverage-tests.py', '--negative-control')
+if failures:
+    raise SystemExit('XITRIX v0.11 fixtures failed: ' + '; '.join(failures))
 print('PASS XITRIX v0.11 imports: framebuffer source, image pool, rendering overhead, vertex range, alpha-to-one')
