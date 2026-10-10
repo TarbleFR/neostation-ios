@@ -243,6 +243,20 @@ Journal de session : `Fichiers › NeoStation › Libretro › Logs`.
 Ce document a été complété après la compilation, sans changer aucune entrée
 de la Build 431.
 
+**Build 432**, IPA de test (réservation de la fenêtre PSP) :
+
+- source : `a57b28fff95533c58cbd906876d9f663a655bd0b` (correctifs
+  `d4de3c76` et `54147b97`) ;
+- run : [38046678429](https://github.com/TarbleFR/neostation-ios/actions/runs/38046678429)
+  (contrôles, natif, compilation Release à froid réussis) ; contrôles
+  libretro macOS : run 38046114506 ; simulateur : run 38046114507
+  (10 scénarios réussis, défaut reproduit avec les sources de la Build 431) ;
+- IPA scellée : SHA-256
+  `67afcea1576329bab6cd3b913ea544b2d5fcff11c69aa343d8dd3d4486b761b0`,
+  205 874 590 octets ;
+- signatures : 57 signatures de préparation vérifiées ;
+- installation : par SideStore. Aucun test sur iPhone à ce stade.
+
 ## Reste à vérifier sur iPhone
 
 1. Lancer un jeu 3DS, le quitter par « Quit game », puis le relancer. Le
