@@ -22,6 +22,11 @@ static NSError *GLError(NSString *detail) {
   return [NSError errorWithDomain:@"org.neostation.libretro.gl" code:1 userInfo:@{NSLocalizedDescriptionKey : detail}];
 }
 
+/// Framebuffer created with the context, before the core's geometry is
+/// known; -prepareWithWidth:height: grows it when the core needs more
+/// (PPSSPP renders 960x544 by default).
+static const unsigned kProvisionalSize = 1024;
+
 @interface LibretroGLRenderer () {
  @public
   GLuint _framebuffer;
@@ -60,7 +65,9 @@ static retro_proc_address_t LibretroGLProcAddress(const char *symbol) {
   unsigned _height;
 }
 
-+ (nullable instancetype)rendererForCallback:(struct retro_hw_render_callback *)callback device:(id<MTLDevice>)device {
++ (nullable instancetype)rendererForCallback:(struct retro_hw_render_callback *)callback
+                                      device:(id<MTLDevice>)device
+                                       error:(NSError **)error {
   EAGLRenderingAPI api;
   switch (callback->context_type) {
     case RETRO_HW_CONTEXT_OPENGLES2:
@@ -70,10 +77,17 @@ static retro_proc_address_t LibretroGLProcAddress(const char *symbol) {
       api = kEAGLRenderingAPIOpenGLES3;
       break;
     case RETRO_HW_CONTEXT_OPENGLES_VERSION:
-      if (callback->version_major > 3 || (callback->version_major == 3 && callback->version_minor > 0)) return nil;
+      if (callback->version_major > 3 || (callback->version_major == 3 && callback->version_minor > 0)) {
+        if (error) {
+          *error = GLError([NSString stringWithFormat:@"OpenGL ES %u.%u unavailable", callback->version_major,
+                                                      callback->version_minor]);
+        }
+        return nil;
+      }
       api = callback->version_major >= 3 ? kEAGLRenderingAPIOpenGLES3 : kEAGLRenderingAPIOpenGLES2;
       break;
     default:
+      if (error) *error = GLError([NSString stringWithFormat:@"context type %u unsupported", callback->context_type]);
       return nil;
   }
   LibretroGLRenderer *renderer = [[self alloc] init];
@@ -82,6 +96,10 @@ static retro_proc_address_t LibretroGLProcAddress(const char *symbol) {
   renderer->_stencil = callback->stencil;
   renderer->_bottomLeftOrigin = callback->bottom_left_origin;
   renderer->_device = device;
+  if (![renderer prepareWithWidth:kProvisionalSize height:kProvisionalSize error:error]) {
+    [renderer teardown];
+    return nil;
+  }
   callback->get_current_framebuffer = LibretroGLCurrentFramebuffer;
   callback->get_proc_address = LibretroGLProcAddress;
   gCurrentGLRenderer = renderer;

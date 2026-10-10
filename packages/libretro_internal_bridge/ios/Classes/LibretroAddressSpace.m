@@ -9,6 +9,9 @@ const uint64_t LibretroPPSSPPBaseMinimum = 0x100000000ull;
 const uint64_t LibretroPPSSPPBaseLimit = 0x17FFF0000ull;
 const uint64_t LibretroPPSSPPBaseStride = 0x800000ull;
 const uint64_t LibretroPPSSPPSpan = 0x0C000000ull;
+/// Scratchpad 16 KiB, VRAM and three mirrors 4 x 2 MiB, RAM views 31 + 31 +
+/// 2 MiB: the sum MemoryMap_Setup passes to GrabMemSpace.
+const uint64_t LibretroPPSSPPArenaBytes = 0x4804000ull;
 
 /// PPSSPP's views on iOS for the default PSP-2000 model, as offsets from the
 /// base: scratchpad, VRAM with its three mirrors, then 64 MiB of RAM (31 MiB
@@ -42,25 +45,58 @@ static BOOL RangeIsFree(const LibretroAddressRange *merged, NSUInteger count, ui
   return low >= count || merged[low].start >= end;
 }
 
+/// Sorts `ranges` in place and merges overlapping or touching ones, empty
+/// ranges dropped. Returns the number of merged ranges at the front.
+static NSUInteger MergeRanges(LibretroAddressRange *ranges, NSUInteger count) {
+  if (count == 0) return 0;
+  qsort(ranges, count, sizeof(*ranges), CompareRanges);
+  NSUInteger merged = 0;
+  for (NSUInteger index = 0; index < count; index++) {
+    LibretroAddressRange range = ranges[index];
+    if (range.end <= range.start) continue;
+    if (merged > 0 && range.start <= ranges[merged - 1].end) {
+      if (range.end > ranges[merged - 1].end) ranges[merged - 1].end = range.end;
+    } else {
+      ranges[merged++] = range;
+    }
+  }
+  return merged;
+}
+
+/// Calls `hole` for each unmapped hole of [start, end), in address order;
+/// stops when it returns NO.
+static void ForEachHole(const LibretroAddressRange *merged, NSUInteger count, uint64_t start, uint64_t end,
+                        BOOL (^hole)(uint64_t holeStart, uint64_t holeSize)) {
+  uint64_t cursor = start;
+  for (NSUInteger index = 0; index <= count && cursor < end; index++) {
+    uint64_t holeEnd = index < count ? MIN(merged[index].start, end) : end;
+    if (holeEnd > cursor && !hole(cursor, holeEnd - cursor)) return;
+    if (index < count && merged[index].end > cursor) cursor = merged[index].end;
+  }
+}
+
 LibretroPPSSPPWindow LibretroPPSSPPWindowForMappedRanges(const LibretroAddressRange *mapped, NSUInteger count) {
   LibretroPPSSPPWindow window;
   memset(&window, 0, sizeof(window));
-  LibretroAddressRange *merged = NULL;
-  NSUInteger mergedCount = 0;
-  if (mapped != NULL && count > 0) {
-    merged = malloc(count * sizeof(*merged));
-    if (merged == NULL) return window;
-    memcpy(merged, mapped, count * sizeof(*merged));
-    qsort(merged, count, sizeof(*merged), CompareRanges);
-    for (NSUInteger index = 0; index < count; index++) {
-      LibretroAddressRange range = merged[index];
-      if (range.end <= range.start) continue;
-      if (mergedCount > 0 && range.start <= merged[mergedCount - 1].end) {
-        if (range.end > merged[mergedCount - 1].end) merged[mergedCount - 1].end = range.end;
-      } else {
-        merged[mergedCount++] = range;
-      }
-    }
+  const uint64_t spanStart = LibretroPPSSPPBaseMinimum;
+  const uint64_t spanEnd = LibretroPPSSPPBaseLimit + LibretroPPSSPPSpan;
+  if (mapped == NULL) count = 0;
+  // One more slot for the arena.
+  LibretroAddressRange *merged = malloc((count + 1) * sizeof(*merged));
+  if (merged == NULL) return window;
+  if (count > 0) memcpy(merged, mapped, count * sizeof(*merged));
+  NSUInteger mergedCount = MergeRanges(merged, count);
+  // The arena first, in the first hole that fits (vm_allocate anywhere).
+  __block uint64_t arena = 0;
+  ForEachHole(merged, mergedCount, spanStart, spanEnd, ^BOOL(uint64_t holeStart, uint64_t holeSize) {
+    if (holeSize < LibretroPPSSPPArenaBytes) return YES;
+    arena = holeStart;
+    return NO;
+  });
+  window.arenaStart = arena;
+  if (arena != 0) {
+    merged[mergedCount] = (LibretroAddressRange){arena, arena + LibretroPPSSPPArenaBytes};
+    mergedCount = MergeRanges(merged, mergedCount + 1);
   }
   for (uint64_t base = LibretroPPSSPPBaseMinimum; base < LibretroPPSSPPBaseLimit; base += LibretroPPSSPPBaseStride) {
     window.probedBases++;
@@ -72,17 +108,17 @@ LibretroPPSSPPWindow LibretroPPSSPPWindowForMappedRanges(const LibretroAddressRa
     window.usableBases++;
     if (window.firstBase == 0) window.firstBase = base;
   }
-  const uint64_t spanStart = LibretroPPSSPPBaseMinimum;
-  const uint64_t spanEnd = LibretroPPSSPPBaseLimit + LibretroPPSSPPSpan;
-  uint64_t cursor = spanStart;
-  for (NSUInteger index = 0; index <= mergedCount && cursor < spanEnd; index++) {
-    uint64_t holeEnd = index < mergedCount ? MIN(merged[index].start, spanEnd) : spanEnd;
-    if (holeEnd > cursor && holeEnd - cursor > window.largestHoleSize) {
-      window.largestHoleStart = cursor;
-      window.largestHoleSize = holeEnd - cursor;
+  __block uint64_t largestStart = 0;
+  __block uint64_t largestSize = 0;
+  ForEachHole(merged, mergedCount, spanStart, spanEnd, ^BOOL(uint64_t holeStart, uint64_t holeSize) {
+    if (holeSize > largestSize) {
+      largestStart = holeStart;
+      largestSize = holeSize;
     }
-    if (index < mergedCount && merged[index].end > cursor) cursor = merged[index].end;
-  }
+    return YES;
+  });
+  window.largestHoleStart = largestStart;
+  window.largestHoleSize = largestSize;
   free(merged);
   return window;
 }
@@ -112,18 +148,23 @@ NSString *LibretroPPSSPPAddressSpaceReport(void) {
   NSData *ranges = LibretroMappedRanges(LibretroPPSSPPBaseMinimum, spanEnd);
   NSUInteger count = ranges.length / sizeof(LibretroAddressRange);
   LibretroPPSSPPWindow window = LibretroPPSSPPWindowForMappedRanges(ranges.bytes, count);
+  NSString *arena = window.arenaStart != 0
+                        ? [NSString stringWithFormat:@"its 0x%llx-byte arena expected at 0x%llx", LibretroPPSSPPArenaBytes,
+                                                     window.arenaStart]
+                        : [NSString stringWithFormat:@"its 0x%llx-byte arena expected above 0x%llx",
+                                                     LibretroPPSSPPArenaBytes, spanEnd];
   if (window.firstBase != 0) {
     return [NSString stringWithFormat:@"[HOST] PPSSPP memory window: usable base 0x%llx (%lu of %lu probed bases free, "
-                                      @"%lu regions mapped in 0x%llx-0x%llx); largest hole 0x%llx bytes at 0x%llx",
+                                      @"%lu regions mapped in 0x%llx-0x%llx, %@); largest hole 0x%llx bytes at 0x%llx",
                                       window.firstBase, (unsigned long)window.usableBases,
                                       (unsigned long)window.probedBases, (unsigned long)count,
-                                      LibretroPPSSPPBaseMinimum, spanEnd, window.largestHoleSize,
+                                      LibretroPPSSPPBaseMinimum, spanEnd, arena, window.largestHoleSize,
                                       window.largestHoleStart];
   }
   return [NSString stringWithFormat:@"[HOST] PPSSPP memory window: no usable base among %lu probed (%lu regions "
-                                    @"mapped in 0x%llx-0x%llx); largest hole 0x%llx bytes at 0x%llx; PPSSPP needs "
-                                    @"0x%llx free bytes at an 8 MiB-aligned base below 0x%llx",
+                                    @"mapped in 0x%llx-0x%llx, %@); largest hole 0x%llx bytes at 0x%llx; PPSSPP "
+                                    @"needs 0x%llx free bytes at an 8 MiB-aligned base below 0x%llx",
                                     (unsigned long)window.probedBases, (unsigned long)count,
-                                    LibretroPPSSPPBaseMinimum, spanEnd, window.largestHoleSize,
+                                    LibretroPPSSPPBaseMinimum, spanEnd, arena, window.largestHoleSize,
                                     window.largestHoleStart, LibretroPPSSPPSpan, LibretroPPSSPPBaseLimit];
 }

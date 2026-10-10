@@ -360,6 +360,9 @@ static void LibretroRestoreAppOrientations(UIViewController *presenter) {
     failure = [self loadContent];
   }
   if (failure != nil) {
+    // Journaled before the teardown, which runs the core's code once more.
+    [_journal note:[NSString stringWithFormat:@"load: failed %@: %@", failure[@"code"] ?: @"",
+                                              failure[@"message"] ?: @""]];
     @autoreleasepool {
       [self unloadCore];
     }
@@ -815,7 +818,16 @@ static void LibretroRestoreAppOrientations(UIViewController *presenter) {
     if (_vulkan != nil && _negotiation != NULL) [_vulkan setNegotiationInterface:_negotiation];
     return _vulkan != nil;
   }
-  _gl = [LibretroGLRenderer rendererForCallback:callback device:_presenter.device];
+  NSError *error = nil;
+  _gl = [LibretroGLRenderer rendererForCallback:callback device:_presenter.device error:&error];
+  if (_gl == nil) {
+    // Refused inside SET_HW_RENDER: the core can still fall back (PPSSPP
+    // renders in software) or fail retro_load_game cleanly.
+    NSString *line = [NSString stringWithFormat:@"[HOST] OpenGL ES context %u unavailable: %@", callback->context_type,
+                                                error.localizedDescription ?: @"unknown"];
+    [host appendLog:line];
+    [_journal note:line];
+  }
   return _gl != nil;
 }
 

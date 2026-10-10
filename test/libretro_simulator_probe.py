@@ -379,20 +379,33 @@ def pick_device():
     return udid, f'{name} iOS {version[0]}.{version[1]}'
 
 
+def probe_pid(console_path):
+    """`simctl launch` prints "<bundle id>: <pid>" first."""
+    try:
+        match = re.search(rf'{re.escape(BUNDLE_ID)}: (\d+)', console_path.read_text(errors='replace'))
+    except OSError:
+        return None
+    return int(match.group(1)) if match else None
+
+
 def run_in_simulator(app, evidence, timeout):
     udid, description = pick_device()
+    # A fresh device for every run: nothing left by a previous probe.
+    subprocess.run(['xcrun', 'simctl', 'shutdown', udid], capture_output=True)
+    run(['xcrun', 'simctl', 'erase', udid])
     subprocess.run(['xcrun', 'simctl', 'boot', udid], capture_output=True)
     run(['xcrun', 'simctl', 'bootstatus', udid, '-b'], timeout=600)
-    subprocess.run(['xcrun', 'simctl', 'uninstall', udid, BUNDLE_ID], capture_output=True)
     run(['xcrun', 'simctl', 'install', udid, app])
     data = Path(output(['xcrun', 'simctl', 'get_app_container', udid, BUNDLE_ID, 'data']).strip())
     documents = data / 'Documents'
-    console = open(evidence / 'probe-console.log', 'w')
+    console_path = evidence / 'probe-console.log'
+    console = open(console_path, 'w')
     launched_at = time.time()
     process = subprocess.Popen(['xcrun', 'simctl', 'launch', '--console-pty', '--terminate-running-process', udid,
                                 BUNDLE_ID], stdout=console, stderr=subprocess.STDOUT)
     finished = False
     exited = False
+    silent_sampled = False
     deadline = time.time() + timeout
     while time.time() < deadline:
         if (documents / 'probe.json').is_file():
@@ -401,7 +414,21 @@ def run_in_simulator(app, evidence, timeout):
         if process.poll() is not None:
             exited = True
             break
+        progress = documents / 'probe-progress.log'
+        if not silent_sampled and time.time() - launched_at > 120 and not progress.is_file():
+            # Launched but silent: record where its threads are.
+            silent_sampled = True
+            pid = probe_pid(console_path)
+            print(f'the probe wrote no progress in 120 s (pid {pid}); sampling it', flush=True)
+            if pid:
+                subprocess.run(['sample', str(pid), '3', '-file', str(evidence / 'probe-silent-sample.txt')],
+                               capture_output=True)
         time.sleep(1)
+    if not finished and not exited:
+        pid = probe_pid(console_path)
+        if pid:
+            subprocess.run(['sample', str(pid), '3', '-file', str(evidence / 'probe-timeout-sample.txt')],
+                           capture_output=True)
     time.sleep(1)
     subprocess.run(['xcrun', 'simctl', 'terminate', udid, BUNDLE_ID], capture_output=True)
     try:

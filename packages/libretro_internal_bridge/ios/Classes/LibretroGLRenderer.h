@@ -14,12 +14,20 @@ NS_ASSUME_NONNULL_BEGIN
 /// emulation thread, where the context stays current.
 @interface LibretroGLRenderer : NSObject
 
-/// Validates the requested context and fills get_current_framebuffer and
-/// get_proc_address. Returns nil for an unsupported context type.
+/// Called for SET_HW_RENDER, on the emulation thread: validates the
+/// requested context, creates the EAGL context and a provisional framebuffer
+/// (made current on this thread), and fills get_current_framebuffer and
+/// get_proc_address. Returns nil, with the reason in `error`, for an
+/// unsupported context type or when the context or its surface cannot be
+/// created. Failing here refuses the hardware context while the core can
+/// still fall back (PPSSPP renders in software) or give up cleanly; failing
+/// after retro_load_game would unload PPSSPP while its boot thread runs,
+/// which PPSSPP does not survive.
 + (nullable instancetype)rendererForCallback:(struct retro_hw_render_callback *)callback
-                                      device:(id<MTLDevice>)device;
+                                      device:(id<MTLDevice>)device
+                                       error:(NSError *_Nullable *_Nullable)error;
 
-/// Creates the EAGL context and a framebuffer of at least this size.
+/// Grows the framebuffer to at least this size (the context exists).
 - (BOOL)prepareWithWidth:(unsigned)width height:(unsigned)height error:(NSError *_Nullable *_Nullable)error;
 - (void)makeCurrent;
 
