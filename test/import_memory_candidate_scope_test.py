@@ -993,10 +993,30 @@ ARMSX2_INTEGRATION_OVERRIDES = {
     'packages/armsx2_internal_bridge/ios/Classes/Armsx2InternalBridgePlugin.mm':
         'a5650b9bddefbed76f941fb53735545bebcbbd39',
 }
+# Build435 lines of the IPA workflow, applied on top of the Build 419 restoration
+# bytes (10 October 2026): the Core built from 6fede58a by run 38068094552
+# (measured memory allowance, deferred SPU compilation, writer-lock precheck)
+# and its two host-executed policy test inputs in the exact-diff guard. Each
+# pair applies exactly once; every other byte stays the maintainer's.
+IPA_WORKFLOW_BUILD435_LINES = (
+    ('      RPCS3_CORE_HOST_SHA: afb33454db50236485bd5ec963a722dcb5f65610\n',
+     '      RPCS3_CORE_HOST_SHA: 6fede58ae799214ce59cfecbae79b66d01d33b37\n'),
+    ("      RPCS3_CORE_RUN_ID: '37620034517'\n", "      RPCS3_CORE_RUN_ID: '38068094552'\n"),
+    ('            test/rpcs3_armsx3_performance_patch_test.py \\\n',
+     '            test/rpcs3_armsx3_performance_patch_test.py \\\n'
+     '            test/rpcs3_build435_core_delta_test.py \\\n'
+     '            test/native/rpcs3_build435_core_delta_test.cpp \\\n'),
+)
 for path in ARMSX2_INTEGRATION_FILES:
     revision = ARMSX2_INTEGRATION_OVERRIDES.get(path, ARMSX2_INTEGRATION_SHA)
     reviewed = subprocess.check_output(['git', 'show', revision + ':' + path], cwd=ROOT)
-    if path == '.github/workflows/neoswap-ipa.yml' and revision == ARMSX2_INTEGRATION_SHA:
+    if path == '.github/workflows/neoswap-ipa.yml' and revision != ARMSX2_INTEGRATION_SHA:
+        text = reviewed.decode('utf-8')
+        for old, new in IPA_WORKFLOW_BUILD435_LINES:
+            assert text.count(old) == 1, 'Build435 IPA workflow line expected once: ' + old
+            text = text.replace(old, new, 1)
+        reviewed = text.encode('utf-8')
+    elif path == '.github/workflows/neoswap-ipa.yml':
         text = reviewed.decode('utf-8')
         for old, new in IPA_WORKFLOW_BUILD410_LINES:
             assert text.count(old) == 1, 'Reviewed IPA workflow line expected once: ' + old
@@ -1185,8 +1205,11 @@ for workflow_path in ('.github/workflows/neoswap-ipa.yml', '.github/workflows/io
         # neo_swap_core_pin_test verifies against the pinned commit.
         # Build412 Core: afb33454 adds writer-lock attribution and rsx::thread
         # accounting to the profiler; its inputs no longer match the Build411 Core.
-        assert re.findall(r'(?m)^      RPCS3_CORE_HOST_SHA: (.+)$', workflow) == ['afb33454db50236485bd5ec963a722dcb5f65610']
-        assert re.findall(r'(?m)^      RPCS3_CORE_RUN_ID: (.+)$', workflow) == ["'37620034517'"]
+        # Build435 Core (run 38068094552 on 6fede58a): measured memory allowance,
+        # deferred SPU compilation and writer-lock precheck; its inputs no longer
+        # match the Build412 Core.
+        assert re.findall(r'(?m)^      RPCS3_CORE_HOST_SHA: (.+)$', workflow) == ['6fede58ae799214ce59cfecbae79b66d01d33b37']
+        assert re.findall(r'(?m)^      RPCS3_CORE_RUN_ID: (.+)$', workflow) == ["'38068094552'"]
         assert "assert result['head_sha']==os.environ['RPCS3_CORE_HOST_SHA']" in workflow
         assert "assert result['conclusion']=='success'" in workflow
         assert 'validate_core_input_identity(identity)' in workflow

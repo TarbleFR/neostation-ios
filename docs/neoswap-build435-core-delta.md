@@ -162,4 +162,14 @@ La lane `retroarch-delivery.yml` est ré-épinglée sur ce run
 
 ### IPA 435
 
-Renseigné après la lane de livraison.
+- premier run de lane [38071940829](https://github.com/TarbleFR/neostation-ios/actions/runs/38071940829)
+  sur `508c887e` : jobs `checks` et `native` réussis ; le job Release à froid
+  s'est arrêté à « Verify and install passive RPCS3 Core » parce que les deux
+  fichiers du test de politiques, ajoutés aux entrées épinglées du Core,
+  manquaient dans la liste « exact-diff » de `neoswap-ipa.yml` que
+  `neo_swap_core_pin_test.py` compare à ces entrées. Corrigé en listant ces
+  deux entrées dans les deux workflows et en épinglant aussi `neoswap-ipa.yml`
+  sur le Core 435 (étape Build 435 du test de périmètre candidat, lignes
+  appliquées sur les octets de `afc0a96d`).
+
+Renseigné après la lane de livraison suivante.
