@@ -1,7 +1,8 @@
 name: Libretro simulator probe
-# NeoStation's embedded libretro session with real cores in the iOS
-# Simulator: launch, run, "Quit game" and relaunch with PPSSPP (a PSP test
-# program, directly and inside an ISO), Azahar (ftpd.3dsx) and the NeoTest
+# NeoStation's embedded libretro session in the iOS Simulator: launch, run,
+# "Quit game" and relaunch with the real PPSSPP core (a PSP test program,
+# directly and inside an ISO), a Vulkan test core that tears down like
+# Azahar (the simulator GPU cannot start Azahar itself) and the NeoTest
 # core, including a core that stops while starting. See
 # test/libretro_simulator_probe.py. A simulator run is not an iPhone test.
 'on':
@@ -15,6 +16,7 @@ name: Libretro simulator probe
     - test/libretro_simulator/**
     - test/libretro_simulator_probe.py
     - test/libretro_host/test_core.c
+    - test/libretro_host/vulkan_test_core.c
   workflow_dispatch:
 permissions:
   contents: read
@@ -48,12 +50,12 @@ jobs:
       run: |
         python3 test/libretro_simulator_probe.py run --cores dist/libretro --inputs "$RUNNER_TEMP/probe-inputs" \
           --evidence evidence/this-commit --label "${GITHUB_SHA}"
-    - name: Close a 3DS game with the sources before the teardown fix (informational)
+    - name: Close a Vulkan game (Azahar's teardown) with the sources before the fix (informational)
       if: ${{ !cancelled() }}
       run: |
         git worktree add "$RUNNER_TEMP/before-fix" 940f114975c9ae4761b227e5efa9381ef9fa976e
         python3 test/libretro_simulator_probe.py run --cores dist/libretro --inputs "$RUNNER_TEMP/probe-inputs" \
-          --sources "$RUNNER_TEMP/before-fix/packages/libretro_internal_bridge/ios" --only azahar-1 \
+          --sources "$RUNNER_TEMP/before-fix/packages/libretro_internal_bridge/ios" --only neovk-1 \
           --expect unfixed --evidence evidence/before-fix --label 940f114975c9ae4761b227e5efa9381ef9fa976e \
           --timeout 300
     - uses: actions/upload-artifact@v4

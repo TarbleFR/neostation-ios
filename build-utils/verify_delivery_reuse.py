@@ -455,6 +455,7 @@ LIFECYCLE_DELTA = {
     'packages/libretro_internal_bridge/ios/Classes/LibretroSessionJournal.m',
     'test/libretro_host/frontend/address_space_test.m',
     'test/libretro_host/frontend/session_journal_test.m',
+    'test/libretro_host/vulkan_test_core.c',
     'test/libretro_simulator/probe.m',
     'test/libretro_simulator_probe.py',
 }

@@ -12,7 +12,10 @@ sources into a small UIKit app and embeds:
   Mach-O platform switched from iOS (2) to iOS Simulator (7) - no other
   byte changes - and signed ad hoc;
 - the MoltenVK simulator slice;
-- the NeoTest core of test/libretro_host, built for the simulator;
+- the NeoTest core and the Vulkan test core of test/libretro_host (the
+  latter uses the frontend's Vulkan device like Azahar: it creates it,
+  leaves it to the frontend and destroys its objects through it in
+  retro_unload_game), built for the simulator;
 - PPSSPP's system files, and the content: NeoTest's game, simple.prx, an
   ISO built here around simple.prx (PSP_GAME/SYSDIR/EBOOT.BIN, PARAM.SFO,
   "PSP GAME" system id: the ISO path of real games) and ftpd.3dsx.
@@ -24,6 +27,12 @@ log, journals, simulator log, crash reports) goes to --evidence.
 With --sources (another bridge tree, e.g. the commit before a fix) and
 --expect unfixed, it records whether that tree's process dies while a
 scenario is being closed; it never fails on that outcome.
+
+Azahar itself cannot start in the simulator: the simulator GPU has no
+arrays of textures or samplers, so its renderer throws
+vk::FeatureNotPresentError (createDescriptorSetLayoutUnique) in
+context_reset. Its scenarios run only when named with --only; the Vulkan
+test core covers the teardown Azahar depends on.
 """
 import argparse
 import hashlib
@@ -50,6 +59,8 @@ DEFINES = ('GLES_SILENCE_DEPRECATION=1', 'COREVIDEO_SILENCE_GL_DEPRECATION=1', '
 FRAMEWORKS = ('UIKit', 'Foundation', 'Metal', 'QuartzCore', 'AVFoundation', 'GameController', 'OpenGLES',
               'CoreVideo', 'Security', 'ImageIO', 'CoreGraphics')
 REAL_CORES = ('ppsspp', 'azahar')
+# Built here from test/libretro_host for the simulator.
+TEST_CORES = {'neotest': 'test_core.c', 'neovk': 'vulkan_test_core.c'}
 LC_BUILD_VERSION = 0x32
 PLATFORM_IOS = 2
 PLATFORM_IOS_SIMULATOR = 7
@@ -81,10 +92,16 @@ SCENARIOS = [
     {'name': 'ppsspp-prx', 'core': 'ppsspp', 'content': 'content/simple.prx', 'console': 'psp', 'expect': 'run'},
     {'name': 'ppsspp-iso-1', 'core': 'ppsspp', 'content': 'content/probe.iso', 'console': 'psp', 'expect': 'run'},
     {'name': 'ppsspp-iso-2', 'core': 'ppsspp', 'content': 'content/probe.iso', 'console': 'psp', 'expect': 'run'},
+    {'name': 'neovk-1', 'core': 'neovk', 'content': 'content/Test Game.ntc', 'console': 'gb', 'expect': 'run',
+     'requiredLog': ['neovk create_device: device created by the core',
+                     "neovk unload_game: resources destroyed through the frontend's device"]},
+    {'name': 'neovk-2', 'core': 'neovk', 'content': 'content/Test Game.ntc', 'console': 'gb', 'expect': 'run',
+     'requiredLog': ["neovk unload_game: resources destroyed through the frontend's device"]},
+    # Only with --only: the simulator GPU cannot start Azahar (see above).
     {'name': 'azahar-1', 'core': 'azahar', 'content': 'content/ftpd.3dsx', 'console': '3ds', 'expect': 'run',
-     'runSeconds': 4.0},
+     'runSeconds': 4.0, 'default': False},
     {'name': 'azahar-2', 'core': 'azahar', 'content': 'content/ftpd.3dsx', 'console': '3ds', 'expect': 'run',
-     'runSeconds': 4.0},
+     'runSeconds': 4.0, 'default': False},
 ]
 # Journal lines of a closed session, in the order RetroArch tears a core down.
 TEARDOWN_ORDER = (
@@ -265,13 +282,16 @@ def compile_probe(sources, sdk, work, app):
     run(link)
 
 
-def build_neotest(sdk, frameworks):
-    target = frameworks / 'neotest_libretro.framework'
-    target.mkdir(parents=True)
-    run(['xcrun', '--sdk', 'iphonesimulator', 'clang', '-target', TARGET, '-isysroot', sdk, '-dynamiclib', '-O1',
-         '-I', BRIDGE / 'ThirdParty/include/libretro', ROOT / 'test/libretro_host/test_core.c',
-         '-install_name', '@rpath/neotest_libretro.framework/neotest_libretro', '-o', target / 'neotest_libretro'])
-    framework_plist(target, 'neotest_libretro')
+def build_test_cores(sdk, frameworks):
+    for core, source in TEST_CORES.items():
+        name = f'{core}_libretro'
+        target = frameworks / f'{name}.framework'
+        target.mkdir(parents=True)
+        run(['xcrun', '--sdk', 'iphonesimulator', 'clang', '-target', TARGET, '-isysroot', sdk, '-dynamiclib', '-O1',
+             '-Wall', '-I', BRIDGE / 'ThirdParty/include', '-I', BRIDGE / 'ThirdParty/include/libretro',
+             ROOT / 'test/libretro_host' / source, '-install_name', f'@rpath/{name}.framework/{name}',
+             '-o', target / name])
+        framework_plist(target, name)
 
 
 def framework_plist(target, executable):
@@ -310,7 +330,7 @@ def assemble(args, sources, work):
     frameworks = app / 'Frameworks'
     frameworks.mkdir(parents=True)
     compile_probe(sources, sdk, work, app)
-    build_neotest(sdk, frameworks)
+    build_test_cores(sdk, frameworks)
     cores = Path(args.cores)
     for core in REAL_CORES:
         source = cores / 'Frameworks' / f'{core}_libretro.framework'
@@ -336,6 +356,8 @@ def assemble(args, sources, work):
     scenarios = []
     for scenario in SCENARIOS:
         if args.only and scenario['name'] not in args.only:
+            continue
+        if not args.only and not scenario.get('default', True):
             continue
         entry = dict(scenario)
         if scenario['core'] in REAL_CORES:
@@ -494,6 +516,9 @@ def evaluate(report, scenarios):
             problem = journal_order_problems(result.get('journal', ''))
             if problem:
                 problems.append(f'{name}: {problem}')
+            for line in scenario.get('requiredLog', []):
+                if line not in result.get('journal', ''):
+                    problems.append(f'{name}: the core log lacks "{line}"')
         elif scenario['expect'] == 'core-stopped':
             if launch.get('success') or launch.get('code') != 'LIBRETRO_CORE_STOPPED':
                 problems.append(f"{name}: expected a LIBRETRO_CORE_STOPPED launch failure, got "
@@ -521,6 +546,9 @@ def summarise(report, scenarios):
               f"ended={result.get('ended', False)}", flush=True)
         if not launch.get('success'):
             print(f"    message: {launch.get('message')}", flush=True)
+        for line in result.get('journal', '').splitlines():
+            if 'unavailable' in line or 'PPSSPP memory window' in line:
+                print(f'    {line.split(" ", 2)[-1]}', flush=True)
 
 
 def command_run(args):
