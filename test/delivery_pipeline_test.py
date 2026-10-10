@@ -35,7 +35,13 @@ class DeliveryPipeline(unittest.TestCase):
         changed,unchanged=reuse.verify_tree()
         self.assertGreater(len(unchanged),500)
         self.assertIn('lib/services/retroarch_library_service.dart',changed)
-        self.assertFalse(any(p.startswith('native/') for p in changed))
+        # Every native engine, extension and storage source is byte-identical.
+        # The only native path the Build434 NeoSwap delta touches is the hash
+        # manifest read by the NeoSwap scope gate, which describes the
+        # reviewed packages/neo_swap sources and is not compiled anywhere.
+        native_changed={p for p in changed if p.startswith('native/')}
+        self.assertLessEqual(native_changed,{'native/import-memory-candidate.json'})
+        self.assertTrue(native_changed<=reuse.NEOSWAP_434_DELTA)
 
     def test_release_device_and_signature_guards_are_active(self):
         workflow=(ROOT/'.github/workflows/retroarch-delivery.yml').read_text()

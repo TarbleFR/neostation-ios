@@ -94,6 +94,11 @@ assert runtime_preparation == {
 
 # Additions require a review of the requested production scope. Never derive
 # this whitelist from git status or from the hash manifest itself.
+# Build434 bookkeeping: the Build 419 library rollback (afc0a96d, 8 October
+# 2026) removed lib/services/retroarch_folder_recovery.dart,
+# lib/services/retroarch_library_importer.dart and their two Dart tests;
+# their stale entries left this gate failing on every commit since. They are
+# dropped here and from the manifest; nothing else changes in the whitelists.
 PRODUCTION_FILES = {
     '.github/workflows/dolphin-pacing-check.yml',
     'tools/neoplay-receiver/build-installer.mjs',
@@ -108,6 +113,8 @@ PRODUCTION_FILES = {
     'tools/neoplay-receiver/windows-installer.nsi',
     # Build409: pure global budget policy applied by the plugin every sample.
     'packages/neo_swap/ios/Classes/NeoSwapBudget.h',
+    # Build434: cold-storage prefetch planner and POSIX read-advice helpers.
+    'packages/neo_swap/ios/Classes/NeoSwapColdPrefetch.h',
     # RPCS3-only integrity harness shares its sole supported allocation owner.
     'packages/neo_swap/ios/Classes/NeoSwapCapacityProbe.h',
     'packages/neo_swap/ios/Classes/NeoSwapExperiment.h',
@@ -295,6 +302,9 @@ SUPPORT_FILES = {
     'docs/neoswap-build409-global-budget.md',
     'test/neoswap_budget_test.cpp',
     'test/neoswap_relay_loans_test.cpp',
+    # Build434: measured host envelope, size-class shelves, cold prefetch.
+    'docs/neoswap-build434-7go-envelope.md',
+    'test/neoswap_cold_prefetch_test.cpp',
     'docs/neoswap-swap-research.md',
     'tools/compare_neoswap_sessions.py',
     'test/neoswap_swap_research_test.cpp',
@@ -586,7 +596,6 @@ PRODUCTION_FILES |= {
     'lib/providers/sqlite_config_provider/scanning.dart',
     'lib/screens/settings_screen/new_settings_options/directories_settings_content.dart',
     'lib/services/config_service.dart',
-    'lib/services/retroarch_folder_recovery.dart',
     'lib/services/retroarch_library_protocol.dart',
     'lib/services/retroarch_library_service.dart',
     'packages/external_folder_access/ios/Classes/ExternalFolderAccessPlugin.swift',
@@ -596,7 +605,6 @@ PRODUCTION_FILES |= {
 SUPPORT_FILES |= {
     'docs/retroarch-testflight-link-recovery.md',
     'docs/neoplay/WINDOWS-0.8.0.md',
-    'test/retroarch_folder_recovery_test.dart',
     'test/retroarch_library_cache_test.dart',
     'test/retroarch_library_protocol_test.dart',
     'test/retroarch_sync_locale_test.dart',
@@ -609,10 +617,8 @@ PRODUCTION_FILES |= {
     'lib/repositories/system_repository.dart',
     'lib/screens/systems_screen/system_content.dart',
     'lib/services/ios_rom_library_root_resolver.dart',
-    'lib/services/retroarch_library_importer.dart',
 }
 SUPPORT_FILES |= {
-    'test/retroarch_library_restoration_test.dart',
     'test/ios_rom_library_root_resolver_test.dart',
 }
 

@@ -201,6 +201,17 @@ APPROVED_BUILD414_FILES = frozenset(REVIEWED_BUILD414_POSTIMAGES)
 REVIEWED_BUILD421_RETROARCH_POSTIMAGES = {'lib/services/config_service.dart': 'ac6aefc1d972387c0253af0c9490407f0bc2abbe4a2b7716225962aeafcee80b', 'lib/services/retroarch_folder_recovery.dart': 'b78a9641c350b4801a312affcd433d0624706525a30fd478bd9f5c6779f6b659', 'lib/services/retroarch_library_protocol.dart': 'ba1deeca3d900ff2a831acc258d77efd1a52c24314ce475101c471a21bee0f96', 'lib/services/retroarch_library_service.dart': '8b2a0408ef516e66101de88601725fd5e1ed575d596a2a83aa576326c28ac691', 'lib/services/retroarch_library_importer.dart': 'c00b9234d7378b5991b76688ba9c4c2b70ed08797719e40d65ce404d044a8d55', 'lib/services/ios_rom_library_root_resolver.dart': '5b2cba22d2fbf518f5d337df03cc0cb927d8c4619682344aeb838318e4baef29'}
 
 APPROVED_BUILD421_RETROARCH_FILES = frozenset(REVIEWED_BUILD421_RETROARCH_POSTIMAGES)
+# Build434 (10 October 2026): measured host jetsam envelope in the budget
+# policy, demand-driven size-class shelves for relay host loans, cold-storage
+# prefetch planner and the plugin diagnostics exporting them. Core, relay and
+# donor extensions, storage engine and every other native source unchanged.
+APPROVED_BUILD434_FILES = frozenset({
+    'packages/neo_swap/ios/Classes/NeoSwap.cpp',
+    'packages/neo_swap/ios/Classes/NeoSwapBudget.h',
+    'packages/neo_swap/ios/Classes/NeoSwapColdPrefetch.h',
+    'packages/neo_swap/ios/Classes/NeoSwapHost.h',
+    'packages/neo_swap/ios/Classes/NeoSwapPlugin.mm',
+})
 
 def original(path, revision=BASE):
     return subprocess.check_output(['git', 'show', revision + ':' + path], cwd=ROOT)
@@ -212,7 +223,7 @@ class Build398Integration(unittest.TestCase):
         self.assertEqual(changed - APPROVED_RPCS3_MENU_FILES - APPROVED_MANAGED_SWAP_FILES
                          - APPROVED_SWAP_INTEGRATION_FILES - APPROVED_ARMSX2_INTEGRATION_FILES
                          - APPROVED_BUILD409_FILES - APPROVED_POST410_FILES - APPROVED_BUILD414_FILES
-                         - APPROVED_BUILD421_RETROARCH_FILES, set(),
+                         - APPROVED_BUILD421_RETROARCH_FILES - APPROVED_BUILD434_FILES, set(),
                          'Only explicitly reviewed integrations and exact post410/RetroArch postimages may differ from Build396')
         for path, expected in REVIEWED_BUILD421_RETROARCH_POSTIMAGES.items():
             self.assertEqual(hashlib.sha256((ROOT / path).read_bytes()).hexdigest(), expected, path)

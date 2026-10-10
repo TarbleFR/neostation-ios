@@ -86,6 +86,10 @@ jobs:
           xcrun clang++ -std=c++20 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined \
             -Ipackages/neo_swap/ios/Classes test/neoswap_budget_test.cpp -o "$RUNNER_TEMP/neoswap-budget"
           "$RUNNER_TEMP/neoswap-budget" | tee build/neoswap/budget-tests.txt
+          # Build434: cold-storage prefetch planner and POSIX read advice on a real file.
+          xcrun clang++ -std=c++20 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined \
+            -Ipackages/neo_swap/ios/Classes test/neoswap_cold_prefetch_test.cpp -o "$RUNNER_TEMP/neoswap-cold-prefetch"
+          "$RUNNER_TEMP/neoswap-cold-prefetch" | tee build/neoswap/cold-prefetch-tests.txt
           # Production broker + production relay backend over a real shared-file
           # fixture: relay host loans, kinds, quotas, reuse cache, address index.
           mkdir -p "$RUNNER_TEMP/neoswap-loans-include"

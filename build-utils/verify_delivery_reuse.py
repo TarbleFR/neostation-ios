@@ -473,6 +473,28 @@ LIBRARY_DELTA = {
     'test/neostation_rom_library_test.dart',
 }
 DELTA |= LIBRARY_DELTA
+# NeoSwap Build434 (maintainer request of 10 October 2026, RPCS3 memory):
+# the measured jetsam envelope of the host process in the budget policy, the
+# demand-driven size-class shelves of relay host loans in the broker, the
+# cold-storage prefetch planner, the plugin diagnostics that export them,
+# their portable tests, and the hash manifest the NeoSwap scope gate reads
+# (bookkeeping of those same files, not an engine). The pinned RPCS3 Core,
+# the relay and donor extensions, the storage engine and every other native
+# engine are byte-identical. See docs/neoswap-build434-7go-envelope.md.
+NEOSWAP_434_DELTA = {
+    'packages/neo_swap/ios/Classes/NeoSwap.cpp',
+    'packages/neo_swap/ios/Classes/NeoSwapBudget.h',
+    'packages/neo_swap/ios/Classes/NeoSwapColdPrefetch.h',
+    'packages/neo_swap/ios/Classes/NeoSwapHost.h',
+    'packages/neo_swap/ios/Classes/NeoSwapPlugin.mm',
+    'test/neoswap_budget_test.cpp',
+    'test/neoswap_cold_prefetch_test.cpp',
+    'test/neoswap_relay_loans_test.cpp',
+    'test/import_memory_candidate_scope_test.py',
+    'test/neoplay_build397_integration_test.py',
+    'native/import-memory-candidate.json',
+}
+DELTA |= NEOSWAP_434_DELTA
 INPUT_ROOTS = ('lib/', 'packages/', 'native/', 'build-utils/', 'assets/', 'test/')
 
 def sha(data):
