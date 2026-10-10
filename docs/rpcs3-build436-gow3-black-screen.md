@@ -83,7 +83,19 @@ of War III, la limite observée est la mémoire libre de tout l'iPhone, pas un
 refus erroné de NeoSwap. Dans la session 435, les donneurs n'ont pas démarré
 parce que le jeu s'est figé avant tout besoin de mémoire.
 
-## 4. À vérifier sur l'iPhone
+## 4. IPA livrée
+
+Build 436, source `cb74cb45000e825c0d4e0cb03100f1b3521cc3a3`, livraison run
+38085398784 (checks, natif et Release réussis), Core épinglé `96d7e709`
+(run 38081733944). IPA scellée
+`NeoStation-Build436-cb74cb45000e825c0d4e0cb03100f1b3521cc3a3-cold.ipa` :
+205 927 883 octets, SHA-256
+`43d86f9830fec4378571947d74d3aba94f30064a155dd0213d4f9f0a10d82a05`,
+57 signatures ad hoc vérifiées ; elle s'installe après re-signature Apple
+par SideStore. Elle contient aussi l'indicateur de batterie de la manette
+(`6a903992`). Non testée sur l'iPhone.
+
+## 5. À vérifier sur l'iPhone
 
 1. Lancer God of War III (Build 436) : le jeu doit dépasser l'écran noir.
 2. Transmettre `RPCS3-diagnostic.log` et `NeoSwap-v1.jsonl` après quelques

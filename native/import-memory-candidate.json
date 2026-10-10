@@ -871,7 +871,7 @@
     "test/native/rpcs3_build435_core_delta_test.cpp": "8aef04558a2522899c5ed0b9d4b9dc7803a7d094d568c25c4c275fb15043e10a",
     "test/rpcs3_xitrix_v011_native_test.py": "a6b055c93589a065375a7f336599e2d2ae5e784b06a6cf5a3f6b5dfe6d33b4c0",
     "docs/rpcs3-xitrix-v011-build436.md": "0fdcb93ec096df12755f60dc372c3cbee75b6244911aeafe3ee2c1db25f616c5",
-    "docs/rpcs3-build436-gow3-black-screen.md": "b4976dc8050e0082f57b728bb9b62ef97ed815b549bc4495da0e3465ed559730"
+    "docs/rpcs3-build436-gow3-black-screen.md": "3e3b88a21a168c8c1046c66a1ddaba3f47fd8c0faf97fda2d379616dd8f7613d"
   },
   "support_git_modes": {
     ".github/workflows/neoswap-storage-prototype.yml": "100644",
