@@ -239,8 +239,8 @@ static void TestReservation(void) {
   if (object != MACH_PORT_NULL) mach_port_deallocate(mach_task_self(), object);
   CHECK(region == KERN_SUCCESS && probe == base && info.protection == VM_PROT_NONE,
         @"without access: address space only, no memory");
-  CHECK([LibretroPPSSPPReservationReport() hasPrefix:[NSString stringWithFormat:@"[HOST] PPSSPP window held at 0x%llx", base]],
-        @"held report: %@", LibretroPPSSPPReservationReport());
+  NSString *heldPrefix = [NSString stringWithFormat:@"[HOST] PPSSPP window held at 0x%llx", base];
+  CHECK([LibretroPPSSPPReservationReport() hasPrefix:heldPrefix], @"held report: %@", LibretroPPSSPPReservationReport());
 
   // Boot: views free at the base, the rest of the span still held.
   CHECK(LibretroPPSSPPReleaseViewsForBoot() == base, @"the views are released at the reserved base");
