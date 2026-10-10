@@ -594,8 +594,59 @@ JetsamEvent. Accepter uniquement des gains mesurés sans perte de données.
 
 ## 11. Identité de la livraison
 
-Renseignée après l'exécution des workflows (commit, runs, SHA-256 de
-l'IPA, taille, signatures).
+**Build 434**, IPA de test (NeoSwap : enveloppe mesurée, étagères,
+préchargement froid), sur la Build 433 du mainteneur :
+
+- source : `c27a16dc9f8baa2f9a16f1fa3d093e54a817540d` (`Claude`, au-dessus de
+  `fda42ee0`, Build 433 ; aucun fichier de la 433 modifié) ;
+- run de livraison : [38061542006](https://github.com/TarbleFR/neostation-ios/actions/runs/38061542006)
+  (`retroarch-delivery.yml`, `workflow_dispatch`, `build_number=434`) :
+  jobs `checks` (validation Dart réutilisée à l'identité des entrées,
+  `verify_delivery_reuse` en ligne, gardes de pipeline), `native` (Swift
+  réutilisé, hôte libretro, modules frontend, shaders Metal, compilation
+  iPhone des sources libretro) et « Release device build • cold »
+  (compilation Xcode 26.3 Release arm64 en 198,7 s, 13 validations d'IPA,
+  scellement et export en 47,0 s) réussis ; Core RPCS3 `afb33454` run
+  `37620034517`, Cores ARMSX2/Dusklight/KartPad et cœurs libretro réutilisés
+  par identité exacte ;
+- artefact chiffré (destinataire `delivery-424-recipient.pem`) :
+  `NeoStation-Build-434-c27a16dc9f8baa2f9a16f1fa3d093e54a817540d-cold`,
+  id [11672918827](https://github.com/TarbleFR/neostation-ios/actions/runs/38061542006/artifacts/11672918827),
+  206 116 765 octets, empreinte SHA-256 du zip
+  `25dc91ec306ce688f139831bf29cdc083819bc63784a765df080be7f3e79d412`,
+  rétention 14 jours (jusqu'au 24 octobre 2026) ; diagnostics chiffrés :
+  id 11672993537 ;
+- IPA avant scellement (`shasum` de l'étape de validation) : SHA-256
+  `4da0b9c2812dc8b003c5c32465c7d48cadb036de861d9db50081e5a42cd3659f`,
+  environ 192 Mio. Le scellement re-signe chaque binaire en ad hoc, vérifie
+  que les sections de code et de données et les métadonnées ABI sont
+  inchangées (`allCompiledCodeAndDataSectionsUnchangedBySigning`), puis
+  réarchive l'IPA : **l'empreinte de l'IPA scellée n'est pas écrite dans le
+  journal**, elle est dans `SHA256SUMS` et `signed-payload-identity.json`
+  (`ipaSha256`, `ipaBytes`) de l'artefact déchiffré, à relever à
+  l'installation ;
+- installation : par SideStore, qui applique la signature et le profil du
+  compte configuré. Aucun test sur iPhone à ce stade.
+
+Validations Apple du même commit :
+
+- [38061545630](https://github.com/TarbleFR/neostation-ios/actions/runs/38061545630)
+  `neoswap-donation-check.yml` : réussi (noyau macOS, NSXPC, stress ; harnais
+  Simulator iOS 18 compilant `NeoSwap.cpp` et `NeoSwapPlugin.mm` avec de vrais
+  donneurs) ;
+- [38061543678](https://github.com/TarbleFR/neostation-ios/actions/runs/38061543678)
+  `neoswap-relay-check.yml` : réussi (backend injecté, 1 Gio écrit après
+  sortie réelle du créateur, capacité 8 Gio, extension Simulator iOS 18 avec
+  le courtier de production et ses étagères, compilation et édition de liens
+  iPhone arm64) ;
+- [38061547151](https://github.com/TarbleFR/neostation-ios/actions/runs/38061547151)
+  `neoswap-check.yml` : échoué à la porte de périmètre, exactement sur la
+  dérive antérieure décrite en § 10 (`neoplay-check.yml` comparé à
+  `12fb62f9`), après les six contrôles précédents réussis ; les suites du
+  courtier qui suivent cette porte sont celles exécutées localement.
+
+Ce paragraphe a été ajouté après la compilation, sans changer aucune entrée
+de la Build 434 ; le commit qui le porte n'est pas celui de l'IPA.
 
 ## Sources primaires
 
