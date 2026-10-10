@@ -40,6 +40,7 @@ int main(int argc, const char *argv[]) {
     NSString *current = [directory stringByAppendingPathComponent:@"session.log"];
     NSString *previous = [directory stringByAppendingPathComponent:@"previous-session.log"];
     NSString *unfinished = [directory stringByAppendingPathComponent:@"unfinished-session.log"];
+    NSString *failedLaunch = [directory stringByAppendingPathComponent:@"failed-launch.log"];
 
     CHECK([LibretroSessionJournal journalInDirectory:@""] == nil, @"no directory, no journal");
 
@@ -108,6 +109,28 @@ int main(int argc, const char *argv[]) {
       if ([timestamped numberOfMatchesInString:line options:0 range:NSMakeRange(0, line.length)] != 1) wellFormed = NO;
     }
     CHECK(whole == 400 && wellFormed, @"400 concurrent notes, each on its own well-formed line (%lu)", (unsigned long)whole);
+    CHECK(![NSFileManager.defaultManager fileExistsAtPath:failedLaunch], @"no failed launch, no failed-launch.log");
+
+    // A failed launch is kept as failed-launch.log through later sessions.
+    LibretroSessionJournal *failed = [LibretroSessionJournal journalInDirectory:directory];
+    [failed note:@"load: PPSSPP memory"];
+    [failed finishWithOutcome:@"launch failed LIBRETRO_CORE_STOPPED"];
+    for (int later = 0; later < 3; later++) {
+      [[LibretroSessionJournal journalInDirectory:directory] finishWithOutcome:@"closed"];
+    }
+    NSString *keptFailure = Read(failedLaunch);
+    CHECK([keptFailure containsString:@"load: PPSSPP memory"] &&
+              [Lines(keptFailure).lastObject isEqualToString:@"END launch failed LIBRETRO_CORE_STOPPED"],
+          @"the failed launch is kept whole as failed-launch.log after three later sessions");
+    CHECK(![Read(previous) containsString:@"load: PPSSPP memory"], @"while the rotation dropped it from previous-session.log");
+    LibretroSessionJournal *again = [LibretroSessionJournal journalInDirectory:directory];
+    [again note:@"load: second failure"];
+    [again finishWithOutcome:@"launch failed LIBRETRO_LOAD_FAILED"];
+    [again finishWithOutcome:@"launch failed twice"];
+    keptFailure = Read(failedLaunch);
+    CHECK([keptFailure containsString:@"load: second failure"] && ![keptFailure containsString:@"load: PPSSPP memory"] &&
+              [Lines(keptFailure).lastObject isEqualToString:@"END launch failed LIBRETRO_LOAD_FAILED"],
+          @"a later failure replaces it, a second END is ignored");
   }
   printf("%s: %d failure(s)\n", failures == 0 ? "session_journal_test passed" : "session_journal_test FAILED", failures);
   return failures == 0 ? 0 : 1;

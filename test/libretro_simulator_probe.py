@@ -24,9 +24,14 @@ It boots a simulator, runs the scenarios (launch like the plugin, run,
 teardown order and that the game view is gone. Evidence (results, progress
 log, journals, simulator log, crash reports) goes to --evidence.
 
+`ppsspp-crowded` leaves no base of PPSSPP's memory window free except
+what the bridge reserved after launch (see probe.m), the iPhone's state when
+PSP games failed with "Memory init failed".
+
 With --sources (another bridge tree, e.g. the commit before a fix) and
 --expect unfixed, it records whether that tree's process dies while a
-scenario is being closed; it never fails on that outcome.
+scenario is being closed, or whether PPSSPP finds no memory base in the
+crowded window; it never fails on those outcomes.
 
 Azahar itself cannot start in the simulator: the simulator GPU has no
 arrays of textures or samplers, so its renderer throws
@@ -92,6 +97,9 @@ SCENARIOS = [
     {'name': 'ppsspp-prx', 'core': 'ppsspp', 'content': 'content/simple.prx', 'console': 'psp', 'expect': 'run'},
     {'name': 'ppsspp-iso-1', 'core': 'ppsspp', 'content': 'content/probe.iso', 'console': 'psp', 'expect': 'run'},
     {'name': 'ppsspp-iso-2', 'core': 'ppsspp', 'content': 'content/probe.iso', 'console': 'psp', 'expect': 'run'},
+    {'name': 'ppsspp-crowded', 'core': 'ppsspp', 'content': 'content/probe.iso', 'console': 'psp', 'expect': 'run',
+     'crowdWindow': True, 'requiredLog': ['[HOST] PPSSPP window held at', 'view ranges released for this boot',
+                                          'teardown: [HOST] PPSSPP window held at']},
     {'name': 'neovk-1', 'core': 'neovk', 'content': 'content/Test Game.ntc', 'console': 'gb', 'expect': 'run',
      'requiredLog': ['neovk create_device: device created by the core',
                      "neovk unload_game: resources destroyed through the frontend's device"]},
@@ -523,7 +531,7 @@ def evaluate(report, scenarios):
             if launch.get('success') or launch.get('code') != 'LIBRETRO_CORE_STOPPED':
                 problems.append(f"{name}: expected a LIBRETRO_CORE_STOPPED launch failure, got "
                                 f"{launch.get('success')} {launch.get('code')}")
-            elif 'neotest boot failed: simulated' not in launch.get('message', ''):
+            elif scenario.get('stopMessage', 'neotest boot failed: simulated') not in launch.get('message', ''):
                 problems.append(f"{name}: the failure does not quote the core's error: {launch.get('message')}")
             if result.get('presentedAtEnd') or result.get('activeAfterStop'):
                 problems.append(f'{name}: the game view or session stayed after the failure')
@@ -547,7 +555,7 @@ def summarise(report, scenarios):
         if not launch.get('success'):
             print(f"    message: {launch.get('message')}", flush=True)
         for line in result.get('journal', '').splitlines():
-            if 'unavailable' in line or 'PPSSPP memory window' in line:
+            if 'unavailable' in line or 'PPSSPP memory window' in line or 'PPSSPP window' in line:
                 print(f'    {line.split(" ", 2)[-1]}', flush=True)
 
 
@@ -569,12 +577,19 @@ def command_run(args):
           f"exitedEarly={outcome['exitedEarly']} in {outcome['seconds']} s", flush=True)
     summarise(report, scenarios)
     if args.expect == 'unfixed':
-        # Informational: does this tree's process die while closing a game?
+        # Informational: does this tree's process die while closing a game,
+        # does PPSSPP find no memory base in the crowded window?
         died_closing = [scenario['name'] for scenario in scenarios
                         if f"{scenario['name']}: stop requested" in progress
                         and f"{scenario['name']}: stopped" not in progress]
+        results = {result['name']: result for result in report.get('results', [])}
+        no_base = [scenario['name'] for scenario in scenarios if scenario.get('crowdWindow')
+                   and not results.get(scenario['name'], {}).get('launch', {}).get('success', True)
+                   and 'Failed finding a memory base' in results[scenario['name']].get('journal', '')]
         if died_closing and not outcome['finished']:
             print(f'REPRODUCED with {args.label}: the process died while closing {", ".join(died_closing)}')
+        elif no_base:
+            print(f'REPRODUCED with {args.label}: PPSSPP found no memory base in {", ".join(no_base)}')
         else:
             print(f'NOT REPRODUCED with {args.label} in the simulator (finished={outcome["finished"]})')
         return

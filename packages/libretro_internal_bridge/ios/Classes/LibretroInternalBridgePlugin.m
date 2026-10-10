@@ -1,5 +1,6 @@
 #import "LibretroInternalBridgePlugin.h"
 
+#import "LibretroAddressSpace.h"
 #import "LibretroDefaultSkins.h"
 #import "LibretroFrontendStore.h"
 #import "LibretroGeometry.h"
@@ -172,6 +173,13 @@ static NSDictionary<NSString *, id> *Failure(NSString *code, NSString *message) 
   instance.channel = channel;
   instance.lastLog = @[];
   [registrar addMethodCallDelegate:instance channel:channel];
+  // PPSSPP's memory window, reserved while it is still free: the 4-6 GiB
+  // window is crowded by the time a PSP game starts. Queued after the
+  // registration of every plugin, so the early reservations made while they
+  // register (RPCS3's JIT escrow) are already in place.
+  dispatch_async(dispatch_get_main_queue(), ^{
+    LibretroPPSSPPReserveWindow();
+  });
 }
 
 + (NSString *)frameworksDirectory {

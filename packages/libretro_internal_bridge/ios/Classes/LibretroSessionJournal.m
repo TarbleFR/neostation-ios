@@ -8,6 +8,8 @@
 static NSString *const kCurrentName = @"session.log";
 static NSString *const kPreviousName = @"previous-session.log";
 static NSString *const kUnfinishedName = @"unfinished-session.log";
+static NSString *const kFailedLaunchName = @"failed-launch.log";
+static NSString *const kFailedLaunchOutcome = @"launch failed";
 static NSString *const kEndMarker = @"\nEND ";
 
 /// A finished journal ends with its END line; only the tail is searched.
@@ -119,11 +121,20 @@ static NSString *JournalTimestamp(void) {
   [self note:[NSString stringWithFormat:@"session %@", outcome]];
   [self writeText:[NSString stringWithFormat:@"END %@\n", outcome]];
   os_unfair_lock_lock(&_lock);
-  if (_descriptor >= 0) {
+  BOOL closed = _descriptor >= 0;
+  if (closed) {
     close(_descriptor);
     _descriptor = -1;
   }
   os_unfair_lock_unlock(&_lock);
+  if (closed && [outcome hasPrefix:kFailedLaunchOutcome]) {
+    // Kept until another launch fails: the sessions after it rotate
+    // session.log and previous-session.log away.
+    NSFileManager *files = NSFileManager.defaultManager;
+    NSString *kept = [_path.stringByDeletingLastPathComponent stringByAppendingPathComponent:kFailedLaunchName];
+    [files removeItemAtPath:kept error:nil];
+    [files copyItemAtPath:_path toPath:kept error:nil];
+  }
 }
 
 @end

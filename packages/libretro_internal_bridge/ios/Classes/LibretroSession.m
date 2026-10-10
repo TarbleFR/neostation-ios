@@ -99,6 +99,8 @@ static void LibretroRestoreAppOrientations(UIViewController *presenter) {
   NSUInteger _startupFrames;
   double _startupSeconds;
   LibretroSessionJournal *_journal;
+  /// PPSSPP's view ranges released for this boot (emulation thread).
+  BOOL _ppssppViewsReleased;
   BOOL _menuPaused;
   BOOL _backgroundPaused;
   _Atomic bool _fastForward;
@@ -563,10 +565,16 @@ static void LibretroRestoreAppOrientations(UIViewController *presenter) {
                                             _host.libraryVersion ?: @""]];
   if ([_host.libraryName isEqualToString:@"PPSSPP"]) {
     // PPSSPP maps the PSP memory at fixed addresses between 4 and 6 GiB
-    // while it boots: record whether this process leaves room for it.
-    NSString *report = LibretroPPSSPPAddressSpaceReport();
-    [_host appendLog:report];
-    [_journal note:report];
+    // while it boots. The plugin reserved a free span there after launch
+    // (reserved now when that failed); its view ranges are released for
+    // this boot only, then reserved again once the core is unloaded.
+    LibretroPPSSPPReserveWindow();
+    LibretroPPSSPPReleaseViewsForBoot();
+    _ppssppViewsReleased = YES;
+    for (NSString *report in @[ LibretroPPSSPPReservationReport(), LibretroPPSSPPAddressSpaceReport() ]) {
+      [_host appendLog:report];
+      [_journal note:report];
+    }
   }
   if (![_host loadContentAtPath:configuration.contentPath error:&error]) return [self failureFromError:error];
   [_journal note:[NSString stringWithFormat:@"load: content accepted (%@)",
@@ -775,6 +783,12 @@ static void LibretroRestoreAppOrientations(UIViewController *presenter) {
         [journal note:@"teardown: renderer released"];
       }];
   host.teardownObserver = nil;
+  if (_ppssppViewsReleased) {
+    // PPSSPP unmapped its views in retro_unload_game.
+    _ppssppViewsReleased = NO;
+    LibretroPPSSPPRestoreReservation();
+    [journal note:[NSString stringWithFormat:@"teardown: %@", LibretroPPSSPPReservationReport()]];
+  }
   _finalLog = _host.recentLog;
 }
 

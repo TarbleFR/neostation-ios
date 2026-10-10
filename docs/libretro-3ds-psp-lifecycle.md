@@ -89,40 +89,50 @@ défaillant en soi. Le simulateur a aussi révélé deux défauts, corrigés :
   alloue 72 Mio n’importe où ; dans le simulateur, cette arène est tombée
   dans la fenêtre même qu’il lui faut ensuite. La mesure en tient compte.
 
-**Non établi** : la raison exacte de l’échec du démarrage PSP sur l’iPhone.
-L’échec intervient en moins de 0,2 s, donc tôt : identification ou montage
-du fichier, ou installation de la mémoire PSP. Pistes examinées :
+**Établi sur l’iPhone** (journal de la Build 431, 10 octobre 2026,
+10 h 11 UTC) : l’échec vient de l’espace d’adressage. Avant le démarrage,
+la mesure donne « no usable base among 256 probed (1790 regions mapped in
+0x100000000-0x18bff0000 …); largest hole 0x3ee8000 bytes ». PPSSPP
+confirme ensuite : `vm_remap failed (3)` vers `0x183800000`,
+`MemoryMap_Setup: Failed finding a memory base.`, puis
+`Memory init failed`. La session renvoie `LIBRETRO_CORE_STOPPED` avec ces
+lignes, comme prévu par la correction précédente.
 
-- **Écartées** :
-  - cœur ou fichiers PPSSPP absents : `ppsspp_libretro.framework` et
-    `LibretroSystem/PPSSPP` sont dans l’IPA 430 ;
-  - JIT : le cœur reçoit `GET_JIT_CAPABLE = false` et l’interpréteur IR est
-    imposé ;
-  - contexte OpenGL ES 2 : `GPU_Init` construit `GPU_GLES` sans pouvoir
-    échouer ;
-  - chargement de PPSSPP par la session : il démarre dans le simulateur.
-- **Plausible, propre à NeoStation : l’espace d’adressage.** Compilé pour
-  iOS (`MASKED_PSP_MEMORY`), PPSSPP place la mémoire PSP à des adresses
-  fixes. Il essaie une base alignée sur 8 Mio entre 4 et 6 Gio
-  (`MemoryMap_Setup`, `vm_remap` sans écrasement). Il lui faut 16 Kio à
-  +0x10000, 8 Mio à +0x4000000 et 64 Mio à +0x8000000, plus son arène de
-  72 Mio. Or NeoStation réserve dès son lancement environ 704 Mio de JIT
-  pour RPCS3 dans la première zone libre au-dessus de 4 Gio, et les mesures
-  de la Build 319 montraient un espace d’adressage déjà serré sur cet
-  iPhone. Sans base libre, PPSSPP échoue avec « Memory init failed ».
-- **Possible** : lecture du fichier (fichier iCloud ou fournisseur non
-  téléchargé, format inattendu) : PPSSPP le signalerait par « Failed to
-  mount ISO file » ou « Error identifying file ».
+Compilé pour iOS (`MASKED_PSP_MEMORY`), PPSSPP place la mémoire PSP à des
+adresses fixes. Il essaie une base alignée sur 8 Mio entre 4 Gio et
+`0x17FFF0000` (`MemoryMap_Setup`, `vm_remap` sans écrasement). Il lui faut
+16 Kio libres à +0x10000, 8 Mio à +0x4000000 et 64 Mio à +0x8000000 ; avant
+cela, son arène de 72 Mio est allouée n’importe où. Au moment d’un jeu PSP,
+cette fenêtre de NeoStation est morcelée en 1 790 régions et son plus grand
+trou fait 63 Mio : aucune base ne convient. Les autres pistes (cœur ou
+fichiers absents, JIT, contexte OpenGL ES, lecture du fichier) sont
+écartées par ce même journal : PPSSPP s’arrête avant de lire le jeu.
 
-Pour trancher sans nouvelle hypothèse livrée à l’aveugle, chaque démarrage
-PSP inscrit avant le chargement une ligne
-`[HOST] PPSSPP memory window, estimated before boot: …` : première base
-utilisable estimée ou absence de base, emplacement attendu de l’arène, plus
-grand trou. Dans le simulateur, PPSSPP a pris sa base un pas de 8 Mio après
-l’estimation. La ligne apparaît dans les détails techniques de l’erreur et
-dans le journal de session. Aucune réservation d’adresses n’est ajoutée tant
-que cette mesure n’a pas confirmé la piste. Une telle réservation pèserait
-sur RPCS3, Dusklight, Dolphin et ARMSX2, qui se partagent le même espace.
+**Correction** (`LibretroAddressSpace.m`) : la fenêtre est réservée tant
+qu’elle est encore libre.
+
+- Juste après le lancement de l’app, une fois tous les plugins
+  enregistrés, le plugin libretro réserve 192 Mio d’adresses (de la base
+  jusqu’à la fin de la dernière vue) à la plus haute base libre de la
+  fenêtre, sans accès (`VM_PROT_NONE`) : aucune mémoire n’est consommée.
+  La réservation JIT anticipée de RPCS3 est déjà en place à ce moment-là ;
+  RPCS3 n’est pas modifié.
+- Juste avant `retro_load_game` de PPSSPP, seules les trois plages des vues
+  sont libérées. Chacune est plus petite que l’arène de 72 Mio, qui va donc
+  ailleurs, et le reste de la plage réservée empêche toute autre allocation
+  de s’y installer. PPSSPP trouve ses vues libres à cette base.
+- Après le déchargement de PPSSPP, les plages des vues sont de nouveau
+  réservées. Si l’une d’elles a été prise entre-temps, elle n’est pas
+  touchée : seules les parties appartenant à la réservation sont libérées
+  et une nouvelle plage libre est cherchée.
+- Si la réservation au lancement a échoué, elle est retentée au lancement
+  du jeu PSP. Le journal de session indique chaque état :
+  `[HOST] PPSSPP window held at 0x…`, `view ranges released for this
+  boot`, `reserved again`.
+
+Les autres émulateurs (Dolphin, ARMSX2, Dusklight) allouent leur mémoire
+sans adresse imposée : ils ne perdent que ces 192 Mio d’adresses dans la
+zone de 4 à 6 Gio, sans mémoire consommée.
 
 ## Diagnostics ajoutés
 
@@ -138,6 +148,10 @@ Journal de session : `Fichiers › NeoStation › Libretro › Logs`.
   fichier se termine sur l’étape qui n’est jamais revenue.
 - La session suivante conserve ce fichier sous le nom
   `unfinished-session.log` et le précédent sous `previous-session.log`.
+- Un lancement en échec est aussi copié dans `failed-launch.log`, conservé
+  jusqu’au prochain échec : les sessions suivantes (nouvel essai, autre
+  jeu) ne le font plus disparaître par rotation, comme c’est arrivé au
+  premier journal PSP.
 
 ## Vérifications
 
@@ -151,8 +165,12 @@ Journal de session : `Fichiers › NeoStation › Libretro › Logs`.
 - **Modules portables (macOS)** : fenêtre mémoire de PPSSPP (fenêtre vide,
   réservation de type RPCS3, arène occupant le seul trou utilisable, base
   unique, trous entre les vues, entrées désordonnées, mesure du processus
-  réel) ; journal (écriture immédiate, rotation, session inachevée
-  conservée, écritures concurrentes).
+  réel) ; réservation sur le processus réel (plage entière réservée sans
+  accès à une base sondée par PPSSPP, vues libérables seules pour le
+  démarrage, reprise à la même base après déchargement, vue prise
+  entre-temps laissée intacte et nouvelle plage réservée) ; journal
+  (écriture immédiate, rotation, session inachevée conservée, écritures
+  concurrentes, lancement en échec conservé).
 - **Simulateur iOS 26.2** (`.github/workflows/libretro-simulator.yml`,
   runs 38009696405 sur `de2bd95c` et 38010857254 sur `19631f95`) : la vraie
   `LibretroSession`, dans la vraie pile UIKit, Metal, OpenGL ES et MoltenVK.
@@ -161,6 +179,11 @@ Journal de session : `Fichiers › NeoStation › Libretro › Logs`.
     le démarrage reçu comme `LIBRETRO_CORE_STOPPED` avec l’erreur du cœur ;
   - PPSSPP : programme de test PSP, puis image ISO deux fois, chacun quitté
     et relancé ;
+  - PPSSPP dans une fenêtre encombrée comme celle de l’iPhone : la case
+    scratchpad de chaque base sondée est occupée avant le lancement, si
+    bien qu’aucune base n’est libre sans la réservation (scénario
+    `ppsspp-crowded`) ; le job `before-reservation` rejoue ce scénario avec
+    les sources de la Build 431 ;
   - un cœur Vulkan de test qui crée le périphérique et détruit ses objets
     dans `retro_unload_game` comme Azahar : lancement, quitter, relancer,
     ses objets détruits par le périphérique encore vivant.
@@ -203,9 +226,8 @@ de la Build 431.
    retour doit se faire sur la liste 3DS sans passer par l’écran d’accueil
    d’iOS.
 2. Lancer un jeu PSP :
-   - s’il démarre, quitter puis relancer ;
-   - s’il échoue, le message traduit et les détails techniques donnent la
-     ligne `PPSSPP memory window` et l’erreur de PPSSPP. Les transmettre,
-     avec `Libretro/Logs/session.log`.
+   - s’il démarre, jouer quelques secondes, quitter puis relancer ;
+   - s’il échoue, transmettre `Libretro/Logs/failed-launch.log` (lignes
+     `PPSSPP window` et erreur de PPSSPP).
 3. Lancer et quitter un jeu d’une autre console (GBA, SNES, DS, N64) pour
    vérifier l’absence de régression de l’ordre de fermeture.

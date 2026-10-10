@@ -58,4 +58,30 @@ NSData *LibretroMappedRanges(uint64_t start, uint64_t end);
 /// not the kernel's allocation policy boundaries.
 NSString *LibretroPPSSPPAddressSpaceReport(void);
 
+/// PPSSPP's window, reserved while the address space is still free.
+///
+/// On the iPhone the 4-6 GiB window is crowded long before a PSP game
+/// starts (10 October 2026: 1790 mappings, largest hole 63 MiB, "Memory init
+/// failed"). The plugin therefore reserves the views' span (192 MiB of
+/// address space, VM_PROT_NONE: no memory is used) at the highest free
+/// 8 MiB-aligned base of the window shortly after launch, once the other
+/// plugins have made their early reservations (RPCS3's JIT escrow is taken
+/// while it registers). Right before PPSSPP boots, only the three view
+/// ranges are released: each is smaller than PPSSPP's 72 MiB arena, which
+/// therefore goes elsewhere, and PPSSPP's probe finds them free at that base.
+/// After the core is unloaded the view ranges are reserved again, or a new
+/// span is looked for when one of them was taken meanwhile. Thread-safe.
+
+/// Reserves the span if none is held. YES when one is held afterwards.
+BOOL LibretroPPSSPPReserveWindow(void);
+/// Releases the view ranges for a boot. Returns the base, 0 when no span is
+/// held.
+uint64_t LibretroPPSSPPReleaseViewsForBoot(void);
+/// After PPSSPP was unloaded: reserves the view ranges again.
+void LibretroPPSSPPRestoreReservation(void);
+/// Base of the held span, 0 when none.
+uint64_t LibretroPPSSPPReservedBase(void);
+/// "[HOST] PPSSPP window ..." describing the reservation, for the journal.
+NSString *LibretroPPSSPPReservationReport(void);
+
 NS_ASSUME_NONNULL_END

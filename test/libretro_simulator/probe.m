@@ -12,11 +12,22 @@
 // Documents/probe-progress.log, written line by line as it happens, so a
 // process that dies leaves the step it died in (with the session journal
 // in Documents/Libretro/Logs).
+//
+// Like the plugin, the probe reserves PPSSPP's memory window right after
+// launch (looked up with dlsym: older bridge sources have no reservation).
+// A scenario with "crowdWindow" first takes the scratchpad slot of every
+// base PPSSPP probes (base + 0x10000, 16 KiB, every 8 MiB from 4 GiB) that
+// is still free, so no base of the window is usable unless reserved
+// beforehand: the state of the iPhone on 10 October 2026 ("Failed finding
+// a memory base"), while the holes between the slots still take the
+// allocations made meanwhile, as the iPhone's lower holes do.
 #import <UIKit/UIKit.h>
 
 #import "LibretroSession.h"
 
+#include <dlfcn.h>
 #include <fcntl.h>
+#include <mach/mach.h>
 #include <unistd.h>
 
 static NSString *DocumentsPath(NSString *component) {
@@ -51,6 +62,38 @@ static NSString *ReadText(NSString *path) {
   return [NSString stringWithContentsOfFile:path encoding:NSUTF8StringEncoding error:nil] ?: @"";
 }
 
+/// PPSSPP's probe (Core/MemMap.cpp): bases from 4 GiB, below this limit, in
+/// 8 MiB steps; the scratchpad view at base + 0x10000.
+static const uint64_t kProbeBaseMinimum = 0x100000000ull;
+static const uint64_t kProbeBaseLimit = 0x17FFF0000ull;
+static const uint64_t kProbeBaseStride = 0x800000ull;
+static const uint64_t kScratchpadOffset = 0x10000ull;
+static const uint64_t kScratchpadSize = 0x4000ull;
+
+/// Takes every free scratchpad slot of the window. Returns the slots taken.
+static NSArray<NSNumber *> *CrowdWindow(void) {
+  NSMutableArray<NSNumber *> *taken = [NSMutableArray array];
+  for (uint64_t base = kProbeBaseMinimum; base < kProbeBaseLimit; base += kProbeBaseStride) {
+    vm_address_t slot = (vm_address_t)(base + kScratchpadOffset);
+    if (vm_allocate(mach_task_self(), &slot, (vm_size_t)kScratchpadSize, VM_FLAGS_FIXED) != KERN_SUCCESS) continue;
+    vm_protect(mach_task_self(), slot, (vm_size_t)kScratchpadSize, FALSE, VM_PROT_NONE);
+    [taken addObject:@((uint64_t)slot)];
+  }
+  return taken;
+}
+
+static void ReleaseCrowd(NSArray<NSNumber *> *taken) {
+  for (NSNumber *slot in taken) {
+    vm_deallocate(mach_task_self(), (vm_address_t)slot.unsignedLongLongValue, (vm_size_t)kScratchpadSize);
+  }
+}
+
+/// The bridge's reservation report, when these sources have one.
+static NSString *ReservationReport(void) {
+  NSString *(*report)(void) = (NSString * (*)(void)) dlsym(RTLD_DEFAULT, "LibretroPPSSPPReservationReport");
+  return report != NULL ? report() : @"no reservation in these sources";
+}
+
 @interface ProbeAppDelegate : UIResponder <UIApplicationDelegate>
 @property(nonatomic, strong) UIWindow *window;
 @end
@@ -80,6 +123,12 @@ static NSString *ReadText(NSString *path) {
   _results = [NSMutableArray array];
   [self prepareDirectories];
   Progress(@"probe started: %lu scenarios, source %@", (unsigned long)_scenarios.count, _config[@"source"] ?: @"?");
+  // As LibretroInternalBridgePlugin does once the plugins are registered.
+  dispatch_async(dispatch_get_main_queue(), ^{
+    BOOL (*reserve)(void) = (BOOL (*)(void))dlsym(RTLD_DEFAULT, "LibretroPPSSPPReserveWindow");
+    if (reserve != NULL) reserve();
+    Progress(@"PPSSPP window at launch: %@", ReservationReport());
+  });
   dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
     [self runNext];
   });
@@ -157,6 +206,12 @@ static NSString *ReadText(NSString *path) {
   NSString *name = scenario[@"name"];
   NSUInteger generation = ++_generation;
   NSMutableDictionary *result = [@{@"name" : name, @"core" : scenario[@"core"] ?: @""} mutableCopy];
+  if ([scenario[@"crowdWindow"] boolValue]) {
+    NSArray<NSNumber *> *crowd = CrowdWindow();
+    result[@"crowd"] = crowd;
+    Progress(@"%@: %lu scratchpad slots of the PPSSPP window taken; %@", name, (unsigned long)crowd.count,
+             ReservationReport());
+  }
   UIViewController *root = self.window.rootViewController;
   LibretroSession *session = [[LibretroSession alloc] initWithConfiguration:[self configurationForScenario:scenario]];
   _session = session;
@@ -230,6 +285,12 @@ static NSString *ReadText(NSString *path) {
     result[@"presentedAtEnd"] = @(self.window.rootViewController.presentedViewController != nil);
     result[@"recentLog"] = Tail(session.recentLog, 80);
     result[@"journal"] = ReadText(DocumentsPath(@"Libretro/Logs/session.log"));
+    NSArray<NSNumber *> *crowd = result[@"crowd"];
+    if (crowd != nil) {
+      ReleaseCrowd(crowd);
+      result[@"crowd"] = @(crowd.count);
+      result[@"reservationAfter"] = ReservationReport();
+    }
     [self->_results addObject:result];
     [self writeResultsFinished:NO];
     self->_session = nil;

@@ -12,9 +12,14 @@ NS_ASSUME_NONNULL_BEGIN
 /// `unfinished-session.log`, its last line naming the step that never
 /// returned.
 ///
+/// A session finished as "launch failed ..." is also copied to
+/// `failed-launch.log`, kept until another launch fails: the sessions
+/// started after a failure (retries, other games) would otherwise rotate
+/// it away before it can be read.
+///
 /// Files, in Files › NeoStation › Libretro › Logs: `session.log` (current
-/// or last session), `previous-session.log`, `unfinished-session.log`.
-/// Thread-safe.
+/// or last session), `previous-session.log`, `unfinished-session.log`,
+/// `failed-launch.log`. Thread-safe.
 @interface LibretroSessionJournal : NSObject
 
 /// Starts `session.log` in `directory` (created when missing), after
@@ -31,7 +36,9 @@ NS_ASSUME_NONNULL_BEGIN
 /// A titled block of lines (the core's log), indented.
 - (void)noteLines:(NSArray<NSString *> *)lines title:(NSString *)title;
 
-/// Writes "END <outcome>" and closes the file; later notes are ignored.
+/// Writes "END <outcome>" and closes the file; later notes are ignored. An
+/// outcome starting with "launch failed" copies the file to
+/// `failed-launch.log`.
 - (void)finishWithOutcome:(NSString *)outcome;
 
 @end

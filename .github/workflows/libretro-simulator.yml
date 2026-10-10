@@ -3,7 +3,8 @@ name: Libretro simulator probe
 # "Quit game" and relaunch with the real PPSSPP core (a PSP test program,
 # directly and inside an ISO), a Vulkan test core that tears down like
 # Azahar (the simulator GPU cannot start Azahar itself) and the NeoTest
-# core, including a core that stops while starting. See
+# core, including a core that stops while starting, and a PSP game in an
+# address space as crowded as the iPhone's. See
 # test/libretro_simulator_probe.py. A simulator run is not an iPhone test.
 'on':
   push:
@@ -94,6 +95,45 @@ jobs:
       if: always()
       with:
         name: libretro-simulator-before-fix-${{ github.sha }}
+        path: evidence/
+        if-no-files-found: warn
+        retention-days: 14
+  # The crowded PSP scenario with the sources before PPSSPP's window was
+  # reserved (Build 431), on a runner of its own. Informational: it records
+  # whether PPSSPP finds no memory base, as on the iPhone; it does not fail
+  # the run.
+  before-reservation:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        persist-credentials: false
+    - name: Select Xcode 26.3
+      uses: maxim-lobanov/setup-xcode@v1
+      with:
+        xcode-version: '26.3'
+    - name: Download the libretro cores pinned by the delivery
+      uses: actions/download-artifact@v4
+      with:
+        name: LibretroCores-48635465f4bdb324db4ff41b8b9815ff101ad360
+        run-id: '37945318237'
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        path: dist/libretro
+    - name: Fetch the pinned MoltenVK simulator slice and test content
+      run: python3 test/libretro_simulator_probe.py fetch --into "$RUNNER_TEMP/probe-inputs"
+    - name: Start a PSP game in a crowded window with the sources before the reservation
+      run: |
+        git worktree add "$RUNNER_TEMP/before-reservation" 15a24516bf198f8f1dd43c300aadbbc7c313926c
+        python3 test/libretro_simulator_probe.py run --cores dist/libretro --inputs "$RUNNER_TEMP/probe-inputs" \
+          --sources "$RUNNER_TEMP/before-reservation/packages/libretro_internal_bridge/ios" --only ppsspp-crowded \
+          --expect unfixed --evidence evidence/before-reservation \
+          --label 15a24516bf198f8f1dd43c300aadbbc7c313926c --timeout 300
+    - uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: libretro-simulator-before-reservation-${{ github.sha }}
         path: evidence/
         if-no-files-found: warn
         retention-days: 14
