@@ -55,8 +55,9 @@ SPU.
   Le premier Core construit avec l'interrupteur seul (run 38079020895) a été
   annulé : `neo_swap_core_pin_test.py` épinglait encore le patch 435 et la
   livraison l'aurait refusé.
-- Nouveau cœur construit par `rpcs3-core.yml`, puis épinglé dans la voie de
-  livraison une fois la construction réussie.
+- Nouveau cœur construit par `rpcs3-core.yml` : run 38081733944 sur
+  `96d7e709`, réussi ; épinglé dans `retroarch-delivery.yml` et
+  `neoswap-ipa.yml`.
 
 Non démontré : la ligne exacte du défaut dans le chemin différé. Hypothèses
 non vérifiées : résultats flottants différents entre l'interpréteur et le

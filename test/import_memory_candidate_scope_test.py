@@ -1007,6 +1007,18 @@ IPA_WORKFLOW_BUILD435_LINES = (
      '            test/rpcs3_build435_core_delta_test.py \\\n'
      '            test/native/rpcs3_build435_core_delta_test.cpp \\\n'),
 )
+# Build436 lines (10 October 2026), applied after the Build435 lines: the Core
+# built from 96d7e709 by run 38081733944 (deferred SPU compilation switched off,
+# five XITRIX v0.11 RSX/Vulkan fixes) and its host-executed fixture runner in
+# the exact-diff guard. Each pair applies exactly once.
+IPA_WORKFLOW_BUILD436_LINES = (
+    ('      RPCS3_CORE_HOST_SHA: 6fede58ae799214ce59cfecbae79b66d01d33b37\n',
+     '      RPCS3_CORE_HOST_SHA: 96d7e709abae9e230254e7b26db8286cf05eb5a4\n'),
+    ("      RPCS3_CORE_RUN_ID: '38068094552'\n", "      RPCS3_CORE_RUN_ID: '38081733944'\n"),
+    ('            test/rpcs3_xitrix_v0101_native_test.py \\\n',
+     '            test/rpcs3_xitrix_v0101_native_test.py \\\n'
+     '            test/rpcs3_xitrix_v011_native_test.py \\\n'),
+)
 for path in ARMSX2_INTEGRATION_FILES:
     revision = ARMSX2_INTEGRATION_OVERRIDES.get(path, ARMSX2_INTEGRATION_SHA)
     reviewed = subprocess.check_output(['git', 'show', revision + ':' + path], cwd=ROOT)
@@ -1014,6 +1026,9 @@ for path in ARMSX2_INTEGRATION_FILES:
         text = reviewed.decode('utf-8')
         for old, new in IPA_WORKFLOW_BUILD435_LINES:
             assert text.count(old) == 1, 'Build435 IPA workflow line expected once: ' + old
+            text = text.replace(old, new, 1)
+        for old, new in IPA_WORKFLOW_BUILD436_LINES:
+            assert text.count(old) == 1, 'Build436 IPA workflow line expected once: ' + old
             text = text.replace(old, new, 1)
         reviewed = text.encode('utf-8')
     elif path == '.github/workflows/neoswap-ipa.yml':
@@ -1208,8 +1223,11 @@ for workflow_path in ('.github/workflows/neoswap-ipa.yml', '.github/workflows/io
         # Build435 Core (run 38068094552 on 6fede58a): measured memory allowance,
         # deferred SPU compilation and writer-lock precheck; its inputs no longer
         # match the Build412 Core.
-        assert re.findall(r'(?m)^      RPCS3_CORE_HOST_SHA: (.+)$', workflow) == ['6fede58ae799214ce59cfecbae79b66d01d33b37']
-        assert re.findall(r'(?m)^      RPCS3_CORE_RUN_ID: (.+)$', workflow) == ["'38068094552'"]
+        # Build436 Core (run 38081733944 on 96d7e709): deferred SPU compilation
+        # switched off and five XITRIX v0.11 RSX/Vulkan fixes; its inputs no
+        # longer match the Build435 Core.
+        assert re.findall(r'(?m)^      RPCS3_CORE_HOST_SHA: (.+)$', workflow) == ['96d7e709abae9e230254e7b26db8286cf05eb5a4']
+        assert re.findall(r'(?m)^      RPCS3_CORE_RUN_ID: (.+)$', workflow) == ["'38081733944'"]
         assert "assert result['head_sha']==os.environ['RPCS3_CORE_HOST_SHA']" in workflow
         assert "assert result['conclusion']=='success'" in workflow
         assert 'validate_core_input_identity(identity)' in workflow

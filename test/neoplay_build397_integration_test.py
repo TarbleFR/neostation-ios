@@ -336,10 +336,10 @@ class Build398Integration(unittest.TestCase):
         subprocess.run([sys.executable, str(ROOT / 'test/neoswap_ipa_previous_build_gate_test.py')], cwd=ROOT, check=True, timeout=60)
         self.assertIn('cp docs/neoplay/BUILD418.md build/private-test/Notes-NeoPlay-Build418.md', text)
         self.assertIn('cp docs/neoswap-build419-memory.md build/private-test/Notes-NeoSwap-Build419.md', text)
-        # The Build435 Core (measured allowance, deferred SPU compilation, writer-lock
-        # precheck): its inputs no longer match the Build412 Core pin.
-        self.assertIn("RPCS3_CORE_HOST_SHA: 6fede58ae799214ce59cfecbae79b66d01d33b37", text)
-        self.assertIn("RPCS3_CORE_RUN_ID: '38068094552'", text)
+        # The Build436 Core (deferred SPU compilation switched off, five XITRIX
+        # v0.11 RSX/Vulkan fixes): its inputs no longer match the Build435 Core pin.
+        self.assertIn("RPCS3_CORE_HOST_SHA: 96d7e709abae9e230254e7b26db8286cf05eb5a4", text)
+        self.assertIn("RPCS3_CORE_RUN_ID: '38081733944'", text)
         self.assertIn('needs: wait-evidence', text)
         self.assertIn("xcode-version: '26.3'", text)
         self.assertLess(text.index('python3 build-utils/configure_neoplay_ios.py'), text.index('pod install --project-directory=ios'))

@@ -103,4 +103,15 @@ portable de la fixture (mode amont hors macOS) puis avec le moteur de
 production, `-Wreturn-type` restant un avertissement pour cette seule
 compilation ; toutes les fixtures s'exécutent et l'échec est signalé à la fin.
 
+Second passage CI (run 38081733944, `96d7e709`, réussi en 52 min) : toutes
+les fixtures réussissent — sélection de framebuffer (21 contrôles, contrôle
+négatif en échec attendu), pool d'images Vulkan (200 604 contrôles, contrôle
+négatif en échec attendu), optimisation, sommets (100 000 dispositions),
+fence avec le moteur portable puis le moteur de production (10 000 échanges,
+quatre attentes, seul avertissement `-Wreturn-type` d'`atomic.cpp`),
+descripteurs (200 000 mutations), indices, plages WRC4 (100 000 plages) et
+alpha-to-one (contrôle négatif en échec attendu). Le Core
+`RPCS3Core-96d7e709abae9e230254e7b26db8286cf05eb5a4` (28,3 Mo, conservé
+jusqu'au 9 novembre 2026) est épinglé dans la voie de livraison.
+
 Licence : XITRIX/rpcs3 et ses fixtures sont sous GPL-2.0-only.
