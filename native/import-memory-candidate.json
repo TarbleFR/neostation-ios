@@ -861,7 +861,7 @@
     "docs/neoplay/WINDOWS-0.8.0.md": "9a328557d223cf8caf9e38d048bba657d1fb99dd5c955f4ae9744585e45c7b89",
     "test/ios_rom_library_root_resolver_test.dart": "860cafc4bf608a05493a7945d6b2b47d540747887be9a2fef0043ce8ec3b92fc",
     "test/neoswap_cold_prefetch_test.cpp": "b97a9f3f3ed8caf4a8f37a1069dc53e2a82d9d325e572d6b8d353f60a1dd4f5b",
-    "docs/neoswap-build434-7go-envelope.md": "53e52a0e432a46527c69a5a0ad9e0dff34d45221bbbff16ca483fe79ddbabf81"
+    "docs/neoswap-build434-7go-envelope.md": "277fe08102efe05386cf11cb235a7b84d352f9fb8774b5d6a8fa6684d5b8a53d"
   },
   "support_git_modes": {
     ".github/workflows/neoswap-storage-prototype.yml": "100644",

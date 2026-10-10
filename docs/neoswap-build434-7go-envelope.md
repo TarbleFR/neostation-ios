@@ -621,10 +621,17 @@ préchargement froid), sur la Build 433 du mainteneur :
   environ 192 Mio. Le scellement re-signe chaque binaire en ad hoc, vérifie
   que les sections de code et de données et les métadonnées ABI sont
   inchangées (`allCompiledCodeAndDataSectionsUnchangedBySigning`), puis
-  réarchive l'IPA : **l'empreinte de l'IPA scellée n'est pas écrite dans le
-  journal**, elle est dans `SHA256SUMS` et `signed-payload-identity.json`
-  (`ipaSha256`, `ipaBytes`) de l'artefact déchiffré, à relever à
-  l'installation ;
+  réarchive l'IPA ; l'empreinte scellée n'est pas écrite dans le journal CI ;
+- IPA scellée, relevée le 10 octobre 2026 après déchiffrement de l'artefact
+  sur le PC du mainteneur (clé privée delivery-424, `gh run download`,
+  `openssl pkeyutl` RSA-OAEP SHA-256 puis `openssl enc` AES-256-CBC PBKDF2,
+  dossier `nsw\b434\content`) :
+  `NeoStation-Build434-c27a16dc9f8baa2f9a16f1fa3d093e54a817540d-cold.ipa`,
+  SHA-256 `bc0e766bd7162f855d288cbed1199b8fb2290f2f9083a50eac1d54f6c00eded3`,
+  205 913 778 octets, valeur identique dans `SHA256SUMS` et dans
+  `signed-payload-identity.json` (`ipaSha256`, `ipaBytes`) ; 57 signatures
+  ad hoc de préparation vérifiées sur 57 (`signature.json`), 54 images
+  Mach-O aux sections de code et de données inchangées ;
 - installation : par SideStore, qui applique la signature et le profil du
   compte configuré. Aucun test sur iPhone à ce stade.
 
