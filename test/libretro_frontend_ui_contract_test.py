@@ -112,11 +112,20 @@ for key in ('catalogLoading', 'catalogFailed', 'catalogRetry', 'catalogEmpty', '
     require(f"'{key}'" in catalog, f'catalog shows {key}')
 require('isDirectDownload' in catalog and 'errorBuilder' in catalog, 'non-archive links and broken thumbnails')
 
-# Consoles: every console, import into the registered roms folder, rescan of
-# the receiving system only.
+# Consoles: every console, import into one of the user's own library folders
+# (10 October 2026: never a second library next to theirs; NeoStation's roms
+# folder only when none is registered), rescan of the receiving system only,
+# and NeoStation's library actions (console folders, moving a library in).
 require('LibretroCoreCatalog.consoles.values' in consoles, 'every embedded console is listed')
 require('LibretroInternalService.importGamesForConsole(' in consoles, 'import for a console without games')
-require('provider.addRomFolder(romsFolder, scan: false)' in consoles, 'imports land in a registered library folder')
+require('chooseLibretroImportDestination(' in consoles and 'library: destination.library' in consoles,
+        "imports land in one of the user's library folders")
+require('addRomFolder(createdLibraryRoot, scan: false)' in consoles,
+        "NeoStation's roms folder is registered only when it received the games")
+require("'importLibraryUnavailable'" in consoles and "'importAlreadyPresent'" in consoles,
+        'an unreachable library and games already there are announced')
+require('createNeoStationConsoleFolders(' in consoles and 'moveLibraryIntoNeoStation(' in consoles,
+        'console folders and library move')
 require('rescanSystemSilent(' in consoles and 'result.systemFolder' in consoles, 'the receiving system is rescanned')
 require("'gamesImported'" in consoles and "'gamesRejected'" in consoles and "'importFailed'" in consoles,
         'import notifications')

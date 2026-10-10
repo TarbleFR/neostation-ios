@@ -91,5 +91,6 @@ screen = read('lib/screens/game_screen/my_games_list.dart')
 require('LIBRETRO_INTERNAL_BEGIN: playlist_actions' in screen, 'floating import button')
 require(re.search(r'_isLibretroLibrary\s*\n\s*\? _buildEmbeddedLibretroImportAction\(\)', screen) is not None,
         'tab import action')
-require('provider.addRomFolder(romsFolder, scan: false)' in screen, 'imports land in a registered library folder')
+require('libraryFolders: _libretroLibraryFolders' in screen and 'addRomFolder(created, scan: false)' in screen,
+        "imports land in one of the user's library folders, NeoStation's roms folder registered only when used")
 print('libretro route contract: OK')

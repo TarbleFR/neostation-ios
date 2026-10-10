@@ -27,6 +27,12 @@ Ces règles expriment les exigences du mainteneur du 18 septembre 2026 et s'appl
 - Aucun des dix fichiers de bibliothèque verrouillés sur la Build 419 n'est modifié : les jeux importés vont dans `Documents/roms/<système>`, enregistré comme dossier de bibliothèque, et les ROM des dossiers déjà liés sont lues sur place.
 - La route `retroarch://` reste pour les systèmes sans cœur intégré, pour les jeux connus seulement de la bibliothèque RetroArch et pour les jeux réglés sur « Application RetroArch (externe) ».
 
+## Décisions du mainteneur — bibliothèques, 10 octobre 2026
+
+- Les jeux importés vont dans une bibliothèque existante de l’utilisateur, jamais dans une seconde bibliothèque créée à côté : choix parmi les dossiers enregistrés accessibles (direct s’il n’y en a qu’un) ; le dossier `roms` de NeoStation n’est utilisé que si aucune bibliothèque n’est enregistrée ; un jeu déjà présent (même nom, même taille) n’est pas recopié.
+- Première ouverture iOS : NeoStation propose de créer un dossier par console dans `NeoStation › roms` (recommandé, sans autre action), de **déplacer** une bibliothèque existante dans ce dossier (l’autre dossier n’est ensuite plus utilisé), ou de lier un dossier sans le déplacer. Les mêmes actions sont dans Réglages › Dossiers › Consoles intégrées.
+- Autorisation explicite de modifier le démarrage (`lib/main.dart`, verrouillé sur la 419) : les dossiers enregistrés introuvables après le déplacement d’un conteneur iOS sont retrouvés au même endroit du conteneur actuel (blocs `LIBRARY_RELOCATION_*`, exception documentée dans `test/retroarch_baseline_scope_test.py`). Aucun fichier de jeu n’est déplacé, aucune ligne de jeu n’est réécrite. Voir `docs/library-folders-2026-10-10.md`.
+
 ## Précision du mainteneur — 9 octobre 2026, 13 h
 
 - L'état fonctionnel confirmé est NeoStation Build 422 : bibliothèque visible et lancement RetroArch lorsque l'application externe reste en arrière-plan. Conserver ces sources de lancement/synchronisation ; ne pas prendre le récepteur autonome 781 pour une mise à jour NeoStation.

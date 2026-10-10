@@ -27,6 +27,9 @@ import '../utils/gamepad_nav.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:neostation/l10n/ios_setup_locale.dart';
+import 'package:neostation/l10n/libretro_locale.dart';
+import 'package:neostation/screens/libretro/libretro_library_actions.dart';
+import 'package:neostation/widgets/confirm_action_dialog.dart';
 
 import '../widgets/tv_directory_picker.dart';
 import '../widgets/folder_not_empty_dialog.dart';
@@ -83,10 +86,13 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
   /// push stops re-asserting `setupWizardActive` and the dock can come in.
   bool _finishing = false;
 
-  // iOS first-run library linking is kicked off automatically once the app is
-  // active. This guard prevents duplicate document pickers across lifecycle
-  // transitions while RetroArch hands the user back to NeoStation.
-  bool _initialIosLibraryLinkStarted = false;
+  // iOS first run: how NeoStation gets the games. 0 creates one folder per
+  // console in NeoStation › roms (nothing else to do), 1 moves an existing
+  // library into it, 2 links a folder without moving it. D-pad up/down
+  // changes the choice, A (or the button) runs it.
+  int _iosLibraryChoice = 0;
+  int _iosMoveDone = 0;
+  int _iosMoveTotal = 0;
 
   static final _log = LoggerService.instance;
 
@@ -126,11 +132,6 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     _initializeSteps();
     _initGamepad();
-    if (Platform.isIOS) {
-      WidgetsBinding.instance.addPostFrameCallback((_) async {
-        await _startInitialIosLibraryLinkIfNeeded();
-      });
-    }
     if (Platform.isAndroid) {
       _secondaryDisplayState = SecondaryDisplayState.instance;
       _hasSecondaryDisplay =
@@ -176,18 +177,12 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
       if (_currentStep == _stepPermissions) _gamepadNav?.activate();
       return;
     }
-
-    // RetroArch's first-run sync temporarily backgrounds NeoStation. Wait for
-    // the return before presenting the security-scoped folder picker. Manic
-    // EMU never leaves the app here, so its picker is normally started by the
-    // initial post-frame callback above.
-    if (Platform.isIOS) {
-      _startInitialIosLibraryLinkIfNeeded();
-    }
   }
 
   void _initGamepad() {
     _gamepadNav = GamepadNavigation(
+      onNavigateUp: () => _moveIosLibraryChoice(-1),
+      onNavigateDown: () => _moveIosLibraryChoice(1),
       onSelectItem: () {
         if (_isSelectingFolder || _isSelectingUserDataFolder) return;
 
@@ -989,27 +984,15 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
     final titleSize = isLandscape ? 14.r : 24.r;
     final textSize = isLandscape ? 10.r : 14.r;
 
-    // iOS doesn't have free filesystem access the way desktop/Android do —
-    // this step links + syncs RetroArch's own folder rather than browsing
-    // an arbitrary one, so it's framed around that instead of generic
-    // "pick a folder" language that doesn't match what's actually
-    // happening. See _selectFolder()'s iOS branch.
-    final String title;
-    final String description;
-    final IconData icon;
-    if (Platform.isIOS) {
-      icon = Symbols.sports_esports_rounded;
-      title = IosSetupLocale.linkTitle(context);
-      description = _selectedFolder != null
-          ? '${IosSetupLocale.linked(context)}\n\n$_selectedFolder'
-          : IosSetupLocale.linkDescription(context);
-    } else {
-      icon = Symbols.folder_open_rounded;
-      title = AppLocale.selectRomFolder.getString(context);
-      description = _selectedFolder != null
-          ? '${AppLocale.romFolderSelected.getString(context)}\n\n$_selectedFolder'
-          : AppLocale.chooseRomFolderDesc.getString(context);
-    }
+    // iOS has no free filesystem access: it offers its own choices
+    // (NeoStation's console folders, a moved library, a linked folder).
+    if (Platform.isIOS) return _buildIosLibraryStep(theme);
+
+    const icon = Symbols.folder_open_rounded;
+    final title = AppLocale.selectRomFolder.getString(context);
+    final description = _selectedFolder != null
+        ? '${AppLocale.romFolderSelected.getString(context)}\n\n$_selectedFolder'
+        : AppLocale.chooseRomFolderDesc.getString(context);
 
     return SingleChildScrollView(
       child: Column(
@@ -1908,7 +1891,7 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
       return Platform.isIOS
           ? (_selectedFolder != null
                 ? IosSetupLocale.continueLabel(context)
-                : IosSetupLocale.linkAction(context))
+                : _iosLibraryOptions(context)[_iosLibraryChoice].title)
           : AppLocale.selectFolder.getString(context);
     }
     if (_currentStep == _stepEsde) {
@@ -1956,7 +1939,11 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
     }
 
     if (_currentStep == _stepFolder) {
-      await _selectFolder();
+      if (Platform.isIOS) {
+        await _runIosLibraryChoice();
+      } else {
+        await _selectFolder();
+      }
       return;
     }
 
@@ -2038,40 +2025,215 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _startInitialIosLibraryLinkIfNeeded() async {
-    if (!Platform.isIOS ||
-        !mounted ||
-        _currentStep != _stepFolder ||
-        _isSelectingFolder ||
-        _initialIosLibraryLinkStarted) {
-      return;
-    }
+  /// The three ways NeoStation gets the games on iOS, in [_iosLibraryChoice]
+  /// order.
+  List<({String title, String description, IconData icon})> _iosLibraryOptions(BuildContext context) => [
+    (
+      title: LibretroLocale.text(context, 'libraryCreateFolders'),
+      description: LibretroLocale.text(context, 'setupCreateFoldersDesc'),
+      icon: Symbols.create_new_folder_rounded,
+    ),
+    (
+      title: LibretroLocale.text(context, 'libraryMove'),
+      description: LibretroLocale.text(context, 'setupMoveDesc'),
+      icon: Symbols.drive_file_move_rounded,
+    ),
+    (
+      title: LibretroLocale.text(context, 'setupLink'),
+      description: IosSetupLocale.linkDescription(context),
+      icon: Symbols.link_rounded,
+    ),
+  ];
 
-    // Do not attempt to present UIDocumentPicker while NeoStation is inactive
-    // (notably while RetroArch is still in the foreground for its callback).
-    if (WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed) {
-      return;
-    }
+  void _moveIosLibraryChoice(int delta) {
+    if (!Platform.isIOS || _currentStep != _stepFolder || _isSelectingFolder) return;
+    final next = (_iosLibraryChoice + delta).clamp(0, 2);
+    if (next != _iosLibraryChoice) setState(() => _iosLibraryChoice = next);
+  }
 
-    if (!mounted || _currentStep != _stepFolder || _isSelectingFolder) return;
-
-    final existingLink = ConfigService.linkedExternalFolderPath;
-    if (existingLink != null && existingLink.trim().isNotEmpty) return;
-
-    _initialIosLibraryLinkStarted = true;
-    try {
-      // The picker is the one iOS-required user confirmation. Once granted,
-      // _selectFolder persists the bookmark, registers the ROM source and runs
-      // the real scan immediately, so no trip to Settings > Directories is
-      // required on first use.
+  /// Runs the chosen way: the console folders or the moved library end up in
+  /// NeoStation › roms, registered and scanned; linking keeps its own flow.
+  Future<void> _runIosLibraryChoice() async {
+    if (_isSelectingFolder) return;
+    if (_iosLibraryChoice == 2) {
       await _selectFolder(allowInternalFallback: false);
-    } finally {
-      // A cancellation leaves the user on the same wizard step, where the main
-      // action can retry normally. A successful link advances to Scanning.
-      if (mounted && _currentStep == _stepFolder) {
-        _initialIosLibraryLinkStarted = false;
-      }
+      return;
     }
+    final provider = context.read<SqliteConfigProvider>();
+    final choice = _iosLibraryChoice;
+    setState(() {
+      _isSelectingFolder = true;
+      _iosMoveDone = 0;
+      _iosMoveTotal = 0;
+    });
+    _gamepadNav?.deactivate();
+    try {
+      var ready = false;
+      if (choice == 0) {
+        await createNeoStationConsoleFolders(provider, scan: false);
+        ready = true;
+      } else {
+        final outcome = await moveLibraryIntoNeoStation(
+          provider,
+          confirm: (source) async {
+            if (!mounted) return false;
+            return ConfirmActionDialog.show(
+              context,
+              title: LibretroLocale.text(context, 'libraryMoveConfirmTitle'),
+              body: LibretroLocale.formatContext(context, 'libraryMoveConfirmBody', {'folder': source}),
+              confirmLabel: LibretroLocale.text(context, 'libraryMoveConfirm'),
+              icon: Icons.drive_file_move_outline,
+            );
+          },
+          onProgress: (done, total) {
+            if (mounted) {
+              setState(() {
+                _iosMoveDone = done;
+                _iosMoveTotal = total;
+              });
+            }
+          },
+        );
+        if (outcome != null && mounted) {
+          final move = outcome.move;
+          AppNotification.showNotification(
+            context,
+            move.total == 0
+                ? LibretroLocale.formatContext(context, 'libraryMoveNothing', {'folder': outcome.source})
+                : LibretroLocale.formatContext(context, 'libraryMoved', {
+                    'moved': move.moved + move.notRemoved,
+                    'kept': move.alreadyPresent,
+                    'failed': move.failed,
+                  }),
+            type: move.complete ? NotificationType.info : NotificationType.error,
+          );
+          ready = move.total > 0;
+        }
+      }
+      if (!mounted) return;
+      if (!ready) {
+        setState(() => _isSelectingFolder = false);
+        return;
+      }
+      final roms = await ConfigService.getDefaultIOSRomsFolder();
+      if (!mounted) return;
+      setState(() {
+        _selectedFolder = 'NeoStation › ${libretroLibraryLocation(roms)}';
+        _isSelectingFolder = false;
+        _currentStep++;
+      });
+      // The move already rescanned the library; the new folders are scanned
+      // once the scanning page is painted, as after linking a folder.
+      await WidgetsBinding.instance.endOfFrame;
+      if (mounted && choice == 0) await provider.scanSystems();
+    } catch (e) {
+      _log.e('iOS library setup failed: $e');
+      if (mounted) {
+        setState(() => _isSelectingFolder = false);
+        AppNotification.showNotification(
+          context,
+          LibretroLocale.formatContext(context, 'libraryActionFailed', {'error': e}),
+          type: NotificationType.error,
+        );
+      }
+    } finally {
+      _gamepadNav?.activate();
+    }
+  }
+
+  /// iOS folder step: the three ways to get the games, the first one
+  /// recommended (NeoStation creates the console folders: nothing else to
+  /// do but put games in them).
+  Widget _buildIosLibraryStep(ThemeData theme) {
+    final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
+    final titleSize = isLandscape ? 14.r : 22.r;
+    final textSize = isLandscape ? 10.r : 13.r;
+    final options = _iosLibraryOptions(context);
+    final moving = _isSelectingFolder && _iosLibraryChoice == 1 && _iosMoveTotal > 0;
+    return SingleChildScrollView(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            LibretroLocale.text(context, 'setupLibraryTitle'),
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: titleSize, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface),
+          ),
+          SizedBox(height: isLandscape ? 6.r : 10.r),
+          Text(
+            moving
+                ? LibretroLocale.formatContext(context, 'libraryMoving', {'done': _iosMoveDone, 'total': _iosMoveTotal})
+                : LibretroLocale.text(context, 'setupLibraryIntro'),
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: textSize,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+              height: 1.3,
+            ),
+          ),
+          SizedBox(height: isLandscape ? 10.r : 16.r),
+          for (var index = 0; index < options.length; index++)
+            Padding(
+              padding: EdgeInsets.only(bottom: 8.r),
+              child: InkWell(
+                key: ValueKey('ios-library-choice-$index'),
+                borderRadius: BorderRadius.circular(12.r),
+                onTap: _isSelectingFolder
+                    ? null
+                    : () {
+                        setState(() => _iosLibraryChoice = index);
+                        _runIosLibraryChoice();
+                      },
+                child: Container(
+                  padding: EdgeInsets.all(isLandscape ? 8.r : 12.r),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12.r),
+                    border: Border.all(
+                      color: index == _iosLibraryChoice
+                          ? theme.colorScheme.primary
+                          : theme.colorScheme.onSurface.withValues(alpha: 0.15),
+                      width: index == _iosLibraryChoice ? 2 : 1,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(options[index].icon, size: isLandscape ? 22.r : 30.r, color: theme.colorScheme.primary),
+                      SizedBox(width: 12.r),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              index == 0
+                                  ? '${options[index].title} · ${LibretroLocale.text(context, 'setupRecommended')}'
+                                  : options[index].title,
+                              style: TextStyle(
+                                fontSize: textSize + 1,
+                                fontWeight: FontWeight.w600,
+                                color: theme.colorScheme.onSurface,
+                              ),
+                            ),
+                            SizedBox(height: 2.r),
+                            Text(
+                              options[index].description,
+                              style: TextStyle(
+                                fontSize: textSize - 1,
+                                color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
+                                height: 1.25,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
   }
 
   Future<void> _selectFolder({bool allowInternalFallback = true}) async {

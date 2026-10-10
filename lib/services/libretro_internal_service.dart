@@ -32,17 +32,43 @@ class LibretroImportResult {
   const LibretroImportResult({
     required this.imported,
     required this.rejected,
+    this.alreadyPresent = 0,
     this.importedPaths = const <String>[],
     this.systemFolder = '',
+    this.createdLibraryRoot,
   });
 
   final int imported;
   final int rejected;
+
+  /// Picked games already in the chosen library (same name and size): not
+  /// copied again.
+  final int alreadyPresent;
   final List<String> importedPaths;
 
   /// System folder the games were copied into (`roms/<systemFolder>`), the
   /// system to rescan afterwards.
   final String systemFolder;
+
+  /// NeoStation's own `roms` folder when it received the games because no
+  /// library folder was registered: the caller registers it.
+  final String? createdLibraryRoot;
+}
+
+/// A library folder imported games can go to: one of the user's registered
+/// ROM folders, with the console's folder inside it.
+class LibretroImportLibrary {
+  const LibretroImportLibrary({required this.root, required this.directory});
+
+  /// The registered folder.
+  final String root;
+
+  /// Where the games are copied: the console's folder of [root] (an alias
+  /// folder such as "Nintendo 3DS" when the library has one), or [root]
+  /// itself when it is a console folder.
+  final String directory;
+
+  String get name => path.basename(root);
 }
 
 class LibretroRetroArchCopy {
@@ -281,13 +307,61 @@ abstract final class LibretroInternalService {
     return Directory(path.join(roms, systemFolder.toLowerCase()));
   }
 
+  /// The registered library folders games of [systemFolder] can be imported
+  /// into, in their registration order: those this device can open. A
+  /// library keeps its own console folder: the first child whose name is
+  /// [systemFolder] or one of [folderAliases] (ignoring case), else a new
+  /// `<root>/<systemFolder>`.
+  static Future<List<LibretroImportLibrary>> importLibraries(
+    String systemFolder, {
+    required Iterable<String> registeredRoots,
+    Iterable<String> folderAliases = const <String>[],
+  }) async {
+    final folder = systemFolder.toLowerCase();
+    final names = <String>{
+      folder,
+      for (final alias in folderAliases)
+        if (alias.trim().isNotEmpty) alias.trim().toLowerCase(),
+    };
+    final libraries = <LibretroImportLibrary>[];
+    final seen = <String>{};
+    for (final registered in registeredRoots) {
+      if (registered.startsWith('content://')) continue;
+      final root = path.normalize(registered);
+      if (!seen.add(root) || !await Directory(root).exists()) continue;
+      libraries.add(LibretroImportLibrary(root: root, directory: await _consoleDirectoryIn(root, folder, names)));
+    }
+    return libraries;
+  }
+
+  static Future<String> _consoleDirectoryIn(String root, String folder, Set<String> names) async {
+    if (names.contains(path.basename(root).trim().toLowerCase())) return root;
+    try {
+      await for (final entity in Directory(root).list(followLinks: false)) {
+        if (entity is Directory && names.contains(path.basename(entity.path).trim().toLowerCase())) {
+          return entity.path;
+        }
+      }
+    } on FileSystemException catch (error) {
+      _log.w('Library folder $root unreadable: $error');
+    }
+    return path.join(root, folder);
+  }
+
   /// Imports games for a system folder. The picker offers only the formats
   /// the system's cores open and the library scanner indexes for it
   /// ([systemExtensions], else the extensions the database lists for the
   /// system): a copied file the scanner ignores would never appear.
+  ///
+  /// Games go to [library] (see [importLibraries]); without one, to
+  /// NeoStation's own `roms` folder ([LibretroImportResult.createdLibraryRoot]).
+  /// A picked file already in the destination with the same name and size is
+  /// not copied again ([LibretroImportResult.alreadyPresent]); one with the
+  /// same name and another size is copied as "name (2).ext".
   static Future<LibretroImportResult> importGames(
     String systemFolder, {
     Iterable<String>? systemExtensions,
+    LibretroImportLibrary? library,
   }) async {
     final folder = systemFolder.toLowerCase();
     final indexed = systemExtensions ?? await _indexedExtensions(folder);
@@ -305,10 +379,11 @@ abstract final class LibretroInternalService {
     if (selection == null) {
       return LibretroImportResult(imported: 0, rejected: 0, systemFolder: folder);
     }
-    final destination = await importDirectoryFor(folder);
+    final destination = library != null ? Directory(library.directory) : await importDirectoryFor(folder);
     await destination.create(recursive: true);
     var imported = 0;
     var rejected = 0;
+    var alreadyPresent = 0;
     final importedPaths = <String>[];
     for (final file in selection.files) {
       final source = file.path;
@@ -318,10 +393,16 @@ abstract final class LibretroInternalService {
         continue;
       }
       try {
+        final sourceLength = await File(source).length();
+        final existing = File(path.join(destination.path, file.name));
+        if (await existing.exists() && await existing.length() == sourceLength) {
+          alreadyPresent++;
+          continue;
+        }
         final target = await _uniqueDestination(destination, file.name);
         final copied = await File(source).copy(target.path);
         final length = await copied.length();
-        if (length == 0 || length != await File(source).length()) {
+        if (length == 0 || length != sourceLength) {
           await copied.delete();
           rejected++;
           continue;
@@ -339,27 +420,34 @@ abstract final class LibretroInternalService {
     return LibretroImportResult(
       imported: imported,
       rejected: rejected,
+      alreadyPresent: alreadyPresent,
       importedPaths: importedPaths,
       systemFolder: folder,
+      createdLibraryRoot: library == null ? destination.parent.path : null,
     );
   }
 
   /// [importGames] for a system model: its canonical folder and the
   /// extensions it carries from the database.
-  static Future<LibretroImportResult> importGamesForSystem(SystemModel system) =>
+  static Future<LibretroImportResult> importGamesForSystem(SystemModel system, {LibretroImportLibrary? library}) =>
       importGames(
         systemKey(system),
         systemExtensions: system.extensions.isEmpty ? null : system.extensions,
+        library: library,
       );
 
   /// Imports games for one of the embedded consoles, even before it has any
   /// game: into [system] when the caller resolved it (from the provider's
   /// available systems), else into the console's import system.
-  static Future<LibretroImportResult> importGamesForConsole(String console, {SystemModel? system}) async {
+  static Future<LibretroImportResult> importGamesForConsole(
+    String console, {
+    SystemModel? system,
+    LibretroImportLibrary? library,
+  }) async {
     final descriptor = LibretroCoreCatalog.consoles[console];
     if (descriptor == null) return const LibretroImportResult(imported: 0, rejected: 0);
-    if (system != null) return importGamesForSystem(system);
-    return importGames(descriptor.importSystem);
+    if (system != null) return importGamesForSystem(system, library: library);
+    return importGames(descriptor.importSystem, library: library);
   }
 
   /// Extensions the scanner indexes for a system id (from its

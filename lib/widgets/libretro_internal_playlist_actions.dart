@@ -4,6 +4,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 import '../l10n/libretro_locale.dart';
 import '../models/system_model.dart';
+import '../screens/libretro/libretro_library_actions.dart';
 import '../screens/libretro/libretro_skin_manager_screen.dart';
 import '../services/libretro_core_catalog.dart';
 import '../services/libretro_internal_service.dart';
@@ -17,6 +18,7 @@ class LibretroInternalPlaylistActions extends StatefulWidget {
     required this.system,
     required this.onLibraryChanged,
     this.onInteractionChanged,
+    this.libraryFolders,
     this.embedded = false,
   });
 
@@ -26,10 +28,17 @@ class LibretroInternalPlaylistActions extends StatefulWidget {
   final SystemModel system;
 
   /// Canonical catalog key of [system] ([LibretroInternalService.systemKey]),
-  /// also the `roms/<key>` folder its games are imported into.
+  /// also the console folder its games are imported into.
   String get systemFolder => LibretroInternalService.systemKey(system);
 
-  final Future<void> Function() onLibraryChanged;
+  /// Called after games were imported, with the outcome (it names
+  /// NeoStation's `roms` folder when that folder received them because no
+  /// library folder was registered).
+  final Future<void> Function(LibretroImportResult result) onLibraryChanged;
+
+  /// The registered library folders (the configuration's ROM folders): the
+  /// games go to one of them, chosen by the user when there are several.
+  final List<String> Function()? libraryFolders;
   final ValueChanged<bool>? onInteractionChanged;
   final bool embedded;
 
@@ -82,11 +91,26 @@ class _LibretroInternalPlaylistActionsState
     _interaction(true);
     try {
       if (action == 'games') {
-        final result = await LibretroInternalService.importGamesForSystem(widget.system);
+        final destination = await chooseLibretroImportDestination(
+          context,
+          systemFolder: widget.systemFolder,
+          registeredRoots: widget.libraryFolders?.call() ?? const <String>[],
+          folderAliases: <String>[widget.system.folderName, ...widget.system.folders],
+        );
+        if (destination.unavailable) {
+          _notice(_t('importLibraryUnavailable'));
+          return;
+        }
+        if (destination.cancelled || !mounted) return;
+        final result = await LibretroInternalService.importGamesForSystem(
+          widget.system,
+          library: destination.library,
+        );
         if (result.imported > 0) {
-          await widget.onLibraryChanged();
+          await widget.onLibraryChanged(result);
           _notice(_f('gamesImported', {'count': result.imported}));
         }
+        if (result.alreadyPresent > 0) _notice(_f('importAlreadyPresent', {'count': result.alreadyPresent}));
         if (result.rejected > 0) _notice(_t('gamesRejected'));
       } else if (action == 'retroarch') {
         final copied = await LibretroInternalService.copyRetroArchData();

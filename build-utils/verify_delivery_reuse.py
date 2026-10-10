@@ -460,6 +460,19 @@ LIFECYCLE_DELTA = {
     'test/libretro_simulator_probe.py',
 }
 DELTA |= LIFECYCLE_DELTA
+# Library folders (maintainer requests of 10 October 2026): saved folders
+# found again after iOS moved an app container, imports into one of the
+# user's own libraries without duplicates, NeoStation's console folders and
+# moving a library into them, offered at first launch and in Settings.
+LIBRARY_DELTA = {
+    'lib/screens/libretro/libretro_library_actions.dart',
+    'lib/services/ios_library_root_relocation.dart',
+    'lib/services/neostation_rom_library.dart',
+    'lib/widgets/setup_wizard.dart',
+    'test/ios_library_root_relocation_test.dart',
+    'test/neostation_rom_library_test.dart',
+}
+DELTA |= LIBRARY_DELTA
 INPUT_ROOTS = ('lib/', 'packages/', 'native/', 'build-utils/', 'assets/', 'test/')
 
 def sha(data):
