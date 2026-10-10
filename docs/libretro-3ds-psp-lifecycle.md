@@ -117,18 +117,37 @@ qu’elle est encore libre.
   fenêtre, sans accès (`VM_PROT_NONE`) : aucune mémoire n’est consommée.
   La réservation JIT anticipée de RPCS3 est déjà en place à ce moment-là ;
   RPCS3 n’est pas modifié.
-- Juste avant `retro_load_game` de PPSSPP, seules les trois plages des vues
-  sont libérées. Chacune est plus petite que l’arène de 72 Mio, qui va donc
-  ailleurs, et le reste de la plage réservée empêche toute autre allocation
-  de s’y installer. PPSSPP trouve ses vues libres à cette base.
-- Après le déchargement de PPSSPP, les plages des vues sont de nouveau
-  réservées. Si l’une d’elles a été prise entre-temps, elle n’est pas
-  touchée : seules les parties appartenant à la réservation sont libérées
-  et une nouvelle plage libre est cherchée.
+- Juste avant `retro_load_game` de PPSSPP, les trois plages des vues sont
+  libérées avec une « case d’arène » : les 64 Mio entre la vue scratchpad
+  et la VRAM, moins une garde de 16 Kio de chaque côté. Avant de chercher
+  sa base, PPSSPP alloue en effet son arène n’importe où : sa RAM plus
+  8 Mio, soit 40 Mio pour les 32 Mio des jeux du commerce (72 Mio pour
+  64 Mio : homebrews qui la demandent, remasters HD). Le noyau prend le
+  plus bas trou assez grand. La case est sous la plage RAM : une arène de
+  40 Mio y va (ou plus bas), jamais dans une vue ; une arène de 72 Mio ne
+  tient ni dans la case ni dans la plage RAM. Les gardes et l’espace entre
+  VRAM et RAM restent réservés. PPSSPP trouve alors ses vues libres à
+  cette base.
+- Dès que la mémoire de PPSSPP est en place (base lue par l’interface
+  libretro `RETRO_MEMORY_SYSTEM_RAM`, identique sur deux images avec toutes
+  les vues présentes : pendant sa recherche, PPSSPP essaie chaque base
+  candidate), la partie libre de la case est de nouveau réservée.
+- Après le déchargement de PPSSPP, les plages des vues et toute la case
+  sont de nouveau réservées. Si une vue a été prise entre-temps, elle n’est
+  pas touchée : seules les parties appartenant à la réservation sont
+  libérées et une nouvelle plage libre est cherchée.
 - Si la réservation au lancement a échoué, elle est retentée au lancement
   du jeu PSP. Le journal de session indique chaque état :
-  `[HOST] PPSSPP window held at 0x…`, `view ranges released for this
-  boot`, `reserved again`.
+  `[HOST] PPSSPP window held at 0x…`, `view ranges and arena slot released
+  for this boot`, `PPSSPP memory base 0x…`, `PPSSPP's memory at the
+  reserved base`, `reserved again`.
+
+**Première version insuffisante, corrigée avant toute livraison** : la
+version `d4de3c76` ne libérait que les vues. Dans le simulateur, avec une
+fenêtre encombrée, l’arène de 40 Mio de l’ISO de test est tombée dans la
+plage RAM de 64 Mio libérée (`could not remap from 17c000000`) et le
+démarrage a échoué comme sur l’iPhone. La case d’arène (`54147b97`)
+corrige ce point.
 
 Les autres émulateurs (Dolphin, ARMSX2, Dusklight) allouent leur mémoire
 sans adresse imposée : ils ne perdent que ces 192 Mio d’adresses dans la
@@ -181,9 +200,13 @@ Journal de session : `Fichiers › NeoStation › Libretro › Logs`.
     et relancé ;
   - PPSSPP dans une fenêtre encombrée comme celle de l’iPhone : la case
     scratchpad de chaque base sondée est occupée avant le lancement, si
-    bien qu’aucune base n’est libre sans la réservation (scénario
-    `ppsspp-crowded`) ; le job `before-reservation` rejoue ce scénario avec
-    les sources de la Build 431 ;
+    bien qu’aucune base n’est libre sans la réservation et qu’il ne reste
+    au-dessous que des trous de moins de 8 Mio. Scénarios
+    `ppsspp-crowded` (ISO, 32 Mio de RAM, arène de 40 Mio) et
+    `ppsspp-crowded-prx` (programme PRX, 64 Mio, arène de 72 Mio) ; le
+    journal doit montrer la mémoire de PPSSPP à la base réservée. Le job
+    `before-reservation` rejoue le premier avec les sources de la
+    Build 431 ;
   - un cœur Vulkan de test qui crée le périphérique et détruit ses objets
     dans `retro_unload_game` comme Azahar : lancement, quitter, relancer,
     ses objets détruits par le périphérique encore vivant.
