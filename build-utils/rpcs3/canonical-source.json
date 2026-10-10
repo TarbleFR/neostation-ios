@@ -139,7 +139,7 @@
     "rpcs3/ios/RPCS3IOSContract.h": "db4e45fb3044f10a9f026e89cb8bfff65ea5a2ebd88c2b0a03c83001cdbd26cf",
     "rpcs3/ios/RPCS3IOSExperimentalPolicy.cpp": "a59994cc0afe0994e44141f11537b4971e4840b58e92228766e0ff7aaccbe378",
     "rpcs3/ios/RPCS3IOSExperimentalPolicy.h": "c75400cd39f0c1dc37dc0a9e53fb05829bc84f8f9a01b1469e9f5f0a010f5b25",
-    "rpcs3/ios/RPCS3IOSPerformance.cpp": "5bb398d371da8414d997c83dec2ce60eff88a1351a2e2b9762fa7318ba87a39c",
+    "rpcs3/ios/RPCS3IOSPerformance.cpp": "71cbd677238cfcea3dd0c76af1a654a0275b0d952a4116022792d34a9fe9f1cd",
     "rpcs3/ios/RPCS3IOSPerformance.h": "3141778c10fffabd6341c93492e7a50a9bf5606ed29cf45784f0687e62910561",
     "rpcs3/ios/RPCS3IOSSettings.cpp": "d3b27260f98bd7cb27dd74eca2d4e825e666c1944edd4f2bbef9d5845064aa7b",
     "rpcs3/ios/RPCS3IOSSettings.h": "845b14529f9949aa515a5a914a99dc3415ce51c29c567639cb9012cab4399996",
@@ -151,7 +151,7 @@
     "rpcs3/util/vm.hpp": "ac58df153ca5e9b1e9f69511879035493338265ee2de96656072ab777a07ecbc",
     "rpcs3/util/vm_native.cpp": "2c8c9547fc4ae1b6c7d2b39d19475c64b6922d4ac21b193cbded859fc2796a8c"
   },
-  "patch_sha256": "a1f97e58ce9e9e232e87157868ab685607116f28339849a4edaeda61e28dee2c",
+  "patch_sha256": "06919a59941bfb87e7323fa2d96016d2222ba9c00ebbd973d4b138ea02abf96b",
   "policy": "Build353 experimental; selective XITRIX Preview 0.10 engine backports (ARM64 SPU/PPU, VM reservations, RSX/Metal, audio recovery, savestate and graphics correctness); Build352 God of War III bounded-memory policy and Build350 lifecycle baseline retained; NeoSwap v1 opt-in host-owned file-backed RSX CPU data allocator, existing JIT/VM/GPU policies unchanged; selective XITRIX v0.10.1 SPU BID continuation, disabled-texture eviction, MoltenVK conditional-rendering fixes; SPU object cache v5 retires old CFG objects; optional NeoSwap client diagnostics ABI 1, main Core ABI 30 unchanged; NeoSwap coherent host-visible Vulkan SYSTEM buffer imports (1-256MiB), strict external-memory/type/alignment checks, deferred GPU resource disposal and allocator fallback; optional NeoSwap guest page relay ABI 1 for guest data shared aliases, host-owned preparation after authenticated creator exit and ordinary file fallback before first published mapping; Build395: measured God of War III opt-in for RSX CPU aligned buffers 64KiB-1MiB via verified donor loans only, fixed metadata budgets, fast pressure gate and original heap fallback; no JIT/VM/GPU/private allocations redirected; Build409: additive NeoSwap client kinds (GPU host-visible imports, owned video-frame mappings) through the unchanged allocator ABI 1, relay host loans selected by the host budget controller; no JIT/VM/GPU/private allocations redirected; Post-410: loading-time SPU guest metadata warmup and telemetry, no ARM64 object persistence; ready-only fast NeoSwap host loans and ordinary guest backing for new gameplay allocations; existing published alias coherence retained; physical device validation pending; Build435 Core delta (10 October 2026): measured per-process allowance in IOSMemoryPressurePolicy (relative moderate stage, adaptive reclaim cooldown), deferred SPU LLVM compilation on a worker pool with legacy-interpreter hand-off, unlocked snapshot precheck before vm::writer_lock on PUTLLC/stcx; no device validation",
   "schema_version": 2,
   "upstream_commit": "22f1152783cef1f7e04af7b1c895173e28fd5b03",

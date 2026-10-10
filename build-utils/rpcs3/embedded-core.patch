@@ -14961,7 +14961,7 @@ index 8fba197..8aa46a0 100644
  
  // Replaced only while boot is serialized and before emulation workers exist.
 diff --git a/rpcs3/ios/RPCS3IOSPerformance.cpp b/rpcs3/ios/RPCS3IOSPerformance.cpp
-index d800542..7d6c25a 100644
+index d800542..1e704ee 100644
 --- a/rpcs3/ios/RPCS3IOSPerformance.cpp
 +++ b/rpcs3/ios/RPCS3IOSPerformance.cpp
 @@ -1,26 +1,128 @@
@@ -15646,7 +15646,7 @@ index d800542..7d6c25a 100644
 +		const u64 memory_mib = process_memory_footprint() >> 20;
 +#ifdef RPCS3_IOS
 +		const u64 headroom_mib = os_proc_available_memory() >> 20;
-+		const u64 limit_mib = process_memory_limit_estimate() >> 20;
++		const u64 limit_mib = rpcs3::ios::process_memory_limit_estimate() >> 20;
 +#else
 +		const u64 headroom_mib = 0;
 +		const u64 limit_mib = 0;
