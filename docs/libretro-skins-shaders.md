@@ -1,13 +1,18 @@
 # Moteur libretro intégré : PSP, 3DS, skins par console, shaders, format d'écran et commandes
 
-Conception du cycle demandé le 9 octobre 2026 (branche `Claude`, base `a5650b9`).
+Conception initiale du cycle demandé le 9 octobre 2026 (branche `Claude`, base `a5650b9`).
+Pour l'utilisation des skins dans la release 0.0.4 / Build 435, consulter le
+[guide utilisateur et les sources du catalogue](SKINS.md), rédigé en anglais.
 Les en-têtes `packages/libretro_internal_bridge/ios/Classes/*.h` cités ici sont le
 contrat entre les modules ; ce document fixe les règles de comportement.
 
-Rien de ce qui suit n'a été exécuté sur un iPhone. Les chemins OpenGL ES (PPSSPP)
-et Vulkan (Azahar) n'ont jamais tourné sur un appareil.
+Les tableaux d'état initial ci-dessous décrivent le point de départ du cycle,
+pas les fonctions manquantes de la Build 435. À la rédaction initiale, les
+chemins OpenGL ES (PPSSPP) et Vulkan (Azahar) n'avaient pas encore été exécutés
+sur un iPhone dans ce cycle ; ce constat historique n'est pas un bilan des
+essais ultérieurs.
 
-## 1. État des lieux (vérifié dans les sources)
+## 1. État initial du cycle (vérifié dans les sources de départ)
 
 | Sujet | Existant | Manque |
 |---|---|---|

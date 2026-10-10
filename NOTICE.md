@@ -244,7 +244,7 @@ redistributing MeloNX itself.
 
 ---
 
-RETROARCH / LIBRETRO — EXTERNAL EMULATOR INTEGRATION
+RETROARCH / LIBRETRO — EMBEDDED CORES AND EXTERNAL APP INTEGRATION
 
 RetroArch:
 https://github.com/libretro/RetroArch
@@ -252,6 +252,26 @@ https://github.com/libretro/RetroArch
 NeoStation can link/synchronize a RetroArch library and use supported direct
 launch flows. RetroArch remains a separately maintained project with its own
 licenses, cores and third-party notices.
+
+NeoStation also runs embedded libretro cores with its own frontend. Skin
+selection applies to these embedded sessions; external RetroArch keeps its
+own controls and configuration.
+
+---
+
+CONTROLLER SKINS — PROVENANCE CATALOG, DELTA FORMAT AND SKIN CREATORS
+
+Catalog source: https://github.com/Provenance-Emu/skins
+Format reference: https://github.com/rileytestut/DeltaCore
+
+Credit goes to the Provenance catalog contributors, Riley Testut and DeltaCore
+contributors, and the individual skin creators. NeoStation's per-console default
+skins are supplied by NeoStation; community skins are optional user downloads.
+Their authorship and source metadata are retained when provided. Each skin's
+artwork remains subject to its own creator's terms, not NeoStation's license.
+No third-party skin pack is included in the application.
+
+Usage and source references: docs/SKINS.md
 
 ---
 

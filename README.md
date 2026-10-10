@@ -18,8 +18,8 @@ native cores, JIT workflows, sideloading support, external-emulator library
 bridges and mobile-friendly game/session management.
 
 The current iOS fork can work with embedded **Dolphin/DolphiniOS, ARMSX2,
-RPCS3, Dusklight and KartPad** runtimes, alongside external **RetroArch** and
-**MeloNX** integrations. Metadata and account-facing features use services and
+RPCS3, Dusklight and KartPad** runtimes and embedded **Libretro cores**, alongside
+external **RetroArch** and **MeloNX** integrations. Metadata and account-facing features use services and
 datasets such as **ScreenScraper, RetroAchievements and GameDB-PS3**.
 
 > **Modified version notice — August 2026 onward**  
@@ -38,6 +38,9 @@ providing legally obtained content required by the software they choose to use.
 
 ### Embedded runtimes
 
+- **Libretro cores** — the emulation cores also used by RetroArch run supported
+  systems directly in NeoStation. Their on-screen controls support per-console
+  default skins and optional imports from the Provenance skin catalog.
 - **[DolphiniOS / Dolphin](https://github.com/OatmealDome/dolphin-ios)** —
   embedded GameCube/Wii engine with NeoStation session, touch, menu,
   RetroAchievements and JIT integration.
@@ -75,6 +78,25 @@ providing legally obtained content required by the software they choose to use.
   provide a usable title.
 - Gamepad-focused landscape navigation and 12-locale coverage for iOS-specific
   settings and menus.
+
+## Controller skins
+
+The skin catalog is provided by **[Provenance](https://github.com/Provenance-Emu/skins)**.
+It is used for NeoStation's **embedded Libretro consoles**. Each console has a
+NeoStation default skin; community skins are downloaded only when you choose
+to install them.
+
+1. Open **Settings → Folders → Embedded consoles**, choose a console, then **Skins**.
+2. Select **Browse the Provenance catalog**, or **Import from Files** for a
+   compatible `.deltaskin`, `.manicskin` or single-skin `.zip` archive.
+3. Choose **Use in portrait**, **Use in landscape** or **Use in both orientations**.
+
+The default skin remains available. When an imported skin lacks a layout for
+one orientation, NeoStation uses its default for that orientation. Compatibility
+depends on the console, device layout and functions used by each skin.
+
+See the **[skin guide](docs/SKINS.md)** for import instructions, in-game settings,
+supported behavior, catalog sources and creator credits.
 
 ## Requirements
 
@@ -171,6 +193,9 @@ components, and preserve their license/notices.
 | **KartPad / WiiCompiled** | [KartPad](https://github.com/chrissotraidis/kartpad) by [@chrissotraidis](https://github.com/chrissotraidis), built on [WiiCompiled](https://github.com/patchzyy/Wiicompiled) created by [@patchzyy](https://github.com/patchzyy). |
 | **MeloNX / Ryujinx** | [MeloNX](https://github.com/nurtrino/MeloNX) contributors; MeloNX describes itself as based on Ryujinx/Ryubing. |
 | **RetroArch / libretro** | [RetroArch](https://github.com/libretro/RetroArch) and libretro contributors. |
+| **Provenance Skin Catalog** | [Provenance-Emu/skins](https://github.com/Provenance-Emu/skins) maintainers and contributors; external catalog used to discover community controller skins. |
+| **Delta / DeltaCore** | [Riley Testut and DeltaCore contributors](https://github.com/rileytestut/DeltaCore); reference controller-skin format for compatible imports. |
+| **Community skin creators** | Each skin's original author and download source are retained when available. Artwork remains subject to its creator's terms. |
 | **StikJIT** | [StikDebug/StikJIT](https://github.com/StikDebug/StikJIT) and its contributors. |
 | **ScreenScraper** | [ScreenScraper.fr](https://www.screenscraper.fr/) metadata and media service. |
 | **RetroAchievements** | [RetroAchievements](https://retroachievements.org/) project, API and community. |

@@ -187,3 +187,26 @@ named beside each code. Source: https://www.gc-forever.com/forums/viewtopic.php?
 The catalogue is not bundled in NeoStation. Imported entries retain the author
 and source URL; attribution is not an endorsement or a claim to relicense the
 creator's work. The source does not specify a disc revision.
+
+## Controller skins and the Provenance catalog
+
+- **Catalog:** [Provenance-Emu/skins](https://github.com/Provenance-Emu/skins),
+  maintained by the Provenance project and its community.
+- **Format reference:** [Delta / DeltaCore](https://github.com/rileytestut/DeltaCore),
+  by Riley Testut and contributors.
+- **Artwork:** the individual creators credited by each skin or catalog entry.
+
+NeoStation reads the external catalog at
+https://provenance-emu.com/skins/catalog.json, with
+https://raw.githubusercontent.com/Provenance-Emu/skins/main/catalog.json as fallback.
+The catalog identifies skins; it does not transfer ownership of their artwork.
+
+The embedded Libretro frontend supplies NeoStation default skins and installs
+community skins only at the user's request. Third-party skin packs are not
+bundled. Imported metadata retains the author when supplied and the original
+download URL, or identifies a local file import. A missing author or license
+must not be interpreted as a grant of redistribution rights; the application's
+license does not relicense downloaded artwork.
+
+Usage, compatibility and source references:
+[Controller skin guide](SKINS.md).
