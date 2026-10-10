@@ -153,17 +153,21 @@ NSString *LibretroPPSSPPAddressSpaceReport(void) {
                                                      window.arenaStart]
                         : [NSString stringWithFormat:@"its 0x%llx-byte arena expected above 0x%llx",
                                                      LibretroPPSSPPArenaBytes, spanEnd];
+  // An estimate: PPSSPP allocates a little more before probing (seen one
+  // 8 MiB step later in the simulator).
   if (window.firstBase != 0) {
-    return [NSString stringWithFormat:@"[HOST] PPSSPP memory window: usable base 0x%llx (%lu of %lu probed bases free, "
-                                      @"%lu regions mapped in 0x%llx-0x%llx, %@); largest hole 0x%llx bytes at 0x%llx",
+    return [NSString stringWithFormat:@"[HOST] PPSSPP memory window, estimated before boot: first usable base "
+                                      @"0x%llx (%lu of %lu probed bases free, %lu regions mapped in 0x%llx-0x%llx, "
+                                      @"%@); largest hole 0x%llx bytes at 0x%llx",
                                       window.firstBase, (unsigned long)window.usableBases,
                                       (unsigned long)window.probedBases, (unsigned long)count,
                                       LibretroPPSSPPBaseMinimum, spanEnd, arena, window.largestHoleSize,
                                       window.largestHoleStart];
   }
-  return [NSString stringWithFormat:@"[HOST] PPSSPP memory window: no usable base among %lu probed (%lu regions "
-                                    @"mapped in 0x%llx-0x%llx, %@); largest hole 0x%llx bytes at 0x%llx; PPSSPP "
-                                    @"needs 0x%llx free bytes at an 8 MiB-aligned base below 0x%llx",
+  return [NSString stringWithFormat:@"[HOST] PPSSPP memory window, estimated before boot: no usable base among "
+                                    @"%lu probed (%lu regions mapped in 0x%llx-0x%llx, %@); largest hole 0x%llx "
+                                    @"bytes at 0x%llx; PPSSPP needs 0x%llx free bytes at an 8 MiB-aligned base below "
+                                    @"0x%llx",
                                     (unsigned long)window.probedBases, (unsigned long)count,
                                     LibretroPPSSPPBaseMinimum, spanEnd, arena, window.largestHoleSize,
                                     window.largestHoleStart, LibretroPPSSPPSpan, LibretroPPSSPPBaseLimit];

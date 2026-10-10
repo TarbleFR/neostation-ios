@@ -72,6 +72,23 @@ dans les 12 langues (« Le cœur d’émulation s’est arrêté pendant le
 démarrage du jeu. ») et détails techniques contenant les lignes d’erreur
 du cœur et son journal.
 
+**Établi dans le simulateur iOS** : le vrai cœur PPSSPP, dans la vraie
+session NeoStation, démarre un programme de test PSP, directement puis
+depuis une image ISO construite comme un disque PSP. Il se ferme et se
+relance sans erreur. Le chargement de PPSSPP par NeoStation n’est donc pas
+défaillant en soi. Le simulateur a aussi révélé deux défauts, corrigés :
+
+- **Contexte OpenGL ES** : quand sa surface échouait après
+  `retro_load_game`, la session déchargeait PPSSPP pendant que son fil de
+  démarrage tournait, et PPSSPP s’arrêtait dans `retro_unload_game`
+  (`PSP_Shutdown` n’attend pas ce fil). Le contexte et une surface
+  provisoire sont désormais créés dès `SET_HW_RENDER`. Un échec y refuse le
+  contexte matériel et PPSSPP passe en rendu logiciel, ce que fait le
+  simulateur, qui ne sait pas créer de texture OpenGL ES sur IOSurface.
+- **Mesure de la fenêtre mémoire** : avant de chercher sa base, PPSSPP
+  alloue 72 Mio n’importe où ; dans le simulateur, cette arène est tombée
+  dans la fenêtre même qu’il lui faut ensuite. La mesure en tient compte.
+
 **Non établi** : la raison exacte de l’échec du démarrage PSP sur l’iPhone.
 L’échec intervient en moins de 0,2 s, donc tôt : identification ou montage
 du fichier, ou installation de la mémoire PSP. Pistes examinées :
@@ -82,38 +99,41 @@ du fichier, ou installation de la mémoire PSP. Pistes examinées :
   - JIT : le cœur reçoit `GET_JIT_CAPABLE = false` et l’interpréteur IR est
     imposé ;
   - contexte OpenGL ES 2 : `GPU_Init` construit `GPU_GLES` sans pouvoir
-    échouer.
+    échouer ;
+  - chargement de PPSSPP par la session : il démarre dans le simulateur.
 - **Plausible, propre à NeoStation : l’espace d’adressage.** Compilé pour
   iOS (`MASKED_PSP_MEMORY`), PPSSPP place la mémoire PSP à des adresses
   fixes. Il essaie une base alignée sur 8 Mio entre 4 et 6 Gio
   (`MemoryMap_Setup`, `vm_remap` sans écrasement). Il lui faut 16 Kio à
-  +0x10000, 8 Mio à +0x4000000 et 64 Mio à +0x8000000. Or NeoStation réserve
-  dès son lancement environ 704 Mio de JIT pour RPCS3 dans la première zone
-  libre au-dessus de 4 Gio, et les mesures de la Build 319 montraient un
-  espace d’adressage déjà serré sur cet iPhone. Sans base libre, PPSSPP
-  échoue avec « Memory init failed ».
+  +0x10000, 8 Mio à +0x4000000 et 64 Mio à +0x8000000, plus son arène de
+  72 Mio. Or NeoStation réserve dès son lancement environ 704 Mio de JIT
+  pour RPCS3 dans la première zone libre au-dessus de 4 Gio, et les mesures
+  de la Build 319 montraient un espace d’adressage déjà serré sur cet
+  iPhone. Sans base libre, PPSSPP échoue avec « Memory init failed ».
 - **Possible** : lecture du fichier (fichier iCloud ou fournisseur non
   téléchargé, format inattendu) : PPSSPP le signalerait par « Failed to
   mount ISO file » ou « Error identifying file ».
 
 Pour trancher sans nouvelle hypothèse livrée à l’aveugle, chaque démarrage
 PSP inscrit avant le chargement une ligne
-`[HOST] PPSSPP memory window: …` : première base utilisable ou absence de
-base, plus le plus grand trou. Elle apparaît dans les détails techniques de
-l’erreur et dans le journal de session. Aucune réservation d’adresses n’est
-ajoutée tant que cette mesure n’a pas confirmé la piste. Une telle
-réservation pèserait sur RPCS3, Dusklight, Dolphin et ARMSX2, qui se
-partagent le même espace.
+`[HOST] PPSSPP memory window, estimated before boot: …` : première base
+utilisable estimée ou absence de base, emplacement attendu de l’arène, plus
+grand trou. Dans le simulateur, PPSSPP a pris sa base un pas de 8 Mio après
+l’estimation. La ligne apparaît dans les détails techniques de l’erreur et
+dans le journal de session. Aucune réservation d’adresses n’est ajoutée tant
+que cette mesure n’a pas confirmé la piste. Une telle réservation pèserait
+sur RPCS3, Dusklight, Dolphin et ARMSX2, qui se partagent le même espace.
 
 ## Diagnostics ajoutés
 
 Journal de session : `Fichiers › NeoStation › Libretro › Logs`.
 
-- `session.log` : lancement, cœur et contenu chargés, contexte graphique,
-  confirmation du démarrage, demande d’arrêt (utilisateur ou cœur), chaque
-  étape de fermeture (`context_destroy`, `retro_unload_game`,
-  `retro_deinit`, libération du moteur de rendu, `dlclose`, fermeture de la
-  vue), puis le journal du cœur et une ligne `END`.
+- `session.log` : lancement, cœur et contenu chargés, contexte graphique
+  (ou raison de son refus), mesure PPSSPP, confirmation du démarrage,
+  demande d’arrêt (utilisateur ou cœur), chaque étape de fermeture
+  (`context_destroy`, `retro_unload_game`, `retro_deinit`, libération du
+  moteur de rendu, `dlclose`, fermeture de la vue), puis le journal du cœur
+  et une ligne `END`.
 - Chaque ligne est écrite immédiatement : si le processus s’arrête, le
   fichier se termine sur l’étape qui n’est jamais revenue.
 - La session suivante conserve ce fichier sous le nom
@@ -129,20 +149,26 @@ Journal de session : `Fichiers › NeoStation › Libretro › Logs`.
   - un cœur qui demande l’arrêt à l’image 3 est vu à cette image avec son
     erreur.
 - **Modules portables (macOS)** : fenêtre mémoire de PPSSPP (fenêtre vide,
-  réservation de type RPCS3, base unique, trous entre les vues, entrées
-  désordonnées, mesure du processus réel) ; journal (écriture immédiate,
-  rotation, session inachevée conservée, écritures concurrentes).
-- **Simulateur iOS** (`.github/workflows/libretro-simulator.yml`) : la
-  vraie `LibretroSession` avec :
-  - PPSSPP sur un programme de test PSP, directement puis dans une image ISO
-    construite comme un disque PSP ;
-  - Azahar sur `ftpd.3dsx` ;
-  - le cœur de test (lancement, quitter, relancer ; arrêt pendant le
-    démarrage).
-  
-  Le même scénario 3DS tourne aussi avec les sources d’avant le correctif.
-  Les cœurs de l’iPhone y tournent après le seul changement de plateforme
-  Mach-O (iOS → simulateur). Un simulateur n’est pas un iPhone.
+  réservation de type RPCS3, arène occupant le seul trou utilisable, base
+  unique, trous entre les vues, entrées désordonnées, mesure du processus
+  réel) ; journal (écriture immédiate, rotation, session inachevée
+  conservée, écritures concurrentes).
+- **Simulateur iOS 26.2** (`.github/workflows/libretro-simulator.yml`,
+  run 38009696405 sur `de2bd95c`) : la vraie `LibretroSession`, dans la vraie
+  pile UIKit, Metal, OpenGL ES et MoltenVK. Les 8 scénarios réussissent :
+  - le cœur de test logiciel : lancement, quitter, relancer ; arrêt pendant
+    le démarrage reçu comme `LIBRETRO_CORE_STOPPED` avec l’erreur du cœur ;
+  - PPSSPP : programme de test PSP, puis image ISO deux fois, chacun quitté
+    et relancé ;
+  - un cœur Vulkan de test qui crée le périphérique et détruit ses objets
+    dans `retro_unload_game` comme Azahar : lancement, quitter, relancer,
+    ses objets détruits par le périphérique encore vivant.
+
+  Azahar lui-même ne démarre pas dans le simulateur : le GPU simulé n’a pas
+  de tableaux de textures ni d’échantillonneurs
+  (`vk::FeatureNotPresentError`, avec ou sans correctif). Les cœurs de
+  l’iPhone y tournent après le seul changement de plateforme Mach-O (iOS →
+  simulateur). Un simulateur n’est pas un iPhone.
 
 ## Reste à vérifier sur iPhone
 

@@ -144,8 +144,8 @@ static void TestLiveReport(void) {
   }
   CHECK(ordered, @"mapped ranges come in address order, without overlaps");
   NSString *report = LibretroPPSSPPAddressSpaceReport();
-  CHECK([report hasPrefix:@"[HOST] PPSSPP memory window: "] &&
-            ([report containsString:@"usable base 0x"] || [report containsString:@"no usable base"]),
+  CHECK([report hasPrefix:@"[HOST] PPSSPP memory window, estimated before boot: "] &&
+            ([report containsString:@"first usable base 0x"] || [report containsString:@"no usable base"]),
         @"the live report names the outcome: %@", report);
   printf("  %s\n", report.UTF8String);
 }

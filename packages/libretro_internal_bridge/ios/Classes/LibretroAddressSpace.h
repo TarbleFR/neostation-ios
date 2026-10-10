@@ -51,9 +51,11 @@ LibretroPPSSPPWindow LibretroPPSSPPWindowForMappedRanges(const LibretroAddressRa
 /// LibretroAddressRange values (vm_region_64).
 NSData *LibretroMappedRanges(uint64_t start, uint64_t end);
 
-/// "[HOST] PPSSPP memory window: ..." for the session log: what PPSSPP's
-/// probe will find in this process now. Advisory: vm_region lists
-/// mappings, not the kernel's allocation policy boundaries.
+/// "[HOST] PPSSPP memory window, estimated before boot: ..." for the session
+/// log: what PPSSPP's probe should find in this process now. An estimate:
+/// PPSSPP allocates a little more before probing (its base was one 8 MiB
+/// step after the estimate in the simulator), and vm_region lists mappings,
+/// not the kernel's allocation policy boundaries.
 NSString *LibretroPPSSPPAddressSpaceReport(void);
 
 NS_ASSUME_NONNULL_END
