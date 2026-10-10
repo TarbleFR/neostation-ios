@@ -305,6 +305,12 @@ SUPPORT_FILES = {
     # Build434: measured host envelope, size-class shelves, cold prefetch.
     'docs/neoswap-build434-7go-envelope.md',
     'test/neoswap_cold_prefetch_test.cpp',
+    # Build435 Core delta (10 October 2026): host-executed policy test, its
+    # runner, the updated Build352 contract and the delivery notes.
+    'docs/neoswap-build435-core-delta.md',
+    'test/rpcs3_build352_gow3_memory_test.py',
+    'test/rpcs3_build435_core_delta_test.py',
+    'test/native/rpcs3_build435_core_delta_test.cpp',
     'docs/neoswap-swap-research.md',
     'tools/compare_neoswap_sessions.py',
     'test/neoswap_swap_research_test.cpp',
@@ -641,8 +647,15 @@ NEOPLAY_080_RETAINED_FILES = {
     'tools/neoplay-receiver/embedded-playback-smoke.mjs',
     'tools/neoplay-receiver/README-WINDOWS.txt',
 }
+# Maintainer-approved re-pin (10 October 2026): the Build 422 delivery
+# 7416150d added five lines to neoplay-check.yml after this endpoint. That one
+# file is compared with that commit; the twelve others stay at 0.8.0.
+NEOPLAY_080_RETAINED_OVERRIDES = {
+    '.github/workflows/neoplay-check.yml': '7416150dd4a5b7b414374bc6b89b2e59bc7a7aa0',
+}
 for path in NEOPLAY_080_RETAINED_FILES:
-    retained = subprocess.check_output(['git', 'show', NEOPLAY_080_RETAINED_SHA + ':' + path], cwd=ROOT)
+    revision = NEOPLAY_080_RETAINED_OVERRIDES.get(path, NEOPLAY_080_RETAINED_SHA)
+    retained = subprocess.check_output(['git', 'show', revision + ':' + path], cwd=ROOT)
     assert (ROOT / path).read_bytes() == retained, 'Unrelated inherited NeoPlay source changed: ' + path
 
 # Maintainer-authorized integration of swap and armsx2-26 into experimental.
@@ -966,9 +979,24 @@ IPA_WORKFLOW_BUILD420_LINES = (
 )
 # Build421: only catalog restoration, scan safety and delivery metadata.
 IPA_WORKFLOW_BUILD421_LINES = (('name: NeoStation NeoSwap + NeoPlay private • Build 420\n', 'name: NeoStation NeoSwap + NeoPlay private • Build 421\n'), ('run-name: NeoStation NeoSwap + NeoPlay private • Build 420 • ${{ github.sha }}\n', 'run-name: NeoStation NeoSwap + NeoPlay private • Build 421 • ${{ github.sha }}\n'), ("        default: '420'\n", "        default: '421'\n"), ('  group: neostation-neoswap-neoplay-build420-${{ github.sha }}\n', '  group: neostation-neoswap-neoplay-build421-${{ github.sha }}\n'), ('    name: Neostation iOS 0.0.2 private IPA (420)\n', '    name: Neostation iOS 0.0.2 private IPA (421)\n'), ("      BUILD_NUMBER: ${{ inputs.build_number || '420' }}\n", "      BUILD_NUMBER: ${{ inputs.build_number || '421' }}\n"), ('      ARTIFACT_NAME: NeoStation-NeoSwap-NeoPlay-Build-420-${{ github.sha }}\n', '      ARTIFACT_NAME: NeoStation-NeoSwap-NeoPlay-Build-421-${{ github.sha }}\n'), ('          flutter test test/retroarch_library_protocol_test.dart test/retroarch_library_cache_test.dart test/retroarch_folder_recovery_test.dart test/retroarch_sync_locale_test.dart test/ios_rom_library_root_resolver_test.dart test/ios_selective_rollback_test.dart test/armsx2_retroarch_routing_isolation_test.dart\n', '          flutter test test/retroarch_library_protocol_test.dart test/retroarch_library_cache_test.dart test/retroarch_folder_recovery_test.dart test/retroarch_sync_locale_test.dart test/ios_rom_library_root_resolver_test.dart test/ios_selective_rollback_test.dart test/armsx2_retroarch_routing_isolation_test.dart test/retroarch_library_restoration_test.dart test/rom_scan_symlink_alias_test.dart test/rom_scan_emulator_default_test.dart\n'), ('          cp docs/retroarch-testflight-link-recovery.md build/private-test/Notes-RetroArch-Build420.md\n', '          cp docs/retroarch-testflight-link-recovery.md build/private-test/Notes-RetroArch-Build421.md\n'))
+# Maintainer-approved re-pins (10 October 2026): three reviewed files were
+# changed by later maintainer commits. Each is compared with the last commit
+# that touched it; the other thirty stay at the integration commit, and the
+# Build410-421 line pairs above remain the record of the IPA workflow until
+# the Build 419 library restoration rewrote it.
+ARMSX2_INTEGRATION_OVERRIDES = {
+    # Build 422 delivery with measured cache reuse.
+    '.github/workflows/ios-ci.yml': '7416150dd4a5b7b414374bc6b89b2e59bc7a7aa0',
+    # Build 419 library restoration and isolated direct TestFlight link.
+    '.github/workflows/neoswap-ipa.yml': 'afc0a96db96930cbdafe76cc126353caaa5b3d36',
+    # Removal of the Armsx2 action builder left from the retired menu.
+    'packages/armsx2_internal_bridge/ios/Classes/Armsx2InternalBridgePlugin.mm':
+        'a5650b9bddefbed76f941fb53735545bebcbbd39',
+}
 for path in ARMSX2_INTEGRATION_FILES:
-    reviewed = subprocess.check_output(['git', 'show', ARMSX2_INTEGRATION_SHA + ':' + path], cwd=ROOT)
-    if path == '.github/workflows/neoswap-ipa.yml':
+    revision = ARMSX2_INTEGRATION_OVERRIDES.get(path, ARMSX2_INTEGRATION_SHA)
+    reviewed = subprocess.check_output(['git', 'show', revision + ':' + path], cwd=ROOT)
+    if path == '.github/workflows/neoswap-ipa.yml' and revision == ARMSX2_INTEGRATION_SHA:
         text = reviewed.decode('utf-8')
         for old, new in IPA_WORKFLOW_BUILD410_LINES:
             assert text.count(old) == 1, 'Reviewed IPA workflow line expected once: ' + old

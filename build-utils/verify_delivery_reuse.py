@@ -495,6 +495,30 @@ NEOSWAP_434_DELTA = {
     'native/import-memory-candidate.json',
 }
 DELTA |= NEOSWAP_434_DELTA
+# RPCS3 Core Build435 (maintainer request of 10 October 2026): the three
+# reviewed Core deltas of docs/neoswap-build435-core-delta.md inside the single
+# canonical patch (measured memory allowance, deferred SPU compilation,
+# writer-lock precheck), its hash manifest, the host-executed policy test,
+# the Core build recipe and syntax gate that run it, the pinned-input test,
+# the updated Build352 contract, the scope gates and the hash manifest they
+# read. The delivery lane still reuses the Core artifact pinned by run id;
+# a new Core run is pinned only after it succeeds.
+NEOSWAP_435_DELTA = {
+    'build-utils/rpcs3/embedded-core.patch',
+    'build-utils/rpcs3/canonical-source.json',
+    'build-utils/build_rpcs3_embedded_core.sh',
+    'build-utils/rpcs3_core_syntax_gate.py',
+    'test/neo_swap_core_pin_test.py',
+    'test/rpcs3_build352_gow3_memory_test.py',
+    'test/rpcs3_build435_core_delta_test.py',
+    'test/native/rpcs3_build435_core_delta_test.cpp',
+    'test/check_neo_swap_scope.py',
+    'test/import_memory_candidate_scope_test.py',
+    'test/delivery_pipeline_test.py',
+    'test/neoplay_build397_integration_test.py',
+    'native/import-memory-candidate.json',
+}
+DELTA |= NEOSWAP_435_DELTA
 INPUT_ROOTS = ('lib/', 'packages/', 'native/', 'build-utils/', 'assets/', 'test/')
 
 def sha(data):

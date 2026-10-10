@@ -612,8 +612,11 @@ WRITER_LOCK_ATTRIBUTION_FILES={
     'rpcs3/ios/RPCS3IOSPerformance.h',
 }
 WRITER_LOCK_ATTRIBUTION_ADDED={'rpcs3/Emu/Memory/vm_locking.h','rpcs3/Emu/Memory/vm_reservation.h'}
-current=json.loads((ROOT/'build-utils/rpcs3/canonical-source.json').read_text())
-attribution_patch=(ROOT/'build-utils/rpcs3/embedded-core.patch').read_bytes()
+# Frozen at the commit the Build412 Core (run 37620034517) was built from; the
+# Build435 delta is reviewed against this stage below.
+WRITER_LOCK_ATTRIBUTION_REVIEWED='afb33454db50236485bd5ec963a722dcb5f65610'
+current=json.loads(original('build-utils/rpcs3/canonical-source.json',WRITER_LOCK_ATTRIBUTION_REVIEWED))
+attribution_patch=original('build-utils/rpcs3/embedded-core.patch',WRITER_LOCK_ATTRIBUTION_REVIEWED)
 attribution_sections=sections(attribution_patch)
 assert set(current)==set(runtime_manifest)|{'writer_lock_attribution'}
 for key in set(runtime_manifest)-{'files_sha256','patch_sha256'}:
@@ -701,6 +704,128 @@ spu_after=postimage_lines(attribution_sections['rpcs3/Emu/Cell/SPUThread.cpp'])
 assert spu_after.count(b'g_range_lock_bits[1].notify_all();')==postimage_lines(runtime_sections['rpcs3/Emu/Cell/SPUThread.cpp']).count(b'g_range_lock_bits[1].notify_all();')
 assert b'NEOSTATION_ARMSX3_RANGE_LOCK_WAIT_V1: wake PPUs only when the shared word becomes clear.' in spu_after
 AUDITED_CORE_FILES |= WRITER_LOCK_ATTRIBUTION_FILES | WRITER_LOCK_ATTRIBUTION_ADDED
+
+# 10 October 2026 (Build435, maintainer request of the same day): three Core
+# deltas on the Build412 Core source. (A) IOSMemoryPressurePolicy derives the
+# God of War III moderate stage from the measured per-process allowance
+# (phys_footprint + os_proc_available_memory high-water mark) and doubles the
+# moderate reclaim cooldown after a pass that freed nothing lasting; severe and
+# fatal stay absolute. (B) a missed SPU program is compiled by a worker pool
+# while the SPU thread runs it through the existing legacy interpreter, which
+# it leaves only at a taken branch once the module is published; publication
+# still goes through spu_llvm_recompiler::compile(). (C) PUTLLC and the PPU
+# full-line stcx compare the reservation snapshot before taking
+# vm::writer_lock; only the locked comparison can succeed, so the protocol is
+# unchanged (vm.cpp, vm_locking.h and vm_reservation.h stay byte-identical).
+# The replaced and added hunks are pinned by digest; every other section and
+# every other canonical contract stay byte-identical to the Build412 stage.
+BUILD435_FILES={
+    'rpcs3/Emu/Cell/PPUThread.cpp',
+    'rpcs3/Emu/Cell/SPUCommonRecompiler.cpp',
+    'rpcs3/Emu/Cell/SPURecompiler.h',
+    'rpcs3/Emu/Cell/SPUThread.cpp',
+    'rpcs3/Emu/Cell/SPUThread.h',
+    'rpcs3/Emu/RSX/VK/VKResourceManager.cpp',
+    'rpcs3/ios/IOSMemoryPressurePolicy.h',
+    'rpcs3/ios/RPCS3IOSPerformance.cpp',
+    'rpcs3/ios/RPCS3IOSPerformance.h',
+}
+BUILD435_ADDED={'rpcs3/Emu/Cell/SPUDeferredCompilePolicy.h','rpcs3/ios/tests/IOSMemoryPressurePolicyTests.cpp'}
+# path: (digests of the Build412 hunks this delta replaces, digests of its new hunks)
+BUILD435_HUNKS={
+    'rpcs3/Emu/Cell/PPUThread.cpp': (
+        ['6d5a05f7783b9373e1b009521dffaceff74fb0ad7d3473b68a3765c76afe66c1'],
+        ['53def588d2a5e5cb5d47bb545ae68e3b649b440465cbee6822a2297d0ca3759b']),
+    'rpcs3/Emu/Cell/SPUCommonRecompiler.cpp': (
+        ['6bedfbaf103a98ec320de9134a13033ac319f551a66e210b66e9627cfb574b4e',
+         'f9a93de3cd17219a9e5df252d4a76ea34fd09887505c7f9d4d7a68944e421cc3'],
+        ['2fb9206547dd964dbb840e80e8616c266d57c15401eee44f97a03baf873ff3fc',
+         'a5b5d6f3e2b256865b3d2660ca3e30e43b9fe4bb38344a81113e78993fafa273',
+         'e470095c35a68d2deef3ca93a8834fe15f2d6f839a0a4b42d1289dc78aaf8cb3',
+         'ecaf99ad2c842817c928d9770f3c93d61d569f1dd8e93a2e84c2593298f5c37d',
+         'f364ccef300d7138a0659280b7a10ab683b190988c10cd7df7873d038e1515bc']),
+    'rpcs3/Emu/Cell/SPUDeferredCompilePolicy.h': (
+        [],
+        ['e8167629763b14e4e29a42e150323c99c8aa2db064571326a7d852fe44a79f15']),
+    'rpcs3/Emu/Cell/SPURecompiler.h': (
+        ['7b255f3a6697b8eb85844ca2ed064fd3693b6565a7a16b3106ae598338abfb17'],
+        ['674ede46e74b3a847c8339b94b7695b3dbcffba43346f7099d718cefd65672a5']),
+    'rpcs3/Emu/Cell/SPUThread.cpp': (
+        ['b8ba7bca750914c08a5022c3dac7412332981574af74d8a12e7919ea7c230422'],
+        ['5011d22056c50e25db0eec246508ee6573a88fc1d3714c209c6f1e130d5da170']),
+    'rpcs3/Emu/Cell/SPUThread.h': (
+        [],
+        ['6f0d857893dad56bbb366d452aff407d342185c0e6e14e3b8212434436fa0698']),
+    'rpcs3/Emu/RSX/VK/VKResourceManager.cpp': (
+        ['0c1720a73ab7760b5497211bc58fcf136c64af00b891fe39559a1880f771a5da',
+         '34012cadf0ce4fb511b45eb98a665f0fc0a7d1b16f738baad96e43691288cadb',
+         '3b0739118079015969fab07c0eee3c5216b1ed3bf2642ba66289e2c47293d78a',
+         '5e96bfd3ed012876b4f543abcc38ff5d185da769f47568ea390cdf7b4ff40719'],
+        ['137db9207a448d438882b195077048e73dc20bb62c6b383f6f958957e9eb20d9',
+         '50c77b042096b629551985b253b8ddfa2b8ab599e992aa6e1adf3e21e0d360b3',
+         '6ca31126395acbd33569891b08130a9a394f02fde5565c596b288a46c13aa579',
+         '7476a37cdfa90b9385122b6b651f35b83b79c8047ac730e63f076fe876e78ce5']),
+    'rpcs3/ios/IOSMemoryPressurePolicy.h': (
+        ['88b1f9f9d2a70f8d845c7789914d0c42e79d4d6dc0dfca496575c53e63e87179'],
+        ['2c36978e16509f5849e1a732177fc71037a6acc58b912d474f887b43ee1af84f']),
+    'rpcs3/ios/RPCS3IOSPerformance.cpp': (
+        ['00496fe9a361a9dc59ebfe7145ef3abfff720fe9917def7924b2d45b9b011b9b',
+         '3585c6935e50c4c182d48da5ed7356716a48525437eed73378d955c8c616f32d',
+         '537a22d2bffe1afa0720dbc625823b793a4bc00ce297616521813ae7051bfeb6',
+         '7bce6025fc8b326aa08666771158660c729aaa35117af8c56fb2ff839e065cea',
+         '7e10a79c046c3ff5549ac8e8c2bdd4ef698530efb64f50022b6e1d36c17ab44b',
+         'cc50031ca7368e72d80d4d473bd5b7c37304be762cdd0aae853616505b141b73'],
+        ['522b060ceb202708308c930dd1d916e5cdc9c23f358d54833cc430401c1c8ab9',
+         '529a99f67767855214f9e2f3e5aafd2cb86f9ce2385079c3072092ebaa1d7878',
+         '74ad8658b1f68c89170381dfbd7168ae852e3f05936286e88918d9dbda1cc049',
+         'cefc3c25c8904eadea60bced357797a614b659376697e117d95054a6094477a3',
+         'd2ff89d10a5c4c948343351699812103f3d229c61c0e67cef71493f04b85c7ee',
+         'f285ebca29076378d3a6e4c99f42dfc52cdf598eaa73d9fef72446cffe8dadf4']),
+    'rpcs3/ios/RPCS3IOSPerformance.h': (
+        ['ae859b7788af85b193e8e8424881bab4c5f76306295f80ddaa8ec3f5dd36945a'],
+        ['d9999691482d0ee6cdcb4b9d12ae4637bf5095a5b53e963d8b8f0013878f2eed']),
+    'rpcs3/ios/tests/IOSMemoryPressurePolicyTests.cpp': (
+        [],
+        ['242e57926f144b1c05bf6390f5d7bba3e094015ec984c7bb1908aa19f04fb439']),
+}
+assert set(BUILD435_HUNKS)==BUILD435_FILES|BUILD435_ADDED
+build435_manifest=json.loads((ROOT/'build-utils/rpcs3/canonical-source.json').read_text())
+build435_patch=(ROOT/'build-utils/rpcs3/embedded-core.patch').read_bytes()
+build435_sections=sections(build435_patch)
+assert set(build435_manifest)==set(current), 'Build435 changed the canonical manifest shape'
+for key in set(current)-{'files_sha256','patch_sha256','policy'}:
+    assert build435_manifest[key]==current[key], 'Build435 changed unrelated Core policy: '+key
+assert build435_manifest['policy'].startswith(current['policy']) and 'Build435' in build435_manifest['policy']
+assert 'no device validation' in build435_manifest['policy']
+assert set(build435_manifest['files_sha256'])==set(current['files_sha256'])|BUILD435_ADDED
+assert {p for p,h in build435_manifest['files_sha256'].items() if current['files_sha256'].get(p)!=h}==BUILD435_FILES|BUILD435_ADDED, \
+    'Unexpected Build435 postimages'
+assert hashlib.sha256(build435_patch).hexdigest()==build435_manifest['patch_sha256']
+assert set(build435_sections)==set(attribution_sections)|BUILD435_ADDED
+for path in set(attribution_sections)-BUILD435_FILES:
+    assert build435_sections[path]==attribution_sections[path], 'Build435 changed unrelated Core section: '+path
+assert {p for p in build435_sections if attribution_sections.get(p)!=build435_sections[p]}==BUILD435_FILES|BUILD435_ADDED
+for path,(removed,added) in BUILD435_HUNKS.items():
+    before={hunk_signature(h):hunk_digest(h) for h in hunks(attribution_sections[path])} if path in attribution_sections else {}
+    after={hunk_signature(h):hunk_digest(h) for h in hunks(build435_sections[path])}
+    assert sorted(d for s,d in before.items() if s not in after)==removed, 'Build435 replaced other Build412 hunks in '+path
+    assert sorted(d for s,d in after.items() if s not in before)==added, 'Build435 added unreviewed hunks in '+path
+import collections
+build435_added=sum((added_lines(build435_sections[p]) for p in BUILD435_FILES|BUILD435_ADDED), start=collections.Counter())
+assert not any(b'g_cfg' in line and b'.set(' in line for line in build435_added), 'Build435 writes an emulator setting'
+assert not any(b'fmt::throw_exception' in line for line in build435_added), 'Build435 adds a fatal path'
+policy_after=postimage_lines(build435_sections['rpcs3/ios/IOSMemoryPressurePolicy.h'])
+assert b'high_footprint_headroom_moderate_enter = 2560 * process_memory_mib;' in policy_after, 'Build352 constant no longer caps the relative stage'
+# The upstream severe/fatal constants sit outside every hunk of this section;
+# the pinned hunk digests prove no hunk of this delta touches them.
+assert b'process_headroom_severe_enter' not in b''.join(line for line in build435_sections['rpcs3/ios/IOSMemoryPressurePolicy.h'].splitlines(keepends=True) if line.startswith((b'+', b'-')) and b'= ' in line and b'process_memory_mib;' in line and b'high_footprint' not in line and b'moderate_reclaim' not in line), 'Build435 redefines an absolute pressure threshold'
+deferred_after=postimage_lines(build435_sections['rpcs3/Emu/Cell/SPUDeferredCompilePolicy.h'])
+assert b'inline constexpr bool deferred_compile_enabled = true;' in deferred_after and b'deferred_queue_limit = 256;' in deferred_after
+spu_build435=postimage_lines(build435_sections['rpcs3/Emu/Cell/SPUThread.cpp'])
+assert spu_build435.index(b'record_writer_lock_avoided(static_cast<u32>(vm::writer_lock_source::spu_putllc))')<spu_build435.index(b'vm::writer_lock_tag tag(vm::writer_lock_source::spu_putllc);')
+assert spu_build435.count(b'vm::writer_lock lock(')==spu_after.count(b'vm::writer_lock lock('), 'Build435 added or removed a writer lock acquisition'
+AUDITED_CORE_FILES |= BUILD435_FILES | BUILD435_ADDED
+current=build435_manifest
 assert candidate['manifest']['rpcs3_postimages_sha256'] == {
     path: current['files_sha256'][path] for path in sorted(AUDITED_CORE_FILES)
 }, 'Candidate/Core postimage identity drift'

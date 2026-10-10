@@ -41,7 +41,7 @@ class DeliveryPipeline(unittest.TestCase):
         # reviewed packages/neo_swap sources and is not compiled anywhere.
         native_changed={p for p in changed if p.startswith('native/')}
         self.assertLessEqual(native_changed,{'native/import-memory-candidate.json'})
-        self.assertTrue(native_changed<=reuse.NEOSWAP_434_DELTA)
+        self.assertTrue(native_changed<=reuse.NEOSWAP_434_DELTA|reuse.NEOSWAP_435_DELTA)
 
     def test_release_device_and_signature_guards_are_active(self):
         workflow=(ROOT/'.github/workflows/retroarch-delivery.yml').read_text()

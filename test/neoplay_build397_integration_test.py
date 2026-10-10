@@ -212,6 +212,16 @@ APPROVED_BUILD434_FILES = frozenset({
     'packages/neo_swap/ios/Classes/NeoSwapHost.h',
     'packages/neo_swap/ios/Classes/NeoSwapPlugin.mm',
 })
+APPROVED_BUILD435_FILES = frozenset({
+    'build-utils/rpcs3/embedded-core.patch',
+    'build-utils/rpcs3/canonical-source.json',
+    'build-utils/build_rpcs3_embedded_core.sh',
+    'build-utils/rpcs3_core_syntax_gate.py',
+    'test/neo_swap_core_pin_test.py',
+    'test/rpcs3_build352_gow3_memory_test.py',
+    'test/check_neo_swap_scope.py',
+    'native/import-memory-candidate.json',
+})
 
 def original(path, revision=BASE):
     return subprocess.check_output(['git', 'show', revision + ':' + path], cwd=ROOT)
@@ -223,7 +233,8 @@ class Build398Integration(unittest.TestCase):
         self.assertEqual(changed - APPROVED_RPCS3_MENU_FILES - APPROVED_MANAGED_SWAP_FILES
                          - APPROVED_SWAP_INTEGRATION_FILES - APPROVED_ARMSX2_INTEGRATION_FILES
                          - APPROVED_BUILD409_FILES - APPROVED_POST410_FILES - APPROVED_BUILD414_FILES
-                         - APPROVED_BUILD421_RETROARCH_FILES - APPROVED_BUILD434_FILES, set(),
+                         - APPROVED_BUILD421_RETROARCH_FILES - APPROVED_BUILD434_FILES
+                         - APPROVED_BUILD435_FILES, set(),
                          'Only explicitly reviewed integrations and exact post410/RetroArch postimages may differ from Build396')
         for path, expected in REVIEWED_BUILD421_RETROARCH_POSTIMAGES.items():
             self.assertEqual(hashlib.sha256((ROOT / path).read_bytes()).hexdigest(), expected, path)
