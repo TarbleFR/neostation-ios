@@ -130,4 +130,36 @@ touché chaque fichier, sans retirer d'assertion :
 
 ## 6. Identité de la livraison
 
-Renseigné après les compilations (Core puis IPA 435).
+### Core RPCS3 (Build 435)
+
+- premier run [38067298163](https://github.com/TarbleFR/neostation-ios/actions/runs/38067298163)
+  sur `983d9202` : arrêté en 3 min par la porte de syntaxe iOS sur un seul
+  appel non qualifié dans `RPCS3IOSPerformance.cpp` ; `SPUThread.cpp`,
+  `SPUCommonRecompiler.cpp`, `PPUThread.cpp` et `VKResourceManager.cpp`
+  avaient passé la porte ; corrigé par `6fede58a` (aucune autre section
+  changée) ;
+- run [38068094552](https://github.com/TarbleFR/neostation-ios/actions/runs/38068094552)
+  (`rpcs3-core.yml`, `workflow_dispatch`, `--ref Claude`) sur
+  `6fede58ae799214ce59cfecbae79b66d01d33b37` : pré-vol (dont
+  `rpcs3_build435_core_delta_test.py` avec Apple clang et ASan), compilation
+  et validation réussis, job de 16 h 32 à 17 h 27 UTC (54 min 27 s) ;
+- source `XITRIX/rpcs3@22f1152783cef1f7e04af7b1c895173e28fd5b03`, ABI 30,
+  delta canonique `patch_sha256`
+  `06919a59941bfb87e7323fa2d96016d2222ba9c00ebbd973d4b138ea02abf96b` ;
+- `libRPCS3Core.dylib` arm64, SHA-256
+  `5b0a5d09caa6ce6381249515d3cf696b67a2b7a867b96df36e00269192a6a0c8`,
+  validation passive dlopen et exports réussie ;
+- artefact `RPCS3Core-6fede58ae799214ce59cfecbae79b66d01d33b37`,
+  id [11676354918](https://github.com/TarbleFR/neostation-ios/actions/runs/38068094552/artifacts/11676354918),
+  28 307 224 octets, empreinte du zip
+  `8dc34448aeea2b80a4b21cdebaee8378429a8880def862ab98ab3e16b8012877`,
+  rétention 30 jours (jusqu'au 9 novembre 2026) ; diagnostics id 11677305403.
+
+La lane `retroarch-delivery.yml` est ré-épinglée sur ce run
+(`RPCS3_CORE_HOST_SHA` = `6fede58a…`, `RPCS3_CORE_RUN_ID` = 38068094552) ;
+`neoswap-ipa.yml`, hors lane de livraison et comparé byte pour byte à
+`afc0a96d`, garde le Core 412.
+
+### IPA 435
+
+Renseigné après la lane de livraison.
