@@ -6,6 +6,13 @@ struct NPControllerBatteryReading: Equatable {
     let player: Int
     let name: String
     let value: NPBatteryValue
+
+    /// The reading for Dart (NeoStation's header): no percentage when the
+    /// controller does not report one.
+    var payload: [String: Any] {
+        ["player": player, "name": name, "percent": value.percent.map { $0 as Any } ?? NSNull(),
+         "charge": value.charge.rawValue, "low": value.low]
+    }
 }
 
 final class NPControllerBatteryMonitor {

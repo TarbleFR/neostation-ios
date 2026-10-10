@@ -519,6 +519,21 @@ NEOSWAP_435_DELTA = {
     'native/import-memory-candidate.json',
 }
 DELTA |= NEOSWAP_435_DELTA
+# Controller battery in the header (maintainer report of 10 October 2026: the
+# indicator stayed at 100% with an Xbox Series X controller; it showed the
+# phone's battery). The header now shows the connected controller's battery,
+# read by NeoPlay's existing GameController monitor.
+BATTERY_DELTA = {
+    'lib/services/controller_battery_service.dart',
+    'lib/widgets/header.dart',
+    'lib/widgets/header_battery.dart',
+    'packages/neoplay_bridge/ios/Classes/NPControllerBatteryMonitor.swift',
+    'packages/neoplay_bridge/ios/Classes/NeoPlayBridgePlugin.swift',
+    'packages/neoplay_bridge/lib/neoplay_bridge.dart',
+    'test/header_battery_test.dart',
+    'test/neoplay/companion_tests.swift',
+}
+DELTA |= BATTERY_DELTA
 INPUT_ROOTS = ('lib/', 'packages/', 'native/', 'build-utils/', 'assets/', 'test/')
 
 def sha(data):

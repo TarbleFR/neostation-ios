@@ -21,6 +21,15 @@ final class NeoPlayCompanionTests: XCTestCase {
         XCTAssertTrue(NPBatteryValue(level:0.15,charge:.discharging).low)
         XCTAssertFalse(NPBatteryValue(level:0.15,charge:.charging).low)
     }
+    func testHeaderPayloadKeepsAnUnreportedLevelUnknown() {
+        let pad = NSObject(), other = NSObject()
+        let reported = NPControllerBatteryReading(id:ObjectIdentifier(pad),player:1,name:"Xbox Wireless Controller",value:NPBatteryValue(level:0.7,charge:.discharging)).payload
+        XCTAssertEqual(reported["percent"] as? Int,70); XCTAssertEqual(reported["charge"] as? String,"discharging")
+        XCTAssertEqual(reported["player"] as? Int,1); XCTAssertEqual(reported["name"] as? String,"Xbox Wireless Controller")
+        let unknown = NPControllerBatteryReading(id:ObjectIdentifier(other),player:2,name:"Pad",value:NPBatteryValue(level:1,charge:.unknown)).payload
+        XCTAssertTrue(unknown["percent"] is NSNull, "an unknown state is never sent as 100%")
+        XCTAssertEqual(unknown["charge"] as? String,"unknown")
+    }
     func testAirPlayAudioIsNeverReportedAsVideoOrSpecificAppleTV() {
         XCTAssertEqual(NPAirPlayFacts(externalMirroring:false,airPlayAudio:false).status,"notDetected")
         XCTAssertEqual(NPAirPlayFacts(externalMirroring:false,airPlayAudio:true).status,"audioOnly")
