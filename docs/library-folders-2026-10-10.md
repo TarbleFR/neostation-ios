@@ -76,3 +76,13 @@ Demandes du mainteneur après l’installation de la Build 432, sur la branche
   l’iPhone (à confirmer par un journal de la Build 433 comparé à
   `247E7CB5…` de la Build 431) et le déplacement d’un dossier d’une autre app
   sur iOS.
+
+## Livraison
+
+**Build 433**, IPA de test : source `57548e6b214a6ca4b79a7d6f45edb6c9e9e1b552`,
+run [38059314049](https://github.com/TarbleFR/neostation-ios/actions/runs/38059314049)
+(contrôles Dart exécutés de nouveau, natif, compilation Release à froid
+réussis ; contrôles libretro : run 38059137851). IPA scellée : SHA-256
+`fe6547b90b484c33c9c8c9af60a943e2577a15f6368909b93a0b001370facd5b`,
+205 910 988 octets, 57 signatures de préparation vérifiées. Installation par
+SideStore. Aucun test sur iPhone à ce stade.
