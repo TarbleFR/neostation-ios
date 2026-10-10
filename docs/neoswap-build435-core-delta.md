@@ -180,9 +180,15 @@ La lane `retroarch-delivery.yml` est ré-épinglée sur ce run
   Core 435 `5b0a5d09…` installé après vérification de son identité complète ;
 - IPA avant scellement (`shasum` de l'étape de validation) : SHA-256
   `65183b3f206f198f8badabf5717a673b0d5abc49b6ce2b183760802bcbfca10a` ;
-  l'empreinte scellée est dans `SHA256SUMS` et `signed-payload-identity.json`
-  de l'artefact déchiffré, à relever sur le PC du mainteneur (hors ligne au
-  moment de la livraison ; script `decrypt-435.ps1` fourni) ;
+- IPA scellée, relevée le 10 octobre 2026 après déchiffrement de l'artefact
+  sur le PC du mainteneur (clé privée delivery-424, `gh run download`,
+  `openssl pkeyutl` RSA-OAEP SHA-256 puis `openssl enc` AES-256-CBC PBKDF2,
+  dossier `nsw\b435\content`) :
+  `NeoStation-Build435-90a4e513e3a97f642bc45963bfb689f7c4677d46-cold.ipa`,
+  SHA-256 `3290c87e0a48151bfe296b6ece548c1f0de83116e1d9d76e08962f7ccb6e569e`,
+  205 917 388 octets, valeur identique dans `SHA256SUMS` et dans
+  `signed-payload-identity.json` ; 57 signatures ad hoc de préparation
+  vérifiées sur 57 (`signature.json`, build 435) ;
 - artefact chiffré (destinataire `delivery-424-recipient.pem`) :
   `NeoStation-Build-435-90a4e513e3a97f642bc45963bfb689f7c4677d46-cold`,
   id [11678040155](https://github.com/TarbleFR/neostation-ios/actions/runs/38072379293/artifacts/11678040155),
