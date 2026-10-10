@@ -82,11 +82,28 @@ and add your own BIOS files, just as you would in RetroArch's `system` folder.
 Preserve the filenames and subfolders required by each core. No BIOS files
 are included.
 
-**Planned additions:** shader support to customize the rendering as in RetroArch,
-and skins to personalize the appearance of on-screen controls.
+### Controller skins — Provenance Skin Catalog
 
-See the [0.0.3 release](https://github.com/TarbleFR/neostation-ios/releases/tag/0.0.3)
-and [release notes](docs/RELEASE_0.0.3.md) for downloads and release details.
+NeoStation iOS **0.0.4 / Build 435** uses the
+**[Provenance Skin Catalog](https://github.com/Provenance-Emu/skins)**
+to browse and install community skins for its embedded Libretro consoles.
+**Thank you to the Provenance team, the catalog contributors and every skin
+creator for making this collection available.**
+
+- **Catalog source:** [Provenance-Emu/skins](https://github.com/Provenance-Emu/skins).
+- **Browse online:** [provenance-emu.com/skins](https://provenance-emu.com/skins/).
+- **Skin format reference:** [Delta / DeltaCore](https://github.com/rileytestut/DeltaCore),
+  by Riley Testut and contributors.
+- **Artwork and layouts:** credited to each skin's original creator. Community
+  skins are optional downloads and remain subject to their creators' terms.
+
+Open **Settings → Folders → Embedded consoles**, select a console, then
+**Skins → Browse the Provenance catalog**. Install a skin and choose portrait,
+landscape or both orientations. Each console also has a NeoStation default skin.
+
+See the [skin guide](https://github.com/TarbleFR/neostation-ios/blob/08145438cc907b22b7b860bf190d1b520040fef1/docs/SKINS.md)
+and the [0.0.4 release](https://github.com/TarbleFR/neostation-ios/releases/tag/0.0.4)
+for instructions and downloads.
 
 ### External app integrations
 
@@ -159,8 +176,9 @@ process. `.env` must never be committed.
 
 ## Releases and historical build references
 
-The latest published version is **[NeoStation iOS 0.0.3 — Build 427](https://github.com/TarbleFR/neostation-ios/releases/tag/0.0.3)**.
-Its original executable source, release packaging and checks are documented in
+The latest published version is **[NeoStation iOS 0.0.4 — Build 435](https://github.com/TarbleFR/neostation-ios/releases/tag/0.0.4)**.
+The release includes the IPA, its checksum and exact source/build references.
+The earlier 0.0.3 packaging remains documented in
 [the 0.0.3 source manifest](docs/RELEASE_0.0.3_SOURCE_MANIFEST.md).
 
 The **Build 350** identity below is retained as a historical native donor reference:
@@ -211,6 +229,9 @@ components, and preserve their license/notices.
 | **KartPad / WiiCompiled** | [KartPad](https://github.com/chrissotraidis/kartpad) by [@chrissotraidis](https://github.com/chrissotraidis), built on [WiiCompiled](https://github.com/patchzyy/Wiicompiled) created by [@patchzyy](https://github.com/patchzyy). |
 | **MeloNX / Ryujinx** | [MeloNX](https://github.com/nurtrino/MeloNX) contributors; MeloNX describes itself as based on Ryujinx/Ryubing. |
 | **RetroArch / libretro** | [RetroArch](https://github.com/libretro/RetroArch) and libretro contributors, for the Libretro API, core ecosystem and buildbot distributions used by the embedded integration; RetroArch also remains an optional external frontend. Individual emulator authors are credited below. |
+| **Provenance Skin Catalog** | [Provenance-Emu/skins](https://github.com/Provenance-Emu/skins), maintained by the Provenance team and community contributors; the catalog used by NeoStation to discover and install controller skins. |
+| **Delta / DeltaCore** | [Riley Testut and DeltaCore contributors](https://github.com/rileytestut/DeltaCore), for the controller-skin format referenced by compatible imports. |
+| **Community skin creators** | The original authors of each skin's artwork and layout. Available author and source credits are preserved; each creator's terms apply. |
 | **StikJIT** | [StikDebug/StikJIT](https://github.com/StikDebug/StikJIT) and its contributors. |
 | **ScreenScraper** | [ScreenScraper.fr](https://www.screenscraper.fr/) metadata and media service. |
 | **RetroAchievements** | [RetroAchievements](https://retroachievements.org/) project, API and community. |
