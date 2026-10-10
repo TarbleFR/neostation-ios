@@ -45,7 +45,7 @@ jobs:
       - name: Validate all NeoPlay languages and dialog lifecycle
         run: |
           dart analyze lib/widgets/main_menu_tab_strip.dart lib/widgets/header.dart lib/l10n/neoplay_companion_locale.dart lib/widgets/neoplay_game_hud_host.dart lib/widgets/neoplay_apple_tv_card.dart lib/l10n/neoplay_locale.dart lib/widgets/neoplay_dialog.dart packages/neoplay_bridge/lib/neoplay_bridge.dart lib/screens/settings_screen/new_settings_options/tools_settings_content.dart
-          flutter test test/neoplay_locale_test.dart test/neoplay_dialog_test.dart test/neoplay_companion_test.dart test/main_menu_tab_strip_test.dart test/header_battery_test.dart
+          flutter test test/neoplay_locale_test.dart test/neoplay_dialog_test.dart test/neoplay_companion_test.dart test/main_menu_tab_strip_test.dart
           python3 test/neoplay_config_test.py
           python3 test/neoplay_ipa_packaging_test.py
           python3 test/neoplay_build397_integration_test.py

@@ -1,5 +1,10 @@
 # Build 435 — delta du Core RPCS3 : enveloppe mesurée, compilation SPU différée, pré-comparaison du `writer_lock`
 
+> **Build 436 (10 octobre 2026)** : sur l’iPhone, God of War III se fige environ 5 s après le
+> démarrage dans 3 sessions sur 3 avec ce Core, et un autre titre s’arrête sur un `STOP 0x0`
+> SPU. Le delta B (compilation SPU différée) est désactivé par son interrupteur ; A et C sont
+> conservés. Voir `docs/rpcs3-build436-gow3-black-screen.md`.
+
 Demande du mainteneur du 10 octobre 2026 : appliquer au Core RPCS3 les trois
 leviers proposés au § 7 de `docs/neoswap-build434-7go-envelope.md`, qui
 exigeaient une reconstruction du Core. Les sources NeoStation (hôte,

@@ -113,7 +113,10 @@ int main()
 	static_assert(interpreter_should_exit(compile_state_complete, false, interpreter_handoff_quantum_branches));
 	static_assert(deferred_worker_count(6) == 2 && deferred_worker_count(8) == 3 && deferred_worker_count(2) == 1 && deferred_worker_count(0) == 1);
 	static_assert(prefer_request(5, 9, 4, 1) && !prefer_request(4, 1, 5, 9) && prefer_request(4, 1, 4, 2) && !prefer_request(4, 2, 4, 1));
-	static_assert(deferred_queue_limit == 256 && deferred_compile_enabled);
+	// Build 436: the deferral is switched off after God of War III froze about
+	// 5 s after boot on the iPhone with it (3 of 3 Build 435 sessions); every
+	// miss compiles inline as in Build 434. The decisions above stay tested.
+	static_assert(deferred_queue_limit == 256 && !deferred_compile_enabled);
 	{
 		// Hottest first, oldest among equals: a queue of four requests.
 		struct request { std::uint64_t hits, sequence; } queue[] = {{1, 1}, {7, 2}, {7, 3}, {3, 4}};

@@ -33,6 +33,11 @@ Ces règles expriment les exigences du mainteneur du 18 septembre 2026 et s'appl
 - Première ouverture iOS : NeoStation propose de créer un dossier par console dans `NeoStation › roms` (recommandé, sans autre action), de **déplacer** une bibliothèque existante dans ce dossier (l’autre dossier n’est ensuite plus utilisé), ou de lier un dossier sans le déplacer. Les mêmes actions sont dans Réglages › Dossiers › Consoles intégrées.
 - Autorisation explicite de modifier le démarrage (`lib/main.dart`, verrouillé sur la 419) : les dossiers enregistrés introuvables après le déplacement d’un conteneur iOS sont retrouvés au même endroit du conteneur actuel (blocs `LIBRARY_RELOCATION_*`, exception documentée dans `test/retroarch_baseline_scope_test.py`). Aucun fichier de jeu n’est déplacé, aucune ligne de jeu n’est réécrite. Voir `docs/library-folders-2026-10-10.md`.
 
+## Décision du mainteneur — God of War III et NeoSwap, 10 octobre 2026 soir
+
+- Le mainteneur refuse le retour au Core 434 : il faut corriger la Build 435. Les journaux de l’iPhone montrent God of War III figé environ 5 s après le démarrage dans 3 sessions sur 3 avec le Core 435 (images présentées, PPU/SPU/RSX inactifs, mémoire plate), alors que le Core 434 le fait tourner. La Build 436 désactive la compilation SPU différée (delta B, `deferred_compile_enabled = false`) et conserve les deltas A et C. Ne pas la réactiver sans preuve sur l’iPhone. Voir `docs/rpcs3-build436-gow3-black-screen.md`.
+- NeoSwap est conservé (sa suppression avait été demandée à cause de l’écran noir, qui ne vient pas de lui). Pendant le jeu, la mémoire libre de tout l’iPhone (≈ 0,6 Go) limite les donneurs : ne pas présenter NeoSwap comme une source de RAM supplémentaire au-delà de la mémoire libre du système.
+
 ## Précision du mainteneur — 9 octobre 2026, 13 h
 
 - L'état fonctionnel confirmé est NeoStation Build 422 : bibliothèque visible et lancement RetroArch lorsque l'application externe reste en arrière-plan. Conserver ces sources de lancement/synchronisation ; ne pas prendre le récepteur autonome 781 pour une mise à jour NeoStation.

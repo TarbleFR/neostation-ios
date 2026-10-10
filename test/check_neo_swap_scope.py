@@ -789,8 +789,11 @@ BUILD435_HUNKS={
         ['242e57926f144b1c05bf6390f5d7bba3e094015ec984c7bb1908aa19f04fb439']),
 }
 assert set(BUILD435_HUNKS)==BUILD435_FILES|BUILD435_ADDED
-build435_manifest=json.loads((ROOT/'build-utils/rpcs3/canonical-source.json').read_text())
-build435_patch=(ROOT/'build-utils/rpcs3/embedded-core.patch').read_bytes()
+# Frozen at the commit the Build435 Core (run 38068094552) was built from; the
+# Build436 switch is reviewed against this stage below.
+BUILD435_REVIEWED='6fede58ae799214ce59cfecbae79b66d01d33b37'
+build435_manifest=json.loads(original('build-utils/rpcs3/canonical-source.json',BUILD435_REVIEWED))
+build435_patch=original('build-utils/rpcs3/embedded-core.patch',BUILD435_REVIEWED)
 build435_sections=sections(build435_patch)
 assert set(build435_manifest)==set(current), 'Build435 changed the canonical manifest shape'
 for key in set(current)-{'files_sha256','patch_sha256','policy'}:
@@ -826,6 +829,40 @@ assert spu_build435.index(b'record_writer_lock_avoided(static_cast<u32>(vm::writ
 assert spu_build435.count(b'vm::writer_lock lock(')==spu_after.count(b'vm::writer_lock lock('), 'Build435 added or removed a writer lock acquisition'
 AUDITED_CORE_FILES |= BUILD435_FILES | BUILD435_ADDED
 current=build435_manifest
+# Build436 (10 October 2026): the Build435 deferred SPU compilation is switched
+# off after God of War III froze about 5 s after boot on the iPhone in 3 of 3
+# Build435 sessions and another title stopped on SPU STOP 0x0
+# (docs/rpcs3-build436-gow3-black-screen.md). Exactly one postimage changes, by
+# exactly the switch and its comment; the policies stay host-tested.
+BUILD436_FILES={'rpcs3/Emu/Cell/SPUDeferredCompilePolicy.h'}
+build436_manifest=json.loads((ROOT/'build-utils/rpcs3/canonical-source.json').read_text())
+build436_patch=(ROOT/'build-utils/rpcs3/embedded-core.patch').read_bytes()
+build436_sections=sections(build436_patch)
+assert hashlib.sha256(build436_patch).hexdigest()==build436_manifest['patch_sha256']
+assert set(build436_manifest)==set(current), 'Build436 changed the canonical manifest shape'
+for key in set(current)-{'files_sha256','patch_sha256','policy'}:
+    assert build436_manifest[key]==current[key], 'Build436 changed unrelated Core policy: '+key
+assert build436_manifest['policy'].startswith(current['policy']+'; Build436: ')
+assert build436_manifest['policy'].endswith('no device validation of Build436.')
+assert set(build436_manifest['files_sha256'])==set(current['files_sha256'])
+assert {p for p,h in build436_manifest['files_sha256'].items() if current['files_sha256'][p]!=h}==BUILD436_FILES
+assert set(build436_sections)==set(build435_sections)
+assert {p for p in build436_sections if build435_sections[p]!=build436_sections[p]}==BUILD436_FILES
+switch_before=added_lines(build435_sections['rpcs3/Emu/Cell/SPUDeferredCompilePolicy.h'])
+switch_after=added_lines(build436_sections['rpcs3/Emu/Cell/SPUDeferredCompilePolicy.h'])
+assert dict(switch_before-switch_after)=={
+    b'// Compile-time switch for the next candidate; no setting or UI is involved.\n': 1,
+    b'inline constexpr bool deferred_compile_enabled = true;\n': 1,
+}, 'Build436 removed other deferred-compile lines'
+assert dict(switch_after-switch_before)=={
+    b'// Compile-time switch; no setting or UI is involved. Off since Build 436: with\n': 1,
+    b'// it, God of War III froze about 5 s after boot on the iPhone (3 of 3 sessions,\n': 1,
+    b'// 10 October 2026: frames kept coming, PPU/SPU/RSX idle, memory flat) and another\n': 1,
+    b'// title stopped on SPU STOP 0x0 after interpreted hand-offs. The Build 434 inline\n': 1,
+    b'// compilation is used again; the pool and its policies stay for a later review.\n': 1,
+    b'inline constexpr bool deferred_compile_enabled = false;\n': 1,
+}, 'Build436 added other deferred-compile lines'
+current=build436_manifest
 assert candidate['manifest']['rpcs3_postimages_sha256'] == {
     path: current['files_sha256'][path] for path in sorted(AUDITED_CORE_FILES)
 }, 'Candidate/Core postimage identity drift'

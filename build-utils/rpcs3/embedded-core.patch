@@ -5035,10 +5035,10 @@ index d451a94..2ff9ed8 100644
  		if (set_relax_flag)
 diff --git a/rpcs3/Emu/Cell/SPUDeferredCompilePolicy.h b/rpcs3/Emu/Cell/SPUDeferredCompilePolicy.h
 new file mode 100644
-index 0000000..71df793
+index 0000000..a994d9b
 --- /dev/null
 +++ b/rpcs3/Emu/Cell/SPUDeferredCompilePolicy.h
-@@ -0,0 +1,94 @@
+@@ -0,0 +1,98 @@
 +#pragma once
 +
 +#include <cstdint>
@@ -5059,8 +5059,12 @@ index 0000000..71df793
 +inline constexpr std::uint32_t compile_state_complete = 2;
 +inline constexpr std::uint32_t compile_state_failed = 3;
 +
-+// Compile-time switch for the next candidate; no setting or UI is involved.
-+inline constexpr bool deferred_compile_enabled = true;
++// Compile-time switch; no setting or UI is involved. Off since Build 436: with
++// it, God of War III froze about 5 s after boot on the iPhone (3 of 3 sessions,
++// 10 October 2026: frames kept coming, PPU/SPU/RSX idle, memory flat) and another
++// title stopped on SPU STOP 0x0 after interpreted hand-offs. The Build 434 inline
++// compilation is used again; the pool and its policies stay for a later review.
++inline constexpr bool deferred_compile_enabled = false;
 +
 +// Requests waiting or compiling before a miss compiles inline again, which
 +// bounds the backlog memory and the time a program can stay interpreted.
