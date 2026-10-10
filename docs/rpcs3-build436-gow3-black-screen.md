@@ -48,6 +48,13 @@ SPU.
   test natif (`deferred_compile_enabled` attendu à `false`) mis à jour ; la
   porte `test/check_neo_swap_scope.py` fige l'étape 435 sur `6fede58a` et
   n'autorise pour la 436 que l'interrupteur et son commentaire.
+- Le même Core 436 importe cinq correctifs RSX/Vulkan de XITRIX v0.11, à la
+  demande du mainteneur ([rpcs3-xitrix-v011-build436.md](rpcs3-xitrix-v011-build436.md)).
+  Ils ne touchent aucun fichier SPU, PPU, JIT ou mémoire : un gel de God of
+  War III avec SPU inactifs resterait attribuable au chemin SPU, pas à eux.
+  Le premier Core construit avec l'interrupteur seul (run 38079020895) a été
+  annulé : `neo_swap_core_pin_test.py` épinglait encore le patch 435 et la
+  livraison l'aurait refusé.
 - Nouveau cœur construit par `rpcs3-core.yml`, puis épinglé dans la voie de
   livraison une fois la construction réussie.
 

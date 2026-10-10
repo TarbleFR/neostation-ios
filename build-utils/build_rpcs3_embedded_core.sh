@@ -135,6 +135,8 @@ env -u SDKROOT CXX="$HOST_CXX" HOST_MACOS_SDK="$HOST_MACOS_SDK" \
   python3 "$PWD/test/rpcs3_source_archive_test.py" "$SRC"
 env -u SDKROOT CXX="$HOST_CXX" HOST_MACOS_SDK="$HOST_MACOS_SDK" \
   python3 "$PWD/test/rpcs3_xitrix_v0101_native_test.py" "$SRC"
+env -u SDKROOT CXX="$HOST_CXX" HOST_MACOS_SDK="$HOST_MACOS_SDK" \
+  python3 "$PWD/test/rpcs3_xitrix_v011_native_test.py" "$SRC"
 env -u SDKROOT "$HOST_CXX" -isysroot "$HOST_MACOS_SDK" -std=c++20 -O2 -Wall -Wextra -Werror -pthread \
   -DNEOSWAP_TESTING -I "$SRC" -I "$SRC/rpcs3" -I "$PWD/packages/neo_swap/ios/Classes" \
   "$PWD/packages/neo_swap/ios/Classes/NeoSwap.cpp" "$PWD/test/neoswap_rpcs3_allocator_test.cpp" \

@@ -534,7 +534,17 @@ BATTERY_DELTA = {
     'test/neoplay/companion_tests.swift',
 }
 DELTA |= BATTERY_DELTA
-INPUT_ROOTS = ('lib/', 'packages/', 'native/', 'build-utils/', 'assets/', 'test/')
+# Build 436 Core (10 October 2026): the Build 435 deferred SPU compilation is
+# switched off after God of War III froze on the iPhone, and five RSX/Vulkan
+# commits of XITRIX v0.11 are imported with their fixtures, which the new host
+# test runs before the Core build. The third-party notices gained the skin
+# catalog credits (08145438) and are bundled with the app.
+BUILD436_DELTA = {
+    'test/rpcs3_xitrix_v011_native_test.py',
+    'assets/legal/THIRD_PARTY_NOTICES.md',
+}
+DELTA |= BUILD436_DELTA
+INPUT_ROOTS =('lib/', 'packages/', 'native/', 'build-utils/', 'assets/', 'test/')
 
 def sha(data):
     return hashlib.sha256(data).hexdigest()

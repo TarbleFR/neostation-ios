@@ -17,11 +17,18 @@ import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
 UPSTREAM = '22f1152783cef1f7e04af7b1c895173e28fd5b03'
-PATCH_SHA256 = '06919a59941bfb87e7323fa2d96016d2222ba9c00ebbd973d4b138ea02abf96b'
+PATCH_SHA256 = '82690d3d19c0ce7a631709f9e798603f94a65505724198d7674f26f162c8efe4'
 BACKPORTS = (
     '8bd938e9de9ff6455f312cdf8bd64bd37a064c4e',
     '1d13d1e6bbabfbb7a873f2c608c52525ff470e25',
     '6747b75ac96d43674d58e822c527ec6b07519c5f',
+)
+V011_BACKPORTS = (
+    '3dc496307b86f81a409f03816af07261a49748d3',
+    '7137b41aed01d94345e35719a98fdc4190d08e50',
+    '3ebf5c99fada6cd15da346ab216c96ba09a81f63',
+    '57ce3bf6a9f6a522fcb7b8f2ae140b59b19f0cd3',
+    '395636f5a64ec33fc3b9b44c8f01f1c5d69b9217',
 )
 
 # Core source, recipe, ABI and native acceptance evidence. NeoSwap.cpp,
@@ -80,6 +87,7 @@ CORE_INPUTS = (
     'test/rpcs3_ios_ppu_compile_budget_test.cpp',
     'test/rpcs3_ppu_no_size_split_policy_test.cpp',
     'test/rpcs3_xitrix_v0101_native_test.py',
+    'test/rpcs3_xitrix_v011_native_test.py',
     'test/native/rpcs3_spu_analyzer_support.h',
     'test/native/rpcs3_spu_branch_analyzer_test.cpp',
     'test/rpcs3_spu_warmup_test.py',
@@ -124,6 +132,9 @@ def validate_source_contract(root: Path = ROOT, source_root: Path | None = None)
             'The reviewed canonical Core delta changed')
     require(tuple(manifest['xitrix_v0101_backports']['commits']) == BACKPORTS,
             'Unexpected v0.10.1 backport scope')
+    require(tuple(manifest['xitrix_v011_backports']['commits']) == V011_BACKPORTS and
+            manifest['xitrix_v011_backports']['device_runtime_tested'] is False,
+            'Unexpected XITRIX v0.11 import scope')
     require(manifest['device_runtime_tested'] is False and
             manifest['xitrix_v0101_backports']['device_runtime_tested'] is False,
             'Source tests cannot establish physical-device validation')

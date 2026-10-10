@@ -8527,8 +8527,22 @@ index 1a1e818..8738311 100644
  				vm::writer_lock lock(addr);
  
  				if ((result = std::invoke(op, *sptr)))
+diff --git a/rpcs3/Emu/RSX/Capture/rsx_replay.h b/rpcs3/Emu/RSX/Capture/rsx_replay.h
+index f11f2e0..a6d982d 100644
+--- a/rpcs3/Emu/RSX/Capture/rsx_replay.h
++++ b/rpcs3/Emu/RSX/Capture/rsx_replay.h
+@@ -152,6 +152,9 @@ namespace rsx
+ 			version = c_fc_version;
+ 			tile_map.clear();
+ 			memory_map.clear();
++			memory_data_map.clear();
++			display_buffers_map.clear();
++			memory_indexer = 0x1234;
+ 			replay_commands.clear();
+ 			reg_state = method_registers;
+ 		}
 diff --git a/rpcs3/Emu/RSX/Common/BufferUtils.cpp b/rpcs3/Emu/RSX/Common/BufferUtils.cpp
-index 8b2689b..cc49e82 100644
+index 8b2689b..1595a16 100644
 --- a/rpcs3/Emu/RSX/Common/BufferUtils.cpp
 +++ b/rpcs3/Emu/RSX/Common/BufferUtils.cpp
 @@ -6,6 +6,7 @@
@@ -8619,6 +8633,52 @@ index 8b2689b..cc49e82 100644
  		{
  			T index = src[i];
  			if (index != restart_index)
+@@ -772,15 +833,7 @@ u32 get_index_count(rsx::primitive_type draw_mode, u32 initial_index_count)
+ 	}
+ }
+ 
+-u32 get_index_type_size(rsx::index_array_type type)
+-{
+-	switch (type)
+-	{
+-	case rsx::index_array_type::u16: return sizeof(u16);
+-	case rsx::index_array_type::u32: return sizeof(u32);
+-	}
+-	fmt::throw_exception("Wrong index type");
+-}
++
+ 
+ namespace
+ {
+diff --git a/rpcs3/Emu/RSX/Common/BufferUtils.h b/rpcs3/Emu/RSX/Common/BufferUtils.h
+index bad086c..fd0839e 100644
+--- a/rpcs3/Emu/RSX/Common/BufferUtils.h
++++ b/rpcs3/Emu/RSX/Common/BufferUtils.h
+@@ -1,6 +1,7 @@
+ #pragma once
+ 
+ #include "../gcm_enums.h"
++#include "Utilities/StrFmt.h"
+ 
+ #include <span>
+ 
+@@ -22,7 +23,15 @@ u32 get_index_count(rsx::primitive_type m_draw_mode, u32 initial_index_count);
+ /**
+  * Returns index type size in byte
+  */
+-u32 get_index_type_size(rsx::index_array_type type);
++inline u32 get_index_type_size(rsx::index_array_type type)
++{
++	switch (type)
++	{
++	case rsx::index_array_type::u16: return sizeof(u16);
++	case rsx::index_array_type::u32: return sizeof(u32);
++	}
++	fmt::throw_exception("Wrong index type");
++}
+ 
+ /**
+  * Write count indexes using (first, first + count) ranges.
 diff --git a/rpcs3/Emu/RSX/Common/aligned_malloc.hpp b/rpcs3/Emu/RSX/Common/aligned_malloc.hpp
 index 2ca59c3..a7f4f74 100644
 --- a/rpcs3/Emu/RSX/Common/aligned_malloc.hpp
@@ -8906,7 +8966,7 @@ index 8171927..9672672 100644
  				Traits::clone_surface(cmd, sink, region.source, new_address, region, region.source->resolution_scaling_config);
  				allocate_rsx_memory(Traits::get(sink));
 diff --git a/rpcs3/Emu/RSX/Common/texture_cache.h b/rpcs3/Emu/RSX/Common/texture_cache.h
-index 0fa80b2..38945c7 100644
+index 0fa80b2..a85692e 100644
 --- a/rpcs3/Emu/RSX/Common/texture_cache.h
 +++ b/rpcs3/Emu/RSX/Common/texture_cache.h
 @@ -1871,7 +1871,7 @@ namespace rsx
@@ -8927,6 +8987,15 @@ index 0fa80b2..38945c7 100644
  					{
  						continue;
  					}
+@@ -2563,7 +2563,7 @@ namespace rsx
+ 
+ 			auto fast_fbo_check = [&]() -> sampled_image_descriptor
+ 			{
+-				const auto& last = overlapping_fbos.back();
++				const auto& last = helpers::select_framebuffer_source(overlapping_fbos, helpers::is_gcm_depth_format(attr.gcm_format));
+ 
+ 				if (!last.is_clipped) //<- A non-clipped hit fully contains the requested box. We're good to go with the framebuffer processing.
+ 				{
 @@ -2609,12 +2609,17 @@ namespace rsx
  
  			// Check shader_read storage. In a given scene, reads from local memory far outnumber reads from the surface cache
@@ -8961,6 +9030,102 @@ index 0fa80b2..38945c7 100644
  				});
  			}
  
+diff --git a/rpcs3/Emu/RSX/Common/texture_cache_helpers.h b/rpcs3/Emu/RSX/Common/texture_cache_helpers.h
+index e6789e8..040fe85 100644
+--- a/rpcs3/Emu/RSX/Common/texture_cache_helpers.h
++++ b/rpcs3/Emu/RSX/Common/texture_cache_helpers.h
+@@ -80,6 +80,34 @@ namespace rsx
+ 
+ 	namespace texture_cache_helpers
+ 	{
++		template <typename OverlapList>
++		const auto& select_framebuffer_source(const OverlapList& overlaps, bool depth_texture)
++		{
++			const auto& newest = overlaps.back();
++			if (!newest.is_clipped && newest.is_depth != depth_texture)
++			{
++				// Color and depth written by one draw share a tag. Their allocations
++				// can overlap even when the draw does not touch the overlapping pixels.
++				// Prefer the requested aspect among equally recent, complete sources.
++				// Newer writes and partial regions still follow the normal merge rules.
++				for (auto i = overlaps.size() - 1; i > 0; --i)
++				{
++					const auto& candidate = overlaps[i - 1];
++					if (candidate.surface->last_use_tag != newest.surface->last_use_tag)
++					{
++						break;
++					}
++
++					if (!candidate.is_clipped && candidate.is_depth == depth_texture)
++					{
++						return candidate;
++					}
++				}
++			}
++
++			return newest;
++		}
++
+ 		static inline bool force_strict_fbo_sampling(u8 samples)
+ 		{
+ 			if (g_cfg.video.strict_rendering_mode)
+diff --git a/rpcs3/Emu/RSX/Core/RSXDrawCommands.cpp b/rpcs3/Emu/RSX/Core/RSXDrawCommands.cpp
+index 755f4ea..655cf6b 100644
+--- a/rpcs3/Emu/RSX/Core/RSXDrawCommands.cpp
++++ b/rpcs3/Emu/RSX/Core/RSXDrawCommands.cpp
+@@ -63,16 +63,11 @@ namespace rsx
+ 		result.interleaved_blocks.reserve(16);
+ 		result.referenced_registers.reserve(16);
+ 
+-		for (auto [ref_mask, index] = std::tuple{ input_mask, u8(0) }; ref_mask; ++index, ref_mask >>= 1)
++		for (u32 ref_mask = input_mask; ref_mask; ref_mask &= ref_mask - 1)
+ 		{
++			const auto index = static_cast<u8>(std::countr_zero(ref_mask));
+ 			ensure(index < rsx::limits::vertex_count);
+ 
+-			if (!(ref_mask & 1u))
+-			{
+-				// Nothing to do, uninitialized
+-				continue;
+-			}
+-
+ 			// Always reset attribute placement by default
+ 			result.attribute_placement[index] = attribute_buffer_placement::none;
+ 
+@@ -338,7 +333,7 @@ namespace rsx
+ 					offset_in_block[attrib.index] = persistent_offset + (local_address - block->base_offset);
+ 				}
+ 
+-				const auto range = block->calculate_required_range(first_vertex, vertex_count);
++				const auto range = block->get_required_range(first_vertex, vertex_count);
+ 				persistent_offset += block->attribute_stride * range.second;
+ 			}
+ 		}
+@@ -363,13 +358,9 @@ namespace rsx
+ 		const u32 modulo_mask = REGS(m_ctx)->frequency_divider_operation_mask();
+ 		const auto max_index = (first_vertex + vertex_count) - 1;
+ 
+-		for (u16 ref_mask = vp_metadata.referenced_inputs_mask, index = 0; ref_mask; ++index, ref_mask >>= 1)
++		for (u32 ref_mask = vp_metadata.referenced_inputs_mask; ref_mask; ref_mask &= ref_mask - 1)
+ 		{
+-			if (!(ref_mask & 1u))
+-			{
+-				// Unused input, ignore this
+-				continue;
+-			}
++			const auto index = static_cast<u16>(std::countr_zero(ref_mask));
+ 
+ 			if (layout.attribute_placement[index] == attribute_buffer_placement::none)
+ 			{
+@@ -549,7 +540,7 @@ namespace rsx
+ 		{
+ 			for (interleaved_range_info* block : layout.interleaved_blocks)
+ 			{
+-				auto range = block->calculate_required_range(first_vertex, vertex_count);
++				auto range = block->get_required_range(first_vertex, vertex_count);
+ 
+ 				const u32 data_size = range.second * block->attribute_stride;
+ 				const u32 vertex_base = range.first * block->attribute_stride;
 diff --git a/rpcs3/Emu/RSX/Core/RSXIOMap.hpp b/rpcs3/Emu/RSX/Core/RSXIOMap.hpp
 index 46d749c..494d6b4 100644
 --- a/rpcs3/Emu/RSX/Core/RSXIOMap.hpp
@@ -9074,6 +9239,52 @@ index 7a4ab76..067bd87 100644
  
  			if (!destructor)
  			{
+diff --git a/rpcs3/Emu/RSX/Core/RSXVertexTypes.h b/rpcs3/Emu/RSX/Core/RSXVertexTypes.h
+index 51cad0a..511b3a7 100644
+--- a/rpcs3/Emu/RSX/Core/RSXVertexTypes.h
++++ b/rpcs3/Emu/RSX/Core/RSXVertexTypes.h
+@@ -68,6 +68,13 @@ namespace rsx
+ 
+ 		// Check if we need to upload a full unoptimized range, i.e [0-max_index]
+ 		std::pair<u32, u32> calculate_required_range(u32 first, u32 count);
++		// Reuse ranges computed for this layout without an out-of-line call.
++		std::pair<u32, u32> get_required_range(u32 first, u32 count)
++		{
++			if (vertex_range.second)
++				return vertex_range;
++			return calculate_required_range(first, count);
++		}
+ 	};
+ 
+ 	enum attribute_buffer_placement : u8
+@@ -125,13 +132,9 @@ namespace rsx
+ 			if (!volatile_blocks.empty())
+ 				return true;
+ 
+-			for (u16 ref_mask = attribute_mask, index = 0; ref_mask; ++index, ref_mask >>= 1)
++			for (u32 ref_mask = attribute_mask; ref_mask; ref_mask &= ref_mask - 1)
+ 			{
+-				if (!(ref_mask & 1))
+-				{
+-					// Disabled
+-					continue;
+-				}
++				const auto index = static_cast<u16>(std::countr_zero(ref_mask));
+ 
+ 				switch (attribute_placement[index])
+ 				{
+diff --git a/rpcs3/Emu/RSX/GL/GLFragmentProgram.cpp b/rpcs3/Emu/RSX/GL/GLFragmentProgram.cpp
+index f6d8a25..9aafb7c 100644
+--- a/rpcs3/Emu/RSX/GL/GLFragmentProgram.cpp
++++ b/rpcs3/Emu/RSX/GL/GLFragmentProgram.cpp
+@@ -238,6 +238,7 @@ void GLFragmentDecompilerThread::insertGlobalFunctions(std::stringstream &OS)
+ 	m_shader_props.ROP_sRGB_packing = !!(m_prog.ctrl & RSX_SHADER_CONTROL_SRGB_FRAMEBUFFER);
+ 	m_shader_props.ROP_alpha_test = !!(m_prog.ctrl & RSX_SHADER_CONTROL_ALPHA_TEST);
+ 	m_shader_props.ROP_alpha_to_coverage_test = !!(m_prog.ctrl & RSX_SHADER_CONTROL_ALPHA_TO_COVERAGE);
++	m_shader_props.ROP_alpha_to_one = !!(m_prog.ctrl & RSX_SHADER_CONTROL_ALPHA_TO_ONE);
+ 	m_shader_props.ROP_polygon_stipple_test = !!(m_prog.ctrl & RSX_SHADER_CONTROL_POLYGON_STIPPLE);
+ 	m_shader_props.ROP_discard = !!(m_prog.ctrl & RSX_SHADER_CONTROL_USES_KIL);
+ 	m_shader_props.ROP_channel_remap = !!(m_prog.ctrl & RSX_SHADER_CONTROL_ROP_OUTPUT_REMAP);
 diff --git a/rpcs3/Emu/RSX/GL/GLRenderTargets.h b/rpcs3/Emu/RSX/GL/GLRenderTargets.h
 index aa37fd3..703899d 100644
 --- a/rpcs3/Emu/RSX/GL/GLRenderTargets.h
@@ -9299,6 +9510,37 @@ index 3eaebb1..17b0799 100644
  		}
  
  		void semaphore_release(context* ctx, u32 reg, u32 arg)
+diff --git a/rpcs3/Emu/RSX/NV47/HW/nv4097.cpp b/rpcs3/Emu/RSX/NV47/HW/nv4097.cpp
+index 2b2652f..c1b601d 100644
+--- a/rpcs3/Emu/RSX/NV47/HW/nv4097.cpp
++++ b/rpcs3/Emu/RSX/NV47/HW/nv4097.cpp
+@@ -345,7 +345,9 @@ namespace rsx
+ 			// No A2C hardware support or partial hardware support. Invalidate the current program if A2C state changed.
+ 			const auto a2c_old = REGS(ctx)->decode<NV4097_SET_ANTI_ALIASING_CONTROL>(latch).msaa_alpha_to_coverage();
+ 			const auto a2c_new = REGS(ctx)->decode<NV4097_SET_ANTI_ALIASING_CONTROL>(arg).msaa_alpha_to_coverage();
+-			if (a2c_old != a2c_new)
++			const auto a2one_old = REGS(ctx)->decode<NV4097_SET_ANTI_ALIASING_CONTROL>(latch).msaa_alpha_to_one();
++			const auto a2one_new = REGS(ctx)->decode<NV4097_SET_ANTI_ALIASING_CONTROL>(arg).msaa_alpha_to_one();
++			if (a2c_old != a2c_new || (a2c_new && a2one_old != a2one_new))
+ 			{
+ 				RSX(ctx)->m_graphics_state |= rsx::fragment_program_state_dirty;
+ 			}
+diff --git a/rpcs3/Emu/RSX/Program/GLSLCommon.cpp b/rpcs3/Emu/RSX/Program/GLSLCommon.cpp
+index 61e2836..713b270 100644
+--- a/rpcs3/Emu/RSX/Program/GLSLCommon.cpp
++++ b/rpcs3/Emu/RSX/Program/GLSLCommon.cpp
+@@ -323,6 +323,11 @@ namespace glsl
+ 			enabled_options.push_back("_ENABLE_ALPHA_TO_COVERAGE_TEST");
+ 		}
+ 
++		if (props.ROP_alpha_to_one)
++		{
++			enabled_options.push_back("_ENABLE_ALPHA_TO_ONE");
++		}
++
+ 		if (props.ROP_sRGB_packing || props.require_linear_to_srgb)
+ 		{
+ 			enabled_options.push_back("_ENABLE_LINEAR_TO_SRGB");
 diff --git a/rpcs3/Emu/RSX/Program/GLSLSnippets/GPUDeswizzle.glsl b/rpcs3/Emu/RSX/Program/GLSLSnippets/GPUDeswizzle.glsl
 index 1e0b66c..854ee80 100644
 --- a/rpcs3/Emu/RSX/Program/GLSLSnippets/GPUDeswizzle.glsl
@@ -9320,6 +9562,34 @@ index 1e0b66c..854ee80 100644
  		level++;
  	}
  
+diff --git a/rpcs3/Emu/RSX/Program/GLSLSnippets/RSXProg/RSXROPEpilogue.glsl b/rpcs3/Emu/RSX/Program/GLSLSnippets/RSXProg/RSXROPEpilogue.glsl
+index a46c420..0c03cc2 100644
+--- a/rpcs3/Emu/RSX/Program/GLSLSnippets/RSXProg/RSXROPEpilogue.glsl
++++ b/rpcs3/Emu/RSX/Program/GLSLSnippets/RSXProg/RSXROPEpilogue.glsl
+@@ -45,6 +45,11 @@ R"(
+ 	}
+ #endif
+ 
++// Alpha-to-one follows coverage, so the original alpha still selects samples.
++#ifdef _ENABLE_ALPHA_TO_ONE
++	col0.a = _mrt_color_t(vec4(1.)).a;
++#endif
++
+ // ================= Post-output color stages =================
+ #if _MRT_BUFFERS_COUNT >= 1
+ 
+diff --git a/rpcs3/Emu/RSX/Program/GLSLTypes.h b/rpcs3/Emu/RSX/Program/GLSLTypes.h
+index cade467..b4bbc16 100644
+--- a/rpcs3/Emu/RSX/Program/GLSLTypes.h
++++ b/rpcs3/Emu/RSX/Program/GLSLTypes.h
+@@ -48,6 +48,7 @@ namespace glsl
+ 		bool ROP_sRGB_packing : 1;
+ 		bool ROP_alpha_test : 1;
+ 		bool ROP_alpha_to_coverage_test : 1;
++		bool ROP_alpha_to_one : 1;
+ 		bool ROP_polygon_stipple_test : 1;
+ 		bool ROP_discard : 1;
+ 		bool ROP_channel_remap : 1;
 diff --git a/rpcs3/Emu/RSX/Program/ProgramStateCache.cpp b/rpcs3/Emu/RSX/Program/ProgramStateCache.cpp
 index 221e24e..13c9954 100644
 --- a/rpcs3/Emu/RSX/Program/ProgramStateCache.cpp
@@ -9508,10 +9778,26 @@ index a36ce52..bb41eda 100644
  					m_ctx->register_state->decode(reg, m_ctx->register_state->latch);
  					break;
 diff --git a/rpcs3/Emu/RSX/RSXOffload.cpp b/rpcs3/Emu/RSX/RSXOffload.cpp
-index 8b57f19..3a6690e 100644
+index 8b57f19..c8bd51d 100644
 --- a/rpcs3/Emu/RSX/RSXOffload.cpp
 +++ b/rpcs3/Emu/RSX/RSXOffload.cpp
-@@ -164,7 +164,7 @@ namespace rsx
+@@ -138,7 +138,14 @@ namespace rsx
+ 	// Vertex utilities
+ 	void dma_manager::emulate_as_indexed(void *dst, rsx::primitive_type primitive, u32 count)
+ 	{
+-		if (!g_cfg.video.multithreaded_rsx)
++		if (!g_cfg.video.multithreaded_rsx
++#ifdef RPCS3_IOS
++			// At most 3 KiB of precomputed indices. Avoid a heap-allocated
++			// queue packet only when all preceding work has completed.
++			|| (primitive == rsx::primitive_type::quads && count <= 512 &&
++				m_thread->m_enqueued_count.load() <= m_thread->m_processed_count.load())
++#endif
++		)
+ 		{
+ 			write_index_array_for_non_indexed_non_native_primitive_to_buffer(
+ 				static_cast<char*>(dst), primitive, count);
+@@ -164,7 +171,7 @@ namespace rsx
  	{
  		if (auto cpu = thread_ctrl::get_current())
  		{
@@ -9520,7 +9806,7 @@ index 8b57f19..3a6690e 100644
  		}
  
  		return false;
-@@ -172,6 +172,13 @@ namespace rsx
+@@ -172,6 +179,13 @@ namespace rsx
  
  	bool dma_manager::sync() const
  	{
@@ -9534,7 +9820,7 @@ index 8b57f19..3a6690e 100644
  		auto& _thr = *m_thread;
  
  		if (_thr.m_enqueued_count.load() <= _thr.m_processed_count.load()) [[likely]]
-@@ -232,6 +239,11 @@ namespace rsx
+@@ -232,6 +246,11 @@ namespace rsx
  
  	void dma_manager::join()
  	{
@@ -9546,6 +9832,336 @@ index 8b57f19..3a6690e 100644
  		sync();
  		*m_thread = thread_state::aborting;
  	}
+diff --git a/rpcs3/Emu/RSX/RSXThread.cpp b/rpcs3/Emu/RSX/RSXThread.cpp
+index dff27c6..997a98a 100644
+--- a/rpcs3/Emu/RSX/RSXThread.cpp
++++ b/rpcs3/Emu/RSX/RSXThread.cpp
+@@ -42,6 +42,8 @@ class GSRender;
+ atomic_t<bool> g_user_asked_for_recording = false;
+ atomic_t<bool> g_user_asked_for_screenshot = false;
+ atomic_t<bool> g_user_asked_for_frame_capture = false;
++atomic_t<u32> g_user_asked_for_frame_capture_count = 0;
++atomic_t<u32> g_frame_capture_remaining = 0;
+ atomic_t<bool> g_disable_frame_limit = false;
+ rsx::frame_trace_data frame_debug;
+ rsx::frame_capture_data frame_capture;
+@@ -478,15 +480,15 @@ namespace rsx
+ 				}
+ 				else
+ 				{
+-					// Division operator
++					// Division operator: match the shader's integer vertex-ID division.
++					// Rounding up reads an extra instance and can cross local memory.
+ 					_min_index = std::min(_min_index, first / attrib.frequency);
+-					_max_index = std::max<u32>(_max_index, utils::aligned_div(max_index, attrib.frequency));
++					const u32 divided_max = max_index / attrib.frequency;
++					_max_index = std::max(_max_index, divided_max);
++					max_result_by_division = std::max(max_result_by_division, divided_max);
+ 
+ 					if (freq_count > 0 && freq_count != umax)
+ 					{
+-						const u32 max = utils::aligned_div(max_index, attrib.frequency);
+-						max_result_by_division = std::max<u32>(max_result_by_division, max);
+-
+ 						// Discard lower frequencies because it has been proven that there are indices higher than them
+ 						const usz discard_cnt = frequencies + freq_count - std::remove_if(frequencies, frequencies + freq_count, [&max_result_by_division](u32 freq)
+ 						{
+@@ -523,7 +525,8 @@ namespace rsx
+ 				break;
+ 			}
+ 
+-			_max_index = 0;
++			// Tightening modulo bounds must retain the divided attributes' range.
++			_max_index = max_result_by_division;
+ 
+ 			const auto re_evaluate = [&] <typename T> (const std::byte* ptr, T)
+ 			{
+@@ -586,59 +589,6 @@ namespace rsx
+ 		return vertex_range;
+ 	}
+ 
+-	u32 get_vertex_type_size_on_host(vertex_base_type type, u32 size)
+-	{
+-		switch (type)
+-		{
+-		case vertex_base_type::s1:
+-		case vertex_base_type::s32k:
+-			switch (size)
+-			{
+-			case 1:
+-			case 2:
+-			case 4:
+-				return sizeof(u16) * size;
+-			case 3:
+-				return sizeof(u16) * 4;
+-			default:
+-				break;
+-			}
+-			fmt::throw_exception("Wrong vector size");
+-		case vertex_base_type::f: return sizeof(f32) * size;
+-		case vertex_base_type::sf:
+-			switch (size)
+-			{
+-			case 1:
+-			case 2:
+-			case 4:
+-				return sizeof(f16) * size;
+-			case 3:
+-				return sizeof(f16) * 4;
+-			default:
+-				break;
+-			}
+-			fmt::throw_exception("Wrong vector size");
+-		case vertex_base_type::ub:
+-			switch (size)
+-			{
+-			case 1:
+-			case 2:
+-			case 4:
+-				return sizeof(u8) * size;
+-			case 3:
+-				return sizeof(u8) * 4;
+-			default:
+-				break;
+-			}
+-			fmt::throw_exception("Wrong vector size");
+-		case vertex_base_type::cmp: return 4;
+-		case vertex_base_type::ub256: ensure(size == 4); return sizeof(u8) * 4;
+-		default:
+-			break;
+-		}
+-		fmt::throw_exception("Bad vertex data type (%d)!", static_cast<u8>(type));
+-	}
+-
+ 	void tiled_region::write(const void *src, u32 width, u32 height, u32 pitch)
+ 	{
+ 		if (!tile)
+@@ -752,6 +702,10 @@ namespace rsx
+ 
+ 	thread::~thread()
+ 	{
++		g_user_asked_for_frame_capture = false;
++		g_user_asked_for_frame_capture_count = 0;
++		g_frame_capture_remaining = 0;
++		frame_capture.reset();
+ 		g_access_violation_handler = nullptr;
+ 	}
+ 
+@@ -833,6 +787,8 @@ namespace rsx
+ 		m_graphics_state |= pipeline_state::all_dirty;
+ 
+ 		g_user_asked_for_frame_capture = false;
++		g_user_asked_for_frame_capture_count = 0;
++		g_frame_capture_remaining = 0;
+ 
+ 		// TODO: Proper context management in the driver
+ 		s_ctx.rsxthr = this;
+@@ -2367,6 +2323,11 @@ namespace rsx
+ 			{
+ 				// Emulation required
+ 				current_fragment_program.ctrl |= RSX_SHADER_CONTROL_ALPHA_TO_COVERAGE;
++				if (REGS(m_ctx)->msaa_alpha_to_one_enabled())
++				{
++					// Coverage uses the original alpha; surviving fragments export one.
++					current_fragment_program.ctrl |= RSX_SHADER_CONTROL_ALPHA_TO_ONE;
++				}
+ 			}
+ 		}
+ 
+@@ -3378,56 +3339,73 @@ namespace rsx
+ 		// MM sync. This is a pre-emptive operation, so we can use a deferred request.
+ 		rsx::mm_flush_lazy();
+ 
+-		// Marks the end of a frame scope GPU-side
+-		if (g_user_asked_for_frame_capture.exchange(false) && !capture_current_frame)
+-		{
+-			capture_current_frame = true;
+-			frame_debug.reset();
+-			frame_capture.reset();
+-
+-			// random number just to jumpstart the size
+-			frame_capture.replay_commands.reserve(8000);
+-
+-			// capture first tile state with nop cmd
+-			rsx::frame_capture_data::replay_command replay_cmd;
+-			replay_cmd.rsx_command = std::make_pair(NV4097_NO_OPERATION, 0);
+-			frame_capture.replay_commands.push_back(std::move(replay_cmd));
+-			capture::capture_display_tile_state(this, frame_capture.replay_commands.back());
+-		}
+-		else if (capture_current_frame)
++		// Consume requests once. Requests arriving during a burst cannot replace it.
++		const u32 requested_frames = g_user_asked_for_frame_capture_count.exchange(0);
++		const bool requested_single = g_user_asked_for_frame_capture.exchange(false);
++		if (capture_current_frame)
+ 		{
+ 			capture_current_frame = false;
+-
+-			const std::string file_path = fs::get_config_dir() + "captures/" + (Emu.GetTitleID().empty() ? Emu.GetTitle() : Emu.GetTitleID()) + "_" + date_time::current_time_narrow() + "_capture.rrc.gz";
+-
+-			fs::pending_file temp(file_path);
+-
+-			utils::serial save_manager;
+-
+-			if (temp.file)
++			const u32 frame_number = capture_frame_count - capture_frames_remaining + 1;
++			const std::string file_path = capture_frame_count > 1
++				? capture_sequence_path + fmt::format("_frame_%03u_of_%03u_capture.rrc.gz", frame_number, capture_frame_count)
++				: capture_sequence_path + "_capture.rrc.gz";
++			bool saved = false;
+ 			{
+-				save_manager.m_file_handler = make_compressed_serialization_file_handler(temp.file);
+-				save_manager(frame_capture);
+-
+-				save_manager.m_file_handler->finalize(save_manager);
+-
+-				if (temp.commit(false))
++				fs::pending_file temp(file_path);
++				utils::serial save_manager;
++				if (temp.file)
+ 				{
+-					rsx_log.success("Capture successful: %s", file_path);
+-					frame_capture.reset();
+-					pause_emulator = true;
++					save_manager.m_file_handler = make_compressed_serialization_file_handler(temp.file);
++					save_manager(frame_capture);
++					save_manager.m_file_handler->finalize(save_manager);
++					saved = temp.commit(false);
+ 				}
+-				else
++				if (!saved)
+ 				{
+ 					rsx_log.error("Capture failed: %s (%s)", file_path, fs::g_tls_error);
+ 				}
+ 			}
++
++			if (saved)
++			{
++				rsx_log.success("Capture successful (%u/%u): %s", frame_number, capture_frame_count, file_path);
++				--capture_frames_remaining;
++			}
+ 			else
+ 			{
+-				rsx_log.fatal("Capture failed: %s (%s)", file_path, fs::g_tls_error);
++				// Keep already committed files; stop the burst at the first failure.
++				capture_frames_remaining = 0;
++			}
++			frame_capture.reset();
++			g_frame_capture_remaining = capture_frames_remaining;
++			pause_emulator = capture_frames_remaining == 0;
++		}
++		else if (requested_frames || requested_single)
++		{
++			capture_frame_count = std::clamp(requested_frames ? requested_frames : 1u, 1u, 120u);
++			capture_frames_remaining = capture_frame_count;
++			g_frame_capture_remaining = capture_frames_remaining;
++			capture_sequence_path = fs::get_config_dir() + "captures/" + (Emu.GetTitleID().empty() ? Emu.GetTitle() : Emu.GetTitleID()) + "_" + date_time::current_time_narrow();
++			if (capture_frame_count > 1)
++			{
++				// A monotonic identifier avoids second-resolution collisions between bursts.
++				capture_sequence_path += fmt::format("_%llu", get_system_time());
+ 			}
+ 		}
+ 
++		if (capture_frames_remaining)
++		{
++			// Start the next recording at this SAME boundary: no uncaptured gap frame.
++			capture_current_frame = true;
++			frame_debug.reset();
++			frame_capture.reset();
++			frame_capture.replay_commands.reserve(8000);
++			rsx::frame_capture_data::replay_command replay_cmd;
++			replay_cmd.rsx_command = std::make_pair(NV4097_NO_OPERATION, 0);
++			frame_capture.replay_commands.push_back(std::move(replay_cmd));
++			capture::capture_display_tile_state(this, frame_capture.replay_commands.back());
++		}
++
+ 		if (zcull_ctrl->has_pending())
+ 		{
+ 			// NOTE: This is a workaround for buggy games.
+diff --git a/rpcs3/Emu/RSX/RSXThread.h b/rpcs3/Emu/RSX/RSXThread.h
+index fefbfb9..041fbbf 100644
+--- a/rpcs3/Emu/RSX/RSXThread.h
++++ b/rpcs3/Emu/RSX/RSXThread.h
+@@ -32,6 +32,9 @@
+ #include "NV47/FW/GRAPH_backend.h"
+ 
+ extern atomic_t<bool> g_user_asked_for_frame_capture;
++// Debugger burst request (1..120), consumed at the next frame boundary.
++extern atomic_t<u32> g_user_asked_for_frame_capture_count;
++extern atomic_t<u32> g_frame_capture_remaining;
+ extern atomic_t<bool> g_disable_frame_limit;
+ extern rsx::frame_trace_data frame_debug;
+ extern rsx::frame_capture_data frame_capture;
+@@ -73,7 +76,58 @@ namespace rsx
+ 		result_zcull_intr = 2
+ 	};
+ 
+-	u32 get_vertex_type_size_on_host(vertex_base_type type, u32 size);
++	FORCE_INLINE u32 get_vertex_type_size_on_host(vertex_base_type type, u32 size)
++	{
++		switch (type)
++		{
++		case vertex_base_type::s1:
++		case vertex_base_type::s32k:
++			switch (size)
++			{
++			case 1:
++			case 2:
++			case 4:
++				return sizeof(u16) * size;
++			case 3:
++				return sizeof(u16) * 4;
++			default:
++				break;
++			}
++			fmt::throw_exception("Wrong vector size");
++		case vertex_base_type::f: return sizeof(f32) * size;
++		case vertex_base_type::sf:
++			switch (size)
++			{
++			case 1:
++			case 2:
++			case 4:
++				return sizeof(f16) * size;
++			case 3:
++				return sizeof(f16) * 4;
++			default:
++				break;
++			}
++			fmt::throw_exception("Wrong vector size");
++		case vertex_base_type::ub:
++			switch (size)
++			{
++			case 1:
++			case 2:
++			case 4:
++				return sizeof(u8) * size;
++			case 3:
++				return sizeof(u8) * 4;
++			default:
++				break;
++			}
++			fmt::throw_exception("Wrong vector size");
++		case vertex_base_type::cmp: return 4;
++		case vertex_base_type::ub256: ensure(size == 4); return sizeof(u8) * 4;
++		default:
++			break;
++		}
++		fmt::throw_exception("Bad vertex data type (%d)!", static_cast<u8>(type));
++	}
+ 
+ 	u32 get_address(u32 offset, u32 location, u32 size_to_check = 0, std::source_location src_loc = std::source_location::current());
+ 
+@@ -308,6 +362,9 @@ namespace rsx
+ 		vm::ptr<void(u32)> queue_handler = vm::null;
+ 		atomic_t<u64> vblank_count{0};
+ 		bool capture_current_frame = false;
++		u32 capture_frame_count = 0;
++		u32 capture_frames_remaining = 0;
++		std::string capture_sequence_path;
+ 
+ 		u64 vblank_at_flip = umax;
+ 		u64 flip_notification_count = 0;
 diff --git a/rpcs3/Emu/RSX/VK/VKDraw.cpp b/rpcs3/Emu/RSX/VK/VKDraw.cpp
 index 77927e2..9102bf6 100644
 --- a/rpcs3/Emu/RSX/VK/VKDraw.cpp
@@ -9773,6 +10389,18 @@ index 77927e2..9102bf6 100644
  		const int offsets[] = { 0, 16, 48, 32 };
  		auto& sampled_image_info = texture_env[offsets[static_cast<u32>(sampler_state->image_type)] + i];
  		sampled_image_info = { *view, *fs_sampler_handles[i] };
+diff --git a/rpcs3/Emu/RSX/VK/VKFragmentProgram.cpp b/rpcs3/Emu/RSX/VK/VKFragmentProgram.cpp
+index af6a25a..68145ed 100644
+--- a/rpcs3/Emu/RSX/VK/VKFragmentProgram.cpp
++++ b/rpcs3/Emu/RSX/VK/VKFragmentProgram.cpp
+@@ -406,6 +406,7 @@ void VKFragmentDecompilerThread::insertGlobalFunctions(std::stringstream &OS)
+ 	m_shader_props.ROP_sRGB_packing = !!(m_prog.ctrl & RSX_SHADER_CONTROL_SRGB_FRAMEBUFFER);
+ 	m_shader_props.ROP_alpha_test = !!(m_prog.ctrl & RSX_SHADER_CONTROL_ALPHA_TEST);
+ 	m_shader_props.ROP_alpha_to_coverage_test = !!(m_prog.ctrl & RSX_SHADER_CONTROL_ALPHA_TO_COVERAGE);
++	m_shader_props.ROP_alpha_to_one = !!(m_prog.ctrl & RSX_SHADER_CONTROL_ALPHA_TO_ONE);
+ 	m_shader_props.ROP_polygon_stipple_test = !!(m_prog.ctrl & RSX_SHADER_CONTROL_POLYGON_STIPPLE);
+ 	m_shader_props.ROP_discard = !!(m_prog.ctrl & RSX_SHADER_CONTROL_USES_KIL);
+ 	m_shader_props.ROP_channel_remap = !!(m_prog.ctrl & RSX_SHADER_CONTROL_ROP_OUTPUT_REMAP);
 diff --git a/rpcs3/Emu/RSX/VK/VKGSRender.cpp b/rpcs3/Emu/RSX/VK/VKGSRender.cpp
 index 63cab28..64731ba 100644
 --- a/rpcs3/Emu/RSX/VK/VKGSRender.cpp
@@ -10285,10 +10913,43 @@ index a604696..819de43 100644
  			ensure(single_target_pass != VK_NULL_HANDLE);
  
 diff --git a/rpcs3/Emu/RSX/VK/VKProgramPipeline.cpp b/rpcs3/Emu/RSX/VK/VKProgramPipeline.cpp
-index 20a4250..6c78b5f 100644
+index 20a4250..3497d6d 100644
 --- a/rpcs3/Emu/RSX/VK/VKProgramPipeline.cpp
 +++ b/rpcs3/Emu/RSX/VK/VKProgramPipeline.cpp
-@@ -100,11 +100,55 @@ namespace vk
+@@ -14,32 +14,6 @@ namespace vk
+ 	{
+ 		using namespace ::glsl;
+ 
+-		bool operator == (const descriptor_slot_t& a, const VkDescriptorImageInfoEx& b)
+-		{
+-			const auto ptr = std::get_if<VkDescriptorImageInfoEx>(&a);
+-			return !!ptr &&
+-				ptr->resourceId == b.resourceId &&
+-				ptr->imageView == b.imageView &&
+-				ptr->sampler == b.sampler &&
+-				ptr->imageLayout == b.imageLayout;
+-		}
+-
+-		bool operator == (const descriptor_slot_t& a, const VkDescriptorBufferInfoEx& b)
+-		{
+-			const auto ptr = std::get_if<VkDescriptorBufferInfoEx>(&a);
+-			return !!ptr &&
+-				ptr->resourceId == b.resourceId &&
+-				ptr->buffer == b.buffer &&
+-				ptr->offset == b.offset &&
+-				ptr->range == b.range;
+-		}
+-
+-		bool operator == (const descriptor_slot_t& a, const VkDescriptorBufferViewEx& b)
+-		{
+-			const auto ptr = std::get_if<VkDescriptorBufferViewEx>(&a);
+-			return !!ptr && ptr->resourceId == b.resourceId;
+-		}
+-
+ 		bool operator == (const descriptor_slot_t& a, const std::span<const VkDescriptorImageInfoEx>& b)
+ 		{
+ 			const auto ptr = std::get_if<descriptor_image_array_t>(&a);
+@@ -100,11 +74,55 @@ namespace vk
  		void shader::create(::glsl::program_domain domain, const std::string& source)
  		{
  			type     = domain;
@@ -10344,7 +11005,7 @@ index 20a4250..6c78b5f 100644
  			ensure(m_handle == VK_NULL_HANDLE);
  
  			if (!spirv::compile_glsl_to_spv(m_compiled, m_source, type, ::glsl::glsl_rules_vulkan))
-@@ -123,10 +167,14 @@ namespace vk
+@@ -123,10 +141,14 @@ namespace vk
  			vkCreateShaderModule(*g_render_device, &vs_info, nullptr, &m_handle);
  
  			return m_handle;
@@ -10359,7 +11020,7 @@ index 20a4250..6c78b5f 100644
  			m_source.clear();
  			m_compiled.clear();
  
-@@ -137,13 +185,39 @@ namespace vk
+@@ -137,13 +159,39 @@ namespace vk
  			}
  		}
  
@@ -10400,8 +11061,45 @@ index 20a4250..6c78b5f 100644
  			return m_compiled;
  		}
  
+@@ -320,36 +368,6 @@ namespace vk
+ 			return { umax, umax };
+ 		}
+ 
+-		void program::bind_uniform(const VkDescriptorImageInfoEx& image_descriptor, u32 set_id, u32 binding_point)
+-		{
+-			if (m_sets[set_id].m_descriptor_slots[binding_point] == image_descriptor)
+-			{
+-				return;
+-			}
+-
+-			m_sets[set_id].notify_descriptor_slot_updated(binding_point, image_descriptor);
+-		}
+-
+-		void program::bind_uniform(const VkDescriptorBufferInfoEx &buffer_descriptor, u32 set_id, u32 binding_point)
+-		{
+-			if (m_sets[set_id].m_descriptor_slots[binding_point] == buffer_descriptor)
+-			{
+-				return;
+-			}
+-
+-			m_sets[set_id].notify_descriptor_slot_updated(binding_point, buffer_descriptor);
+-		}
+-
+-		void program::bind_uniform(const VkDescriptorBufferViewEx& buffer_view, u32 set_id, u32 binding_point)
+-		{
+-			if (m_sets[set_id].m_descriptor_slots[binding_point] == buffer_view)
+-			{
+-				return;
+-			}
+-
+-			m_sets[set_id].notify_descriptor_slot_updated(binding_point, buffer_view);
+-		}
+-
+ 		void program::bind_uniform_array(const std::span<const VkDescriptorImageInfoEx>& image_descriptors, u32 set_id, u32 binding_point)
+ 		{
+ 			if (m_sets[set_id].m_descriptor_slots[binding_point] == image_descriptors)
 diff --git a/rpcs3/Emu/RSX/VK/VKProgramPipeline.h b/rpcs3/Emu/RSX/VK/VKProgramPipeline.h
-index 79b8371..f6ad7f1 100644
+index 79b8371..b40bd1c 100644
 --- a/rpcs3/Emu/RSX/VK/VKProgramPipeline.h
 +++ b/rpcs3/Emu/RSX/VK/VKProgramPipeline.h
 @@ -9,6 +9,10 @@
@@ -10438,6 +11136,85 @@ index 79b8371..f6ad7f1 100644
  			const std::vector<u32> get_compiled() const;
  
  			VkShaderModule get_handle() const;
+@@ -141,6 +153,32 @@ namespace vk
+ 			VkDescriptorBufferViewEx,
+ 			descriptor_image_array_t>;
+ 
++		inline bool operator == (const descriptor_slot_t& a, const VkDescriptorImageInfoEx& b)
++		{
++			const auto ptr = std::get_if<VkDescriptorImageInfoEx>(&a);
++			return !!ptr &&
++				ptr->resourceId == b.resourceId &&
++				ptr->imageView == b.imageView &&
++				ptr->sampler == b.sampler &&
++				ptr->imageLayout == b.imageLayout;
++		}
++
++		inline bool operator == (const descriptor_slot_t& a, const VkDescriptorBufferInfoEx& b)
++		{
++			const auto ptr = std::get_if<VkDescriptorBufferInfoEx>(&a);
++			return !!ptr &&
++				ptr->resourceId == b.resourceId &&
++				ptr->buffer == b.buffer &&
++				ptr->offset == b.offset &&
++				ptr->range == b.range;
++		}
++
++		inline bool operator == (const descriptor_slot_t& a, const VkDescriptorBufferViewEx& b)
++		{
++			const auto ptr = std::get_if<VkDescriptorBufferViewEx>(&a);
++			return !!ptr && ptr->resourceId == b.resourceId;
++		}
++
+ 		struct descriptor_table_t
+ 		{
+ 			VkDevice m_device = VK_NULL_HANDLE;
+@@ -157,7 +195,7 @@ namespace vk
+ 			u64 m_descriptor_template_cache_id = umax;
+ 
+ 			std::vector<descriptor_slot_t> m_descriptor_slots;
+-			std::vector<bool> m_descriptors_dirty;
++			std::vector<u8> m_descriptors_dirty;
+ 			bool m_any_descriptors_dirty = false;
+ 
+ 			void init(VkDevice dev);
+@@ -225,9 +263,33 @@ namespace vk
+ 			bool has_uniform(program_input_type type, std::string_view uniform_name);
+ 			std::pair<u32, u32> get_uniform_location(::glsl::program_domain domain, program_input_type type, std::string_view uniform_name);
+ 
+-			void bind_uniform(const VkDescriptorImageInfoEx& image_descriptor, u32 set_id, u32 binding_point);
+-			void bind_uniform(const VkDescriptorBufferInfoEx& buffer_descriptor, u32 set_id, u32 binding_point);
+-			void bind_uniform(const VkDescriptorBufferViewEx& buffer_view, u32 set_id, u32 binding_point);
++			void bind_uniform(const VkDescriptorImageInfoEx& image_descriptor, u32 set_id, u32 binding_point)
++			{
++				if (m_sets[set_id].m_descriptor_slots[binding_point] == image_descriptor)
++				{
++					return;
++				}
++
++				m_sets[set_id].notify_descriptor_slot_updated(binding_point, image_descriptor);
++			}
++			void bind_uniform(const VkDescriptorBufferInfoEx &buffer_descriptor, u32 set_id, u32 binding_point)
++			{
++				if (m_sets[set_id].m_descriptor_slots[binding_point] == buffer_descriptor)
++				{
++					return;
++				}
++
++				m_sets[set_id].notify_descriptor_slot_updated(binding_point, buffer_descriptor);
++			}
++			void bind_uniform(const VkDescriptorBufferViewEx& buffer_view, u32 set_id, u32 binding_point)
++			{
++				if (m_sets[set_id].m_descriptor_slots[binding_point] == buffer_view)
++				{
++					return;
++				}
++
++				m_sets[set_id].notify_descriptor_slot_updated(binding_point, buffer_view);
++			}
+ 
+ 			void bind_uniform_array(const std::span<const VkDescriptorImageInfoEx>& image_descriptors,u32 set_id, u32 binding_point);
+ 
 diff --git a/rpcs3/Emu/RSX/VK/VKQueryPool.cpp b/rpcs3/Emu/RSX/VK/VKQueryPool.cpp
 index bcd00a9..f47ed3c 100644
 --- a/rpcs3/Emu/RSX/VK/VKQueryPool.cpp
@@ -10857,6 +11634,98 @@ index c9bbf4e..2bc13d6 100644
  				as_cached_object->release();
  			}
  
+diff --git a/rpcs3/Emu/RSX/VK/VKTextureCache.cpp b/rpcs3/Emu/RSX/VK/VKTextureCache.cpp
+index c165762..37780a9 100644
+--- a/rpcs3/Emu/RSX/VK/VKTextureCache.cpp
++++ b/rpcs3/Emu/RSX/VK/VKTextureCache.cpp
+@@ -408,11 +408,10 @@ namespace vk
+ 		{
+ 			std::lock_guard lock(m_cached_pool_lock);
+ 			m_cache_is_exiting = true;
++			m_cached_images.clear();
++			m_cached_memory_size = 0;
+ 		}
+ 		baseclass::clear();
+-
+-		m_cached_images.clear();
+-		m_cached_memory_size = 0;
+ 	}
+ 
+ 	void texture_cache::copy_transfer_regions_impl(vk::command_buffer& cmd, vk::image* dst, const rsx::simple_array<copy_region_descriptor>& sections_to_transfer) const
+@@ -1576,13 +1575,20 @@ namespace vk
+ 
+ 		// Nuke temporary resources. They will still be visible to the GPU.
+ 		auto gc = vk::get_resource_manager();
+-		any_released |= !m_cached_images.empty();
+-		for (auto& img : m_cached_images)
++		std::deque<cached_image_t> discarded_images;
++		{
++			// The driver thread returns completed images to this pool. Detach the
++			// batch under its lock so lookup never sees moved-from entries, and
++			// later returns retain their own memory accounting.
++			std::lock_guard pool_lock(m_cached_pool_lock);
++			discarded_images.swap(m_cached_images);
++			m_cached_memory_size = 0;
++		}
++		any_released |= !discarded_images.empty();
++		for (auto& img : discarded_images)
+ 		{
+ 			gc->dispose(img.data);
+ 		}
+-		m_cached_images.clear();
+-		m_cached_memory_size = 0;
+ 
+ 		any_released |= !m_temporary_subresource_cache.empty();
+ 		for (auto& e : m_temporary_subresource_cache)
+@@ -1604,18 +1610,19 @@ namespace vk
+ 			purge_unreleased_sections();
+ 		}
+ 
+-		if (m_cached_images.size() > max_cached_image_pool_size ||
+-			m_cached_memory_size > 256 * 0x100000)
+ 		{
+ 			std::lock_guard lock(m_cached_pool_lock);
+-
+-			const auto new_size = m_cached_images.size() / 2;
+-			for (usz i = new_size; i < m_cached_images.size(); ++i)
++			if (m_cached_images.size() > max_cached_image_pool_size ||
++				m_cached_memory_size > 256 * 0x100000)
+ 			{
+-				m_cached_memory_size -= m_cached_images[i].data->memory->size();
+-			}
++				const auto new_size = m_cached_images.size() / 2;
++				for (usz i = new_size; i < m_cached_images.size(); ++i)
++				{
++					m_cached_memory_size -= m_cached_images[i].data->memory->size();
++				}
+ 
+-			m_cached_images.resize(new_size);
++				m_cached_images.resize(new_size);
++			}
+ 		}
+ 
+ 		baseclass::on_frame_end();
+@@ -1708,6 +1715,7 @@ namespace vk
+ 
+ 	u32 texture_cache::get_unreleased_textures_count() const
+ 	{
++		reader_lock lock(m_cached_pool_lock);
+ 		return baseclass::get_unreleased_textures_count() + ::size32(m_cached_images);
+ 	}
+ 
+diff --git a/rpcs3/Emu/RSX/VK/VKTextureCache.h b/rpcs3/Emu/RSX/VK/VKTextureCache.h
+index b0ee059..d9d4d94 100644
+--- a/rpcs3/Emu/RSX/VK/VKTextureCache.h
++++ b/rpcs3/Emu/RSX/VK/VKTextureCache.h
+@@ -463,7 +463,7 @@ namespace vk
+ 		const u32 max_cached_image_pool_size = 256;
+ 		std::deque<cached_image_t> m_cached_images;
+ 		atomic_t<u64> m_cached_memory_size = { 0 };
+-		shared_mutex m_cached_pool_lock;
++		mutable shared_mutex m_cached_pool_lock;
+ 
+ 		// Blocks some operations when exiting
+ 		atomic_t<bool> m_cache_is_exiting = false;
 diff --git a/rpcs3/Emu/RSX/VK/upscalers/fsr1/fsr_pass.cpp b/rpcs3/Emu/RSX/VK/upscalers/fsr1/fsr_pass.cpp
 index dd10f2a..e1f251b 100644
 --- a/rpcs3/Emu/RSX/VK/upscalers/fsr1/fsr_pass.cpp
@@ -11361,7 +12230,7 @@ index 0000000..00b0ad0
 +};
 +}
 diff --git a/rpcs3/Emu/RSX/VK/vkutils/sync.cpp b/rpcs3/Emu/RSX/VK/vkutils/sync.cpp
-index 6d36283..8f06936 100644
+index 6d36283..79990fd 100644
 --- a/rpcs3/Emu/RSX/VK/vkutils/sync.cpp
 +++ b/rpcs3/Emu/RSX/VK/vkutils/sync.cpp
 @@ -8,9 +8,19 @@
@@ -11384,7 +12253,37 @@ index 6d36283..8f06936 100644
  namespace vk
  {
  	namespace globals
-@@ -231,13 +241,38 @@ namespace vk
+@@ -173,14 +183,29 @@ namespace vk
+ 	void fence::signal_flushed()
+ 	{
+ 		flushed.release(true);
++#ifdef RPCS3_IOS
++		flushed.notify_all();
++#endif
+ 	}
+ 
+ 	void fence::wait_flush()
+ 	{
++#ifdef RPCS3_IOS
++		// Cover short submission handoffs without entering the wait engine.
++		for (u32 spins = 0; spins < 128; ++spins)
++		{
++			if (flushed)
++				return;
++			utils::pause();
++		}
++		while (!flushed)
++			flushed.wait(0);
++#else
+ 		while (!flushed)
+ 		{
+ 			utils::pause();
+ 		}
++#endif
+ 	}
+ 
+ 	fence::operator bool() const
+@@ -231,14 +256,39 @@ namespace vk
  			.flags = 0
  		};
  
@@ -11412,18 +12311,19 @@ index 6d36283..8f06936 100644
 +			m_metal_event = export_metal_event(dev, m_vk_event);
 +		}
 +#endif
-+	}
-+
+ 	}
+ 
 +#ifdef RPCS3_IOS
 +	VkResult event::wait_metal(u64 timeout) const
 +	{
 +		return wait_for_metal_event(m_metal_event, *m_device, m_vk_event, timeout);
- 	}
++	}
 +#endif
- 
++
  	event::~event()
  	{
-@@ -562,32 +597,57 @@ namespace vk
+ 		if (m_vk_event) [[likely]]
+@@ -562,32 +612,57 @@ namespace vk
  	VkResult wait_for_fence(fence* pFence, u64 timeout)
  	{
  		pFence->wait_flush();
@@ -11490,10 +12390,23 @@ index 6d36283..8f06936 100644
  		const u64 freq = utils::get_tsc_freq();
  
 diff --git a/rpcs3/Emu/RSX/VK/vkutils/sync.h b/rpcs3/Emu/RSX/VK/vkutils/sync.h
-index 9177e84..e7b010f 100644
+index 9177e84..3e3b523 100644
 --- a/rpcs3/Emu/RSX/VK/vkutils/sync.h
 +++ b/rpcs3/Emu/RSX/VK/vkutils/sync.h
-@@ -51,6 +51,10 @@ namespace vk
+@@ -20,7 +20,12 @@ namespace vk
+ 
+ 	struct fence
+ 	{
++#ifdef RPCS3_IOS
++		// The wait engine supports four-byte atomics. Values remain zero or one.
++		atomic_t<u32> flushed = false;
++#else
+ 		atomic_t<bool> flushed = false;
++#endif
+ 		VkFence handle         = VK_NULL_HANDLE;
+ 		VkDevice owner         = VK_NULL_HANDLE;
+ 
+@@ -51,6 +56,10 @@ namespace vk
  		// For events_v1 and events_v2
  		VkEvent m_vk_event = VK_NULL_HANDLE;
  
@@ -11504,7 +12417,7 @@ index 9177e84..e7b010f 100644
  		// For gpu_label
  		std::unique_ptr<gpu_label> m_label{};
  
-@@ -66,6 +70,10 @@ namespace vk
+@@ -66,6 +75,10 @@ namespace vk
  		void gpu_wait(const command_buffer& cmd, const VkDependencyInfoKHR& dependency) const;
  		VkResult status() const;
  		void reset() const;
@@ -11515,6 +12428,18 @@ index 9177e84..e7b010f 100644
  	};
  
  	class semaphore
+diff --git a/rpcs3/Emu/RSX/gcm_enums.h b/rpcs3/Emu/RSX/gcm_enums.h
+index fe5cf89..a01d0b4 100644
+--- a/rpcs3/Emu/RSX/gcm_enums.h
++++ b/rpcs3/Emu/RSX/gcm_enums.h
+@@ -476,6 +476,7 @@ namespace gcm
+ 		RSX_SHADER_CONTROL_ROP_MULTISAMPLED         = 0x10000000, // ROP outputs are multisampled
+ 		RSX_SHADER_CONTROL_ROP_OUTPUT_REMAP         = 0x20000000, // ROP outputs need channel swizzles.
+ 		RSX_SHADER_CONTROL_PROGRAMMABLE_BLENDING    = 0x40000000, // Enable programmable blending.
++		RSX_SHADER_CONTROL_ALPHA_TO_ONE             = 0x80000000, // Alpha-to-one after emulated alpha-to-coverage.
+ 
+ 		// Meta
+ 		RSX_SHADER_CONTROL_META_USES_DISCARD       = (RSX_SHADER_CONTROL_USES_KIL | RSX_SHADER_CONTROL_TEXTURE_ALPHA_KILL | RSX_SHADER_CONTROL_ALPHA_TEST | RSX_SHADER_CONTROL_POLYGON_STIPPLE | RSX_SHADER_CONTROL_ALPHA_TO_COVERAGE),
 diff --git a/rpcs3/Emu/RSX/rsx_cache.h b/rpcs3/Emu/RSX/rsx_cache.h
 index 625311f..11c8109 100644
 --- a/rpcs3/Emu/RSX/rsx_cache.h
@@ -12673,6 +13598,20 @@ index 0000000..317bb2e
 +	bool m_started = false;
 +};
 +}
+diff --git a/rpcs3/ios/IOSDMACopy.h b/rpcs3/ios/IOSDMACopy.h
+index b6c26eb..a409cfc 100644
+--- a/rpcs3/ios/IOSDMACopy.h
++++ b/rpcs3/ios/IOSDMACopy.h
+@@ -29,6 +29,9 @@ inline void copy_dma_vectors(unsigned char* dst, const unsigned char* src, std::
+ 	case 128: copy_dma_fixed<Vector, 128>(dst, src); return;
+ 	default:
+ 		// Callers supply whole aligned vectors, as required by the old loop.
++#if defined(__clang__) && (defined(__aarch64__) || defined(__arm64__))
++#pragma clang loop unroll_count(8)
++#endif
+ 		for (std::size_t offset = 0; offset < size; offset += 16)
+ 		{
+ 			*reinterpret_cast<Vector*>(dst + offset) = *reinterpret_cast<const Vector*>(src + offset);
 diff --git a/rpcs3/ios/IOSGPUEventWait.h b/rpcs3/ios/IOSGPUEventWait.h
 new file mode 100644
 index 0000000..3b8c4d2
@@ -16192,6 +17131,81 @@ index 74abaa0..b00e894 100644
  std::string game_settings_preset_directory(std::string_view title_id);
  std::string_view settings_load_error_detail(settings_load_error error) noexcept;
  game_settings_preset_result enumerate_game_settings_presets(
+diff --git a/rpcs3/ios/tests/FramebufferSourceTests.cpp b/rpcs3/ios/tests/FramebufferSourceTests.cpp
+new file mode 100644
+index 0000000..717dbdd
+--- /dev/null
++++ b/rpcs3/ios/tests/FramebufferSourceTests.cpp
+@@ -0,0 +1,69 @@
++#include <cassert>
++#include <cstdint>
++#include <cstdio>
++#include <vector>
++
++namespace rsx::texture_cache_helpers
++{
++#include "FramebufferSourceUnderTest.inc"
++}
++
++struct surface
++{
++    std::uint64_t last_use_tag;
++};
++struct overlap
++{
++    const struct surface* surface;
++    bool is_depth;
++    bool is_clipped;
++    int id;
++};
++
++int main()
++{
++    const surface old{41}, current{42}, newer{43};
++    const overlap color{&current, false, false, 1};
++    const overlap depth{&current, true, false, 2};
++    int checks = 0;
++    auto expect = [&](std::vector<overlap> candidates, bool depth_texture, int id)
++    {
++        assert(rsx::texture_cache_helpers::select_framebuffer_source(candidates, depth_texture).id == id);
++        ++checks;
++    };
++
++    // GT6 mirror: complete color and oversized depth allocations share a write
++    // tag. Input order must not force a color texture to sample the depth image.
++    expect({color, depth}, false, 1);
++    expect({depth, color}, false, 1);
++    expect({color, depth}, true, 2);
++    expect({depth, color}, true, 2);
++
++    // A later write owns the data, even when a typeless conversion is required.
++    expect({color, {&newer, true, false, 3}}, false, 3);
++    expect({depth, {&newer, false, false, 3}}, true, 3);
++    expect({{&old, false, false, 3}, depth}, false, 2);
++    expect({{&old, true, false, 3}, color}, true, 1);
++
++    // No matching aspect: retain depth/color reinterpretation and single hits.
++    expect({depth}, false, 2);
++    expect({color}, true, 1);
++    expect({color}, false, 1);
++    expect({depth}, true, 2);
++
++    // Partial coverage must still reach the merge path, and must never replace
++    // a complete source just to match the requested aspect.
++    expect({color, {&newer, true, true, 3}}, false, 3);
++    expect({depth, {&newer, false, true, 3}}, true, 3);
++    expect({{&current, false, true, 3}, depth}, false, 2);
++    expect({{&current, true, true, 3}, color}, true, 1);
++    expect({{&current, false, true, 3}, {&current, true, true, 4}}, false, 4);
++
++    // Retain existing ordering within the matching aspect; only inspect the
++    // newest timestamp group of the already sorted overlap list.
++    expect({{&old, false, false, 3}, color, depth}, false, 1);
++    expect({color, {&current, false, false, 3}, depth}, false, 3);
++    expect({depth, {&current, true, false, 3}, color}, true, 3);
++    expect({color, {&current, false, false, 3}}, false, 3);
++    std::printf("Framebuffer source selection: %d checks passed\n", checks);
++}
 diff --git a/rpcs3/ios/tests/IOSMemoryPressurePolicyTests.cpp b/rpcs3/ios/tests/IOSMemoryPressurePolicyTests.cpp
 index 3d22dfa..9b109be 100644
 --- a/rpcs3/ios/tests/IOSMemoryPressurePolicyTests.cpp
@@ -16365,6 +17379,3330 @@ index 22e57cf..0f73a7a 100644
 +	}
  	return 0;
  }
+diff --git a/rpcs3/ios/tests/MinecraftAtomicSupport.cpp b/rpcs3/ios/tests/MinecraftAtomicSupport.cpp
+new file mode 100644
+index 0000000..774d191
+--- /dev/null
++++ b/rpcs3/ios/tests/MinecraftAtomicSupport.cpp
+@@ -0,0 +1,37 @@
++// Standalone wait-engine fixture: only formatting/error/main-thread plumbing
++// is supplied here; all atomics, parking and notification execute atomic.cpp.
++#include "Utilities/StrFmt.h"
++#include <cstdlib>
++#include <pthread.h>
++namespace fmt
++{
++[[noreturn]] void raw_verify_error(std::source_location, const char8_t*, usz)
++{
++	std::abort();
++}
++[[noreturn]] void raw_throw_exception(std::source_location, const char*, const fmt_type_info*, const u64*)
++{
++	std::abort();
++}
++}
++template <> void fmt_class_string<u32>::format(std::string& out, u64 value)
++{
++	out += std::to_string(value);
++}
++template <> void fmt_class_string<u64>::format(std::string& out, u64 value)
++{
++	out += std::to_string(value);
++}
++template <> void fmt_class_string<unsigned long>::format(std::string& out, u64 value)
++{
++	out += std::to_string(value);
++}
++namespace utils
++{
++u64 _get_main_tid()
++{
++	u64 tid = 0;
++	pthread_threadid_np(nullptr, &tid);
++	return tid;
++}
++}
+diff --git a/rpcs3/ios/tests/MinecraftDMABenchmark.cpp b/rpcs3/ios/tests/MinecraftDMABenchmark.cpp
+new file mode 100644
+index 0000000..c921885
+--- /dev/null
++++ b/rpcs3/ios/tests/MinecraftDMABenchmark.cpp
+@@ -0,0 +1,50 @@
++#include "util/v128.hpp"
++#include "dma-original.h"
++#include "ios/IOSDMACopy.h"
++#include <array>
++#include <algorithm>
++#include <chrono>
++#include <cstdio>
++#include <vector>
++static volatile u64 sink;
++__attribute__((noinline)) void old_copy(unsigned char* d, const unsigned char* s, std::size_t n)
++{
++	baseline::ios::copy_dma_vectors<v128>(d, s, n);
++}
++__attribute__((noinline)) void new_copy(unsigned char* d, const unsigned char* s, std::size_t n)
++{
++	rpcs3::ios::copy_dma_vectors<v128>(d, s, n);
++}
++int main()
++{
++	alignas(128) std::array<unsigned char, 32768> a{}, b{};
++	for (unsigned size : {16, 32, 48, 64, 128, 144, 256, 512, 1024, 4096, 16384})
++	{
++		std::vector<double> times[2];
++		unsigned count = 33554432 / size;
++		for (unsigned rep = 0; rep < 12; ++rep)
++			for (unsigned j = 0; j < 2; ++j)
++			{
++				unsigned v = (rep + j) % 2;
++				u64 r = 0;
++				auto t = std::chrono::steady_clock::now();
++				for (unsigned i = 0; i < count; ++i)
++				{
++					asm volatile("" ::: "memory");
++					if (v)
++						new_copy(a.data(), b.data(), size);
++					else
++						old_copy(a.data(), b.data(), size);
++					r += a[i % size];
++				}
++				sink = r;
++				double ns = std::chrono::duration<double, std::nano>(std::chrono::steady_clock::now() - t).count() / count;
++				if (rep >= 2)
++					times[v].push_back(ns);
++			}
++		for (auto& x : times)
++			std::sort(x.begin(), x.end());
++		double x = (times[0][4] + times[0][5]) / 2, y = (times[1][4] + times[1][5]) / 2;
++		std::printf("dma_%u baseline=%.3f candidate=%.3f ns saving=%.2f%%\n", size, x, y, 100 * (1 - y / x));
++	}
++}
+diff --git a/rpcs3/ios/tests/MinecraftDescriptorTests.cpp b/rpcs3/ios/tests/MinecraftDescriptorTests.cpp
+new file mode 100644
+index 0000000..8ef14e3
+--- /dev/null
++++ b/rpcs3/ios/tests/MinecraftDescriptorTests.cpp
+@@ -0,0 +1,237 @@
++#include "util/types.hpp"
++#include <stdexcept>
++#define ensure(value, ...)                      \
++	do                                          \
++	{                                           \
++		if (!(value))                           \
++			throw std::runtime_error("ensure"); \
++	} while (false)
++#include "Emu/RSX/Common/simple_array.hpp"
++#include <cassert>
++#include <chrono>
++#include <cstdio>
++#include <random>
++#include <variant>
++#include <vector>
++using VkSampler = void*;
++using VkImageView = void*;
++using VkBufferView = void*;
++using VkBuffer = void*;
++using VkImageLayout = u32;
++constexpr auto VK_NULL_HANDLE = nullptr;
++struct VkDescriptorImageInfo
++{
++	VkSampler sampler = nullptr;
++	VkImageView imageView = nullptr;
++	VkImageLayout imageLayout = 0;
++};
++struct VkDescriptorBufferInfo
++{
++	VkBuffer buffer = nullptr;
++	u64 offset = 0, range = 0;
++};
++namespace vk
++{
++	struct image_view;
++	struct sampler;
++	struct buffer;
++	struct buffer_view;
++#include "types.inc"
++} // namespace vk
++using namespace vk;
++using descriptor_image_array_t = rsx::simple_array<VkDescriptorImageInfoEx>;
++using descriptor_slot_t = std::variant<VkDescriptorImageInfoEx, VkDescriptorBufferInfoEx, VkDescriptorBufferViewEx, descriptor_image_array_t>;
++struct table
++{
++	std::vector<descriptor_slot_t> m_descriptor_slots;
++	std::vector<u8> m_descriptors_dirty;
++	bool m_any_descriptors_dirty = false;
++	template <class T>
++	void notify_descriptor_slot_updated(u32 slot, const T& data)
++	{
++		m_descriptor_slots[slot] = data;
++		m_descriptors_dirty[slot] = true;
++		m_any_descriptors_dirty = true;
++	}
++};
++#define METHODS                                                   \
++	void bind_uniform(const VkDescriptorImageInfoEx&, u32, u32);  \
++	void bind_uniform(const VkDescriptorBufferInfoEx&, u32, u32); \
++	void bind_uniform(const VkDescriptorBufferViewEx&, u32, u32);
++namespace old
++{
++#include "old-eq-ImageInfo.inc"
++#include "old-eq-BufferInfo.inc"
++#include "old-eq-BufferView.inc"
++	struct program
++	{
++		std::array<table, 2> m_sets;
++		METHODS
++	};
++#include "old-bind-ImageInfo.inc"
++#include "old-bind-BufferInfo.inc"
++#include "old-bind-BufferView.inc"
++} // namespace old
++namespace candidate
++{
++#include "new-eq-ImageInfo.inc"
++#include "new-eq-BufferInfo.inc"
++#include "new-eq-BufferView.inc"
++	struct program
++	{
++		std::array<table, 2> m_sets;
++#include "new-bind-ImageInfo.inc"
++#include "new-bind-BufferInfo.inc"
++#include "new-bind-BufferView.inc"
++	};
++} // namespace candidate
++static volatile u64 sink;
++template <class A, class B>
++void bench(const char* name, A a, B b)
++{
++	std::vector<double> times[2];
++	for (unsigned r = 0; r < 12; ++r)
++		for (unsigned j = 0; j < 2; ++j)
++		{
++			unsigned v = (r + j) % 2;
++			auto t = std::chrono::steady_clock::now();
++			u64 s = 0;
++			for (unsigned i = 0; i < 1000000; ++i)
++			{
++				asm volatile("" ::: "memory");
++				s += v ? b(i) : a(i);
++			}
++			sink = s;
++			double ns = std::chrono::duration<double, std::nano>(std::chrono::steady_clock::now() - t).count() / 1000000;
++			if (r >= 2)
++				times[v].push_back(ns);
++		}
++	for (auto& v : times)
++		std::sort(v.begin(), v.end());
++	double x = times[0][5], y = times[1][5];
++	std::printf("%s baseline=%.3f candidate=%.3f ns saving=%.2f%%\n", name, x, y, 100 * (1 - y / x));
++}
++bool equal(const descriptor_slot_t& a, const descriptor_slot_t& b)
++{
++	if (a.index() != b.index())
++		return false;
++	if (a.index() == 0)
++	{
++		auto& x = std::get<0>(a);
++		auto& y = std::get<0>(b);
++		return x.sampler == y.sampler && x.imageView == y.imageView && x.imageLayout == y.imageLayout && x.resourceId == y.resourceId;
++	}
++	if (a.index() == 1)
++	{
++		auto& x = std::get<1>(a);
++		auto& y = std::get<1>(b);
++		return x.buffer == y.buffer && x.offset == y.offset && x.range == y.range && x.resourceId == y.resourceId;
++	}
++	if (a.index() == 2)
++	{
++		auto& x = std::get<2>(a);
++		auto& y = std::get<2>(b);
++		return x.view == y.view && x.resourceId == y.resourceId;
++	}
++	return std::get<3>(a).size() == std::get<3>(b).size();
++}
++int main(int argc, char**)
++{
++	old::program o;
++	candidate::program n;
++	for (auto* sets : {&o.m_sets, &n.m_sets})
++		for (auto& s : *sets)
++		{
++			s.m_descriptor_slots.resize(128);
++			s.m_descriptors_dirty.resize(128);
++		}
++	std::mt19937_64 rng(310);
++	VkDescriptorImageInfoEx image;
++	VkDescriptorBufferInfoEx buffer;
++	VkDescriptorBufferViewEx view;
++	for (unsigned i = 0; i < 200000; ++i)
++	{
++		unsigned set = rng() % 2, slot = rng() % 128;
++		image.sampler = reinterpret_cast<void*>(rng() % 32);
++		image.imageView = reinterpret_cast<void*>(rng() % 32);
++		image.imageLayout = rng() % 8;
++		image.resourceId = rng() % 16;
++		buffer.buffer = reinterpret_cast<void*>(rng() % 32);
++		buffer.offset = rng() % 16;
++		buffer.range = rng() % 16;
++		buffer.resourceId = rng() % 16;
++		view.view = reinterpret_cast<void*>(rng() % 32);
++		view.resourceId = rng() % 16;
++		switch (rng() % 4)
++		{
++		case 0:
++			o.bind_uniform(image, set, slot);
++			n.bind_uniform(image, set, slot);
++			break;
++		case 1:
++			o.bind_uniform(buffer, set, slot);
++			n.bind_uniform(buffer, set, slot);
++			break;
++		case 2:
++			o.bind_uniform(view, set, slot);
++			n.bind_uniform(view, set, slot);
++			break;
++		default:
++			o.m_sets[set].m_descriptor_slots[slot] = descriptor_image_array_t{};
++			n.m_sets[set].m_descriptor_slots[slot] = descriptor_image_array_t{};
++			break;
++		}
++		for (unsigned s = 0; s < 2; ++s)
++		{
++			assert(o.m_sets[s].m_descriptors_dirty == n.m_sets[s].m_descriptors_dirty && o.m_sets[s].m_any_descriptors_dirty == n.m_sets[s].m_any_descriptors_dirty);
++			for (unsigned j = 0; j < 128; ++j)
++				assert(equal(o.m_sets[s].m_descriptor_slots[j], n.m_sets[s].m_descriptor_slots[j]));
++		}
++		if (i % 31 == 0)
++			for (auto* sets : {&o.m_sets, &n.m_sets})
++				for (auto& s : *sets)
++				{
++					std::fill(s.m_descriptors_dirty.begin(), s.m_descriptors_dirty.end(), 0);
++					s.m_any_descriptors_dirty = false;
++				}
++	}
++	std::puts("PASS: three extracted descriptor binding paths; 200k mixed type/resource mutations; all slots and dirty states");
++	if (argc == 1)
++		return 0;
++	bench("bind_buffer_changed", [&](unsigned i)
++		{
++			buffer.offset = i;
++			o.bind_uniform(buffer, 1, i % 32);
++			return o.m_sets[1].m_descriptors_dirty[i % 32];
++		},
++		[&](unsigned i)
++		{
++			buffer.offset = i;
++			n.bind_uniform(buffer, 1, i % 32);
++			return n.m_sets[1].m_descriptors_dirty[i % 32];
++		});
++	bench("bind_image_changed", [&](unsigned i)
++		{
++			image.resourceId = i;
++			o.bind_uniform(image, 1, i % 32);
++			return o.m_sets[1].m_descriptors_dirty[i % 32];
++		},
++		[&](unsigned i)
++		{
++			image.resourceId = i;
++			n.bind_uniform(image, 1, i % 32);
++			return n.m_sets[1].m_descriptors_dirty[i % 32];
++		});
++	o.bind_uniform(view, 1, 0);
++	n.bind_uniform(view, 1, 0);
++	bench("bind_view_unchanged", [&](unsigned)
++		{
++			o.bind_uniform(view, 1, 0);
++			return o.m_sets[1].m_descriptors_dirty[0];
++		},
++		[&](unsigned)
++		{
++			n.bind_uniform(view, 1, 0);
++			return n.m_sets[1].m_descriptors_dirty[0];
++		});
++}
+diff --git a/rpcs3/ios/tests/MinecraftFenceTests.cpp b/rpcs3/ios/tests/MinecraftFenceTests.cpp
+new file mode 100644
+index 0000000..164fdf4
+--- /dev/null
++++ b/rpcs3/ios/tests/MinecraftFenceTests.cpp
+@@ -0,0 +1,181 @@
++#include <algorithm>
++#include <atomic>
++#include <barrier>
++#include <cassert>
++#include <chrono>
++#include <cstdio>
++#include <thread>
++#include <vector>
++#include <ctime>
++using u32 = unsigned;
++#ifdef MINECRAFT_NATIVE_ATOMIC
++#include "util/atomic.hpp"
++using atomic_adapter = atomic_t<u32>;
++#else
++struct atomic_adapter
++{
++	std::atomic<u32> value{0};
++	operator u32() const
++	{
++		return value.load();
++	}
++	void release(u32 x)
++	{
++		value.store(x, std::memory_order_release);
++	}
++	void wait(u32 x) const
++	{
++		value.wait(x);
++	}
++	void notify_all()
++	{
++		value.notify_all();
++	}
++};
++#endif
++namespace utils
++{
++	void pause()
++	{
++		asm volatile("yield" ::: "memory");
++	}
++} // namespace utils
++#define FIELDS              \
++	atomic_adapter flushed{0}; \
++	void wait_flush();      \
++	void signal_flushed();
++namespace old
++{
++	struct fence
++	{
++#ifdef MINECRAFT_NATIVE_ATOMIC
++		atomic_t<bool> flushed = false;
++		void wait_flush();
++		void signal_flushed();
++#else
++		FIELDS
++#endif
++	};
++#include "old-wait_flush.inc"
++#include "old-signal_flushed.inc"
++} // namespace old
++namespace candidate
++{
++	struct fence
++	{
++		FIELDS
++	};
++#include "new-wait_flush.inc"
++#include "new-signal_flushed.inc"
++} // namespace candidate
++template <class F>
++void verify()
++{
++	F f;
++	unsigned payload = 0;
++	std::barrier phase(2);
++	std::thread producer([&]
++		{
++			for (unsigned i = 1; i <= 10000; ++i)
++			{
++				phase.arrive_and_wait();
++				payload = i;
++				f.signal_flushed();
++				phase.arrive_and_wait();
++			}
++		});
++	for (unsigned i = 1; i <= 10000; ++i)
++	{
++		f.flushed.release(0);
++		phase.arrive_and_wait();
++		if (i % 3 == 0)
++			std::this_thread::yield();
++		f.wait_flush();
++		assert(payload == i && f.flushed == 1);
++		phase.arrive_and_wait();
++	}
++	producer.join();
++	f.flushed.release(0);
++	std::atomic<unsigned> ready = 0;
++	std::vector<std::thread> waiters;
++	for (unsigned i = 0; i < 4; ++i)
++		waiters.emplace_back([&]
++			{
++				++ready;
++				f.wait_flush();
++				assert(payload == 12345);
++			});
++	while (ready != 4)
++		std::this_thread::yield();
++	std::this_thread::sleep_for(std::chrono::milliseconds(5));
++	payload = 12345;
++	f.signal_flushed();
++	for (auto& t : waiters)
++		t.join();
++	f.wait_flush();
++}
++double cpu_ns()
++{
++	timespec t{};
++	assert(clock_gettime(CLOCK_THREAD_CPUTIME_ID, &t) == 0);
++	return double(t.tv_sec) * 1e9 + t.tv_nsec;
++}
++struct timing
++{
++	double cpu, wall, lag;
++};
++template <class F>
++timing timed(unsigned us)
++{
++	F f;
++	std::atomic<bool> ready = false;
++	std::chrono::steady_clock::time_point signalled;
++	std::thread producer([&]
++		{
++			while (!ready.load())
++				std::this_thread::yield();
++			std::this_thread::sleep_for(std::chrono::microseconds(us));
++			signalled = std::chrono::steady_clock::now();
++			f.signal_flushed();
++		});
++	auto t = std::chrono::steady_clock::now();
++	double cpu = cpu_ns();
++	ready = true;
++	f.wait_flush();
++	cpu = cpu_ns() - cpu;
++	auto end = std::chrono::steady_clock::now();
++	producer.join();
++	assert(end >= signalled);
++	return {cpu, std::chrono::duration<double, std::micro>(end - t).count(), std::chrono::duration<double, std::micro>(end - signalled).count()};
++}
++int main(int argc, char**)
++{
++	verify<old::fence>();
++	verify<candidate::fence>();
++	std::puts("PASS: extracted fence wait/signal; 10000 release/acquire payloads, reset cycles, signal-before-wait, delayed signal and four waiters (backend selected by --native-atomic; otherwise std atomic)");
++	if (argc == 1)
++		return 0;
++	for (unsigned us : {50, 1000, 20000})
++	{
++		std::vector<double> cpu[2], lag[2], wall[2];
++		for (unsigned r = 0; r < 22; ++r)
++			for (unsigned j = 0; j < 2; ++j)
++			{
++				unsigned v = (r + j) % 2;
++				auto n = v ? timed<candidate::fence>(us) : timed<old::fence>(us);
++				if (r >= 2)
++				{
++					cpu[v].push_back(n.cpu);
++					lag[v].push_back(n.lag);
++					wall[v].push_back(n.wall);
++				}
++			}
++		for (unsigned v = 0; v < 2; ++v)
++		{
++			std::sort(cpu[v].begin(), cpu[v].end());
++			std::sort(lag[v].begin(), lag[v].end());
++			std::sort(wall[v].begin(), wall[v].end());
++		}
++		std::printf("fence_%uus CPU baseline=%.1f candidate=%.1f us saving=%.2f%% wake median/p95 baseline=%.2f/%.2f candidate=%.2f/%.2f us wall baseline=%.2f candidate=%.2f us\n", us, cpu[0][10] / 1000, cpu[1][10] / 1000, 100 * (1 - cpu[1][10] / cpu[0][10]), lag[0][10], lag[0][18], lag[1][10], lag[1][18], wall[0][10], wall[1][10]);
++	}
++}
+diff --git a/rpcs3/ios/tests/MinecraftIndexTests.cpp b/rpcs3/ios/tests/MinecraftIndexTests.cpp
+new file mode 100644
+index 0000000..bf44b40
+--- /dev/null
++++ b/rpcs3/ios/tests/MinecraftIndexTests.cpp
+@@ -0,0 +1,213 @@
++#include "util/types.hpp"
++#include <stdexcept>
++#define ensure(x, ...)                          \
++	do                                          \
++	{                                           \
++		if (!(x))                               \
++			throw std::runtime_error("ensure"); \
++	} while (false)
++#include "Utilities/lockless.h"
++#include "Emu/RSX/gcm_enums.h"
++#include <algorithm>
++#include <array>
++#include <cassert>
++#include <chrono>
++#include <cstdio>
++#include <random>
++#include <vector>
++#include <atomic>
++#include <thread>
++namespace fmt
++{
++	[[noreturn]] void throw_exception(const char* x)
++	{
++		throw std::runtime_error(x);
++	}
++} // namespace fmt
++// No sleeping consumer in this fixture: retain the actual queue/atomic/packet
++// implementation, replacing only the wait-engine notification with a counter.
++static unsigned notifications = 0;
++void atomic_wait_engine::notify_one(const void*)
++{
++	++notifications;
++}
++void iota32(u32* dst, unsigned n)
++{
++	for (unsigned i = 0; i < n; ++i)
++		dst[i] = i;
++}
++#include "index-generator.inc"
++__attribute__((noinline)) void write_index_array_for_non_indexed_non_native_primitive_to_buffer(char* d, rsx::primitive_type p, unsigned n)
++{
++	write_non_native_indices_precomputed(d, p, n);
++}
++struct configuration
++{
++	struct
++	{
++		bool multithreaded_rsx = true;
++	} video;
++} g_cfg;
++struct worker
++{
++	enum op
++	{
++		raw_copy,
++		vector_copy,
++		index_emulate,
++		callback
++	};
++#include "transport.inc"
++	lf_queue<transport_packet> m_work_queue;
++	atomic_t<u64> m_enqueued_count = 0, m_processed_count = 0;
++	void drain()
++	{
++		for (auto& j : m_work_queue.pop_all())
++		{
++			if (j.type == index_emulate)
++				write_index_array_for_non_indexed_non_native_primitive_to_buffer(static_cast<char*>(j.dst), rsx::primitive_type(j.aux_param0), j.length);
++			else if (j.type == raw_copy)
++				std::memcpy(j.dst, j.src, j.length);
++			else if (j.type == vector_copy)
++				std::memcpy(j.dst, j.opt_storage.data(), j.length);
++			++m_processed_count;
++		}
++	}
++};
++namespace old
++{
++	struct dma_manager
++	{
++		std::shared_ptr<worker> m_thread = std::make_shared<worker>();
++		void emulate_as_indexed(void*, rsx::primitive_type, u32);
++	};
++#include "old-dispatch.inc"
++} // namespace old
++namespace candidate
++{
++	struct dma_manager
++	{
++		std::shared_ptr<worker> m_thread = std::make_shared<worker>();
++		void emulate_as_indexed(void*, rsx::primitive_type, u32);
++	};
++#include "new-dispatch.inc"
++} // namespace candidate
++static volatile u64 sink;
++int main(int argc, char**)
++{
++	old::dma_manager o;
++	candidate::dma_manager n;
++	alignas(16) std::array<u32, 200000> a{}, b{}, oracle{};
++	std::mt19937 rng(310);
++	for (unsigned i = 0; i < 10000; ++i)
++	{
++		unsigned count = rng() % 3000, offset = rng() % 128;
++		auto mode = i % 3 == 0 ? rsx::primitive_type::triangle_fan : rsx::primitive_type::quads;
++		if (mode == rsx::primitive_type::triangle_fan)
++			count = std::max(2u, count);
++		if (i % 5 == 0)
++		{
++			std::fill_n(oracle.data(), 1024, i);
++			for (auto* thr : {o.m_thread.get(), n.m_thread.get()})
++			{
++				++thr->m_enqueued_count;
++				thr->m_work_queue.push(thr == o.m_thread.get() ? a.data() : b.data(), oracle.data(), 1024 * sizeof(u32));
++			}
++		}
++		o.emulate_as_indexed(a.data() + offset, mode, count);
++		n.emulate_as_indexed(b.data() + offset, mode, count);
++		if (i % 4 == 0)
++		{
++			o.m_thread->drain();
++			n.m_thread->drain();
++			assert(a == b);
++		}
++	}
++	o.m_thread->drain();
++	n.m_thread->drain();
++	assert(a == b);
++	// The completion counter is the acquire/release boundary that makes a
++	// direct upload safe while a real consumer drains earlier queue packets.
++	g_cfg.video.multithreaded_rsx = true;
++	std::atomic<bool> complete = false;
++	auto consume = [&](worker& thread)
++	{
++		while (!complete.load() || thread.m_processed_count.load() < thread.m_enqueued_count.load())
++		{
++			thread.drain();
++			std::this_thread::yield();
++		}
++	};
++	std::thread original_consumer([&] { consume(*o.m_thread); });
++	std::thread candidate_consumer([&] { consume(*n.m_thread); });
++	for (unsigned i = 0; i < 2000; ++i)
++	{
++		const unsigned count = rng() % 1500, offset = rng() % 128;
++		o.emulate_as_indexed(a.data() + offset, rsx::primitive_type::quads, count);
++		n.emulate_as_indexed(b.data() + offset, rsx::primitive_type::quads, count);
++	}
++	complete = true;
++	original_consumer.join();
++	candidate_consumer.join();
++	assert(a == b);
++	for (bool mt : {false, true})
++		for (unsigned count : {0u, 1u, 2u, 3u, 4u, 511u, 512u, 513u, 65535u, 65536u, 65537u})
++		{
++			g_cfg.video.multithreaded_rsx = mt;
++			a.fill(~0u);
++			b = a;
++			oracle = a;
++			o.emulate_as_indexed(a.data(), rsx::primitive_type::quads, count);
++			n.emulate_as_indexed(b.data(), rsx::primitive_type::quads, count);
++			o.m_thread->drain();
++			n.m_thread->drain();
++			for (unsigned i = 0; i < count / 4; ++i)
++			{
++				oracle[i * 6] = i * 4;
++				oracle[i * 6 + 1] = i * 4 + 1;
++				oracle[i * 6 + 2] = oracle[i * 6 + 3] = i * 4 + 2;
++				oracle[i * 6 + 4] = i * 4 + 3;
++				oracle[i * 6 + 5] = i * 4;
++			}
++			assert(a == b && a == oracle);
++		}
++	std::puts("PASS: extracted index dispatch; native packets/lf_queue/atomics; 10k aliasing copy/index jobs, 2000 concurrent-consumer jobs and threshold/tail/fallback boundaries");
++	if (argc == 1)
++		return 0;
++	g_cfg.video.multithreaded_rsx = true;
++	for (unsigned count : {4, 64, 256, 512, 513, 4096})
++	{
++		std::vector<double> times[2];
++		for (unsigned r = 0; r < 12; ++r)
++			for (unsigned j = 0; j < 2; ++j)
++			{
++				unsigned v = (r + j) % 2;
++				auto t = std::chrono::steady_clock::now();
++				u64 s = 0;
++				for (unsigned i = 0; i < 100000; ++i)
++				{
++					asm volatile("" ::: "memory");
++					if (v)
++					{
++						n.emulate_as_indexed(b.data(), rsx::primitive_type::quads, count);
++						n.m_thread->drain();
++						s += b[0];
++					}
++					else
++					{
++						o.emulate_as_indexed(a.data(), rsx::primitive_type::quads, count);
++						o.m_thread->drain();
++						s += a[0];
++					}
++				}
++				sink = s;
++				double ns = std::chrono::duration<double, std::nano>(std::chrono::steady_clock::now() - t).count() / 100000;
++				if (r >= 2)
++					times[v].push_back(ns);
++			}
++		for (auto& x : times)
++			std::sort(x.begin(), x.end());
++		double x = times[0][5], y = times[1][5];
++		std::printf("index_%u baseline=%.2f candidate=%.2f ns saving=%.2f%% (enqueue+drain, notification stub)\n", count, x, y, 100 * (1 - y / x));
++	}
++}
+diff --git a/rpcs3/ios/tests/MinecraftOptimizationTests.cpp b/rpcs3/ios/tests/MinecraftOptimizationTests.cpp
+new file mode 100644
+index 0000000..d62a9df
+--- /dev/null
++++ b/rpcs3/ios/tests/MinecraftOptimizationTests.cpp
+@@ -0,0 +1,389 @@
++#include <arm_neon.h>
++#include "util/v128.hpp"
++#include "Emu/RSX/Common/unordered_map.hpp"
++#include <algorithm>
++#include <array>
++#include <bit>
++#include <cassert>
++#include <chrono>
++#include <cstdio>
++#include <cstring>
++#include <random>
++#include <span>
++#include <stdexcept>
++#include <string>
++#include <vector>
++#include <sys/mman.h>
++#include <unistd.h>
++#ifndef FORCE_INLINE
++#define FORCE_INLINE inline __attribute__((always_inline))
++#endif
++using spu_rdata_t = std::byte[128];
++namespace old_cmp
++{
++#include "old-cmp.inc"
++}
++namespace candidate_cmp
++{
++#include "new-cmp.inc"
++}
++namespace vm
++{
++	alignas(128) std::array<char, 1024 * 1024> memory{};
++	template <class T>
++	T* get_super_ptr(u32 address)
++	{
++		assert(address < memory.size());
++		return reinterpret_cast<T*>(memory.data() + address);
++	}
++} // namespace vm
++namespace utils
++{
++	template <class T, class U>
++	T* bless(U* ptr)
++	{
++		return reinterpret_cast<T*>(ptr);
++	}
++} // namespace utils
++struct uploaded_range
++{
++	uptr local_address;
++	u32 offset_in_heap;
++	u32 data_length;
++	u64 fingerprint;
++};
++template <class T>
++class default_vertex_cache
++{
++public:
++	virtual ~default_vertex_cache() = default;
++	virtual const T* find_vertex_range(u32, u32)
++	{
++		return nullptr;
++	}
++	virtual void store_range(u32, u32, u32) {}
++	virtual void purge() {}
++};
++namespace old_cache
++{
++#include "old-cache.inc"
++}
++namespace candidate_cache
++{
++#include "new-cache.inc"
++}
++namespace fmt
++{
++	template <class... T>
++	[[noreturn]] void throw_exception(const char* s, T...)
++	{
++		throw std::runtime_error(s);
++	}
++} // namespace fmt
++enum class attribute_buffer_placement
++{
++	none,
++	transient,
++	persistent
++};
++struct test_block
++{
++	u32 attribute_stride = 0;
++};
++#define LAYOUT_FIELDS                            \
++	std::vector<test_block*> interleaved_blocks; \
++	std::vector<unsigned> volatile_blocks;       \
++	std::vector<u8> referenced_registers;        \
++	u16 attribute_mask = 0;                      \
++	std::array<attribute_buffer_placement, 16> attribute_placement{};
++struct old_layout
++{
++	LAYOUT_FIELDS
++#include "old-validate.inc"
++};
++struct candidate_layout
++{
++	LAYOUT_FIELDS
++#include "new-validate.inc"
++};
++struct old_dirty
++{
++	std::vector<bool> m_descriptors_dirty;
++	std::vector<u64> m_descriptor_slots;
++	bool m_any_descriptors_dirty = false;
++	template <class T>
++#include "old-dirty.inc"
++};
++struct candidate_dirty
++{
++#include "dirty-type.inc"
++	dirty_type m_descriptors_dirty;
++	std::vector<u64> m_descriptor_slots;
++	bool m_any_descriptors_dirty = false;
++	template <class T>
++#include "new-dirty.inc"
++};
++static volatile u64 sink;
++template <class F>
++double measure(F f, unsigned count)
++{
++	u64 r = 0;
++	auto t = std::chrono::steady_clock::now();
++	for (unsigned i = 0; i < count; ++i)
++	{
++		asm volatile("" ::: "memory");
++		r += f(i);
++	}
++	sink = r;
++	return std::chrono::duration<double, std::nano>(std::chrono::steady_clock::now() - t).count() / count;
++}
++template <class A, class B>
++void bench(const char* name, A a, B b, unsigned count = 500000)
++{
++	std::vector<double> times[2];
++	for (unsigned round = 0; round < 12; ++round)
++		for (unsigned order = 0; order < 2; ++order)
++		{
++			unsigned v = (round + order) % 2;
++			double n = v ? measure(b, count) : measure(a, count);
++			if (round >= 2)
++				times[v].push_back(n);
++		}
++	for (auto& x : times)
++		std::sort(x.begin(), x.end());
++	double x = (times[0][4] + times[0][5]) / 2, y = (times[1][4] + times[1][5]) / 2;
++	std::printf("%s baseline=%.3f candidate=%.3f ns/call saving=%.2f%%\n", name, x, y, 100 * (1 - y / x));
++}
++bool same(const uploaded_range* a, const uploaded_range* b)
++{
++	return bool(a) == bool(b) && (!a || (a->local_address == b->local_address && a->offset_in_heap == b->offset_in_heap && a->data_length == b->data_length && a->fingerprint == b->fingerprint));
++}
++int main(int argc, char**)
++{
++	bool benchmark = argc > 1;
++	std::mt19937 rng(310);
++	alignas(128) std::array<std::byte, 256> a{}, b{};
++	auto compare = [&](unsigned x, unsigned y)
++	{
++		auto& lhs = *reinterpret_cast<const spu_rdata_t*>(a.data() + x);
++		auto& rhs = *reinterpret_cast<const spu_rdata_t*>(b.data() + y);
++		bool expected = std::memcmp(&lhs, &rhs, 128) == 0;
++		assert(old_cmp::cmp_rdata(lhs, rhs) == expected);
++		assert(candidate_cmp::cmp_rdata(lhs, rhs) == expected);
++	};
++	for (unsigned off = 0; off <= 128; off += 16)
++	{
++		for (auto& v : a)
++			v = std::byte(rng());
++		b = a;
++		compare(off, off);
++		for (unsigned byte = 0; byte < 128; ++byte)
++			for (unsigned bit = 0; bit < 8; ++bit)
++			{
++				b = a;
++				b[off + byte] ^= std::byte(1u << bit);
++				compare(off, off);
++			}
++	}
++	for (unsigned i = 0; i < 20000; ++i)
++	{
++		for (auto& v : a)
++			v = std::byte(rng());
++		b = a;
++		if (i % 2)
++			b[rng() % 128] ^= std::byte(1);
++		compare(0, 0);
++	}
++	auto page = sysconf(_SC_PAGESIZE);
++	auto* mem = static_cast<std::byte*>(mmap(nullptr, page * 3, PROT_NONE, MAP_PRIVATE | MAP_ANON, -1, 0));
++	assert(mem != MAP_FAILED && mprotect(mem + page, page, PROT_READ | PROT_WRITE) == 0);
++	for (unsigned tail : {0u, 128u})
++	{
++		auto& v = *reinterpret_cast<spu_rdata_t*>(mem + page + (tail ? page - tail : 0));
++		assert(old_cmp::cmp_rdata(v, v) && candidate_cmp::cmp_rdata(v, v));
++	}
++	munmap(mem, page * 3);
++	old_cache::weak_vertex_cache oc;
++	candidate_cache::weak_vertex_cache nc;
++	for (unsigned i = 0; i < 200000; ++i)
++	{
++		u32 addr = (rng() % 512) * 128, length = rng() % 129, offset = rng();
++		unsigned op = rng() % 12;
++		if (op < 5)
++		{
++			oc.store_range(addr, length, offset);
++			nc.store_range(addr, length, offset);
++		}
++		else if (op == 5)
++		{
++			vm::memory[addr] ^= 1;
++		}
++		else if (op == 6)
++		{
++			oc.purge();
++			nc.purge();
++		}
++		else
++			assert(same(oc.find_vertex_range(addr, length), nc.find_vertex_range(addr, length)));
++		assert(same(oc.find_vertex_range(addr, length), nc.find_vertex_range(addr, length)));
++	}
++	old_layout ol;
++	candidate_layout nl;
++	test_block block;
++	for (unsigned mask = 0; mask < 65536; ++mask)
++	{
++		ol.attribute_mask = nl.attribute_mask = mask;
++		ol.referenced_registers.clear();
++		nl.referenced_registers.clear();
++		for (unsigned i = 0; i < 16; ++i)
++		{
++			ol.attribute_placement[i] = nl.attribute_placement[i] = attribute_buffer_placement((i + mask) % 3);
++			if ((i + mask) % 4 == 0)
++			{
++				ol.referenced_registers.push_back(i);
++				nl.referenced_registers.push_back(i);
++			}
++		}
++		assert(ol.validate() == nl.validate());
++	}
++	for (unsigned i = 0; i < 100000; ++i)
++	{
++		ol.attribute_mask = nl.attribute_mask = rng();
++		for (unsigned j = 0; j < 16; ++j)
++			ol.attribute_placement[j] = nl.attribute_placement[j] = attribute_buffer_placement(rng() % 3);
++		assert(ol.validate() == nl.validate());
++	}
++	for (unsigned stride : {0u, 16u})
++	{
++		block.attribute_stride = stride;
++		ol.interleaved_blocks = {&block};
++		nl.interleaved_blocks = {&block};
++		assert(ol.validate() == nl.validate());
++	}
++	ol.interleaved_blocks.clear();
++	nl.interleaved_blocks.clear();
++	ol.volatile_blocks = {1};
++	nl.volatile_blocks = {1};
++	assert(ol.validate() == nl.validate());
++	ol.volatile_blocks.clear();
++	nl.volatile_blocks.clear();
++	old_dirty od;
++	candidate_dirty nd;
++	od.m_descriptors_dirty.resize(256);
++	nd.m_descriptors_dirty.resize(256);
++	od.m_descriptor_slots.resize(256);
++	nd.m_descriptor_slots.resize(256);
++	for (unsigned i = 0; i < 100000; ++i)
++	{
++		unsigned slot = rng() % 256;
++		u64 value = rng();
++		od.notify_descriptor_slot_updated(slot, value);
++		nd.notify_descriptor_slot_updated(slot, value);
++		assert(od.m_descriptor_slots == nd.m_descriptor_slots && od.m_any_descriptors_dirty == nd.m_any_descriptors_dirty);
++		for (unsigned j = 0; j < 256; ++j)
++			assert(bool(od.m_descriptors_dirty[j]) == bool(nd.m_descriptors_dirty[j]));
++		if (i % 33 == 0)
++		{
++			std::fill(od.m_descriptors_dirty.begin(), od.m_descriptors_dirty.end(), false);
++			std::fill(nd.m_descriptors_dirty.begin(), nd.m_descriptors_dirty.end(), false);
++		}
++	}
++	std::puts("PASS: production cmp 128-byte oracle/each-bit mutations/guard pages, vertex cache mutation/purge/overwrite, layout masks and descriptor state");
++	if (!benchmark)
++		return 0;
++	for (auto& v : a)
++		v = std::byte(rng());
++	b = a;
++	bench("cmp_equal", [&](unsigned i)
++		{
++			return old_cmp::cmp_rdata(*reinterpret_cast<spu_rdata_t*>(a.data() + (i % 8) * 16), *reinterpret_cast<spu_rdata_t*>(b.data() + (i % 8) * 16));
++		},
++		[&](unsigned i)
++		{
++			return candidate_cmp::cmp_rdata(*reinterpret_cast<spu_rdata_t*>(a.data() + (i % 8) * 16), *reinterpret_cast<spu_rdata_t*>(b.data() + (i % 8) * 16));
++		});
++	b[64] ^= std::byte(1);
++	bench("cmp_different", [&](unsigned i)
++		{
++			return old_cmp::cmp_rdata(*reinterpret_cast<spu_rdata_t*>(a.data() + (i % 8) * 16), *reinterpret_cast<spu_rdata_t*>(b.data() + (i % 8) * 16));
++		},
++		[&](unsigned i)
++		{
++			return candidate_cmp::cmp_rdata(*reinterpret_cast<spu_rdata_t*>(a.data() + (i % 8) * 16), *reinterpret_cast<spu_rdata_t*>(b.data() + (i % 8) * 16));
++		});
++	oc.purge();
++	nc.purge();
++	bench("cache_store_hit", [&](unsigned i)
++		{
++			oc.store_range((i % 128) * 128, 128, i);
++			return i;
++		},
++		[&](unsigned i)
++		{
++			nc.store_range((i % 128) * 128, 128, i);
++			return i;
++		});
++	bench("cache_store_miss", [&](unsigned i)
++		{
++			if (i % 1024 == 0)
++				oc.purge();
++			oc.store_range((i % 1024) * 128, 128, i);
++			return i;
++		},
++		[&](unsigned i)
++		{
++			if (i % 1024 == 0)
++				nc.purge();
++			nc.store_range((i % 1024) * 128, 128, i);
++			return i;
++		});
++	bench("cache_invalidate", [&](unsigned i)
++		{
++			u32 addr = (i % 128) * 128;
++			oc.store_range(addr, 128, i);
++			vm::memory[addr] ^= 1;
++			return oc.find_vertex_range(addr, 128) == nullptr;
++		},
++		[&](unsigned i)
++		{
++			u32 addr = (i % 128) * 128;
++			nc.store_range(addr, 128, i);
++			vm::memory[addr] ^= 1;
++			return nc.find_vertex_range(addr, 128) == nullptr;
++		});
++	for (unsigned j = 0; j < 16; ++j)
++		ol.attribute_placement[j] = nl.attribute_placement[j] = attribute_buffer_placement::none;
++	ol.attribute_placement[15] = nl.attribute_placement[15] = attribute_buffer_placement::persistent;
++	ol.referenced_registers.clear();
++	nl.referenced_registers.clear();
++	bench("layout_validate_sparse", [&](unsigned i)
++		{
++			ol.attribute_mask = (1u << 15) | (1u << (i % 8));
++			return ol.validate();
++		},
++		[&](unsigned i)
++		{
++			nl.attribute_mask = (1u << 15) | (1u << (i % 8));
++			return nl.validate();
++		});
++	bench("layout_validate_dense", [&](unsigned i)
++		{
++			ol.attribute_mask = 0xffffu ^ (i & 3);
++			return ol.validate();
++		},
++		[&](unsigned i)
++		{
++			nl.attribute_mask = 0xffffu ^ (i & 3);
++			return nl.validate();
++		});
++	bench("descriptor_dirty", [&](unsigned i)
++		{
++			od.notify_descriptor_slot_updated(i % 64, u64(i));
++			return od.m_descriptor_slots[i % 64];
++		},
++		[&](unsigned i)
++		{
++			nd.notify_descriptor_slot_updated(i % 64, u64(i));
++			return nd.m_descriptor_slots[i % 64];
++		});
++}
+diff --git a/rpcs3/ios/tests/MinecraftReference/IOSDMACopy.h b/rpcs3/ios/tests/MinecraftReference/IOSDMACopy.h
+new file mode 100644
+index 0000000..b6c26eb
+--- /dev/null
++++ b/rpcs3/ios/tests/MinecraftReference/IOSDMACopy.h
+@@ -0,0 +1,38 @@
++#pragma once
++
++#include <cstddef>
++
++namespace rpcs3::ios
++{
++// Keep the original forward, one-vector-at-a-time copy semantics, including
++// overlapping ranges. Do not replace this with a whole-range memcpy.
++template <typename Vector, std::size_t Size>
++inline void copy_dma_fixed(unsigned char* dst, const unsigned char* src)
++{
++	static_assert(sizeof(Vector) == 16 && Size % 16 == 0);
++	for (std::size_t offset = 0; offset < Size; offset += 16)
++	{
++		*reinterpret_cast<Vector*>(dst + offset) = *reinterpret_cast<const Vector*>(src + offset);
++	}
++}
++
++template <typename Vector>
++inline void copy_dma_vectors(unsigned char* dst, const unsigned char* src, std::size_t size)
++{
++	static_assert(sizeof(Vector) == 16);
++	switch (size)
++	{
++	case 64: copy_dma_fixed<Vector, 64>(dst, src); return;
++	case 80: copy_dma_fixed<Vector, 80>(dst, src); return;
++	case 96: copy_dma_fixed<Vector, 96>(dst, src); return;
++	case 112: copy_dma_fixed<Vector, 112>(dst, src); return;
++	case 128: copy_dma_fixed<Vector, 128>(dst, src); return;
++	default:
++		// Callers supply whole aligned vectors, as required by the old loop.
++		for (std::size_t offset = 0; offset < size; offset += 16)
++		{
++			*reinterpret_cast<Vector*>(dst + offset) = *reinterpret_cast<const Vector*>(src + offset);
++		}
++	}
++}
++}
+diff --git a/rpcs3/ios/tests/MinecraftReference/README.md b/rpcs3/ios/tests/MinecraftReference/README.md
+new file mode 100644
+index 0000000..3c1eb86
+--- /dev/null
++++ b/rpcs3/ios/tests/MinecraftReference/README.md
+@@ -0,0 +1,7 @@
++# Minecraft pre-batch references
++
++Immutable production excerpts from core `b697d1536409575c03c2b5a12ed6d3d031bfefda`, captured before this batch. `SHA256.json` records their byte digests. The runners extract the current candidate separately and never regenerate the baseline. Namespace renaming and test-only stubs isolate dependencies; native `simple_array`, `v128`, descriptor field definitions, queue packets, lockless queue and atomics remain in the relevant fixtures.
++
++`run-minecraft-optimization-tests.py` executes reservation, cache, validation and descriptor state comparisons. `run-minecraft-vertex-tests.py` executes full layout analysis/packing/range routines and type helpers; fixtures control RSX registers and guest memory. The descriptor fixture executes all three production binding routines and comparisons. The index fixture retains the native queue and packet implementation, replacing only its notification plumbing; it checks overlapping queued jobs and concurrent consumers. DMA tests use the independent per-vector oracle, including overlapping virtual ranges, physical aliases and inaccessible page bounds, plus the existing independent seeded XXH3 oracle. Fence tests extract real wait/signal methods; `--native-atomic` compiles the production wait engine and supplies only formatting/error/main-thread plumbing.
++
++Run each Python runner normally or with `--sanitize`; `--benchmark` alternates old/new order, excludes two warmups and reports ten-repeat medians. Fence benchmarks report waiting CPU and wake latency separately. Mac/ARM host measurements establish component performance, not iPhone FPS. References cover test domains, not a proof of all emulator behavior. The full contract runner includes the new paths; the existing IOSFPSBatch fixture covers DMA and hashing. See the parent diagnostics report for accepted/rejected candidates, validation and the physical checkpoint.
+diff --git a/rpcs3/ios/tests/MinecraftReference/SHA256.json b/rpcs3/ios/tests/MinecraftReference/SHA256.json
+new file mode 100644
+index 0000000..77e63fc
+--- /dev/null
++++ b/rpcs3/ios/tests/MinecraftReference/SHA256.json
+@@ -0,0 +1,27 @@
++{
++  "IOSDMACopy.h": "0b6e7e73d72262cda5d62096b0feb009fda265c268fe69b3c931a844006abbcc",
++  "analyse.inc": "09141faee380b383cf11970ee8b5b67be4101c4f1717886f8a44f49607c5bf38",
++  "cache.inc": "c16077b5b0f5a104b9a9cd5a57147c2c50c89c8e1b495ab763f478db701d9a8a",
++  "cmp.inc": "8cccb439593b10734adbc291621834a5e01201a0b1aa347f69bf35a1e83e0184",
++  "descriptor-bind-BufferInfo.inc": "d66802a70e96dff5138e4f1e10924c28bd241fe92f03f2c12d1f77209bd9a0ac",
++  "descriptor-bind-BufferView.inc": "54c749a094049be2b390558227635d1742fd43faf2f917d5bb5c2b9773b2cd5f",
++  "descriptor-bind-ImageInfo.inc": "ac06b76453cbf9e368c412b7afa9873f21fb23bc144369d177f84c75ad9560e3",
++  "descriptor-eq-BufferInfo.inc": "f0bd6bf6167bd4a7a29911ecc75458ff0c54d0d88ab34a63477b60a25678cb9d",
++  "descriptor-eq-BufferView.inc": "e2a4e02b078e41126672f81b3d458367feadb77b9d4ee0ea29364487ca56f04c",
++  "descriptor-eq-ImageInfo.inc": "72cc37e92fe747a4c9ea9fbbe0e3986bada7d7590a0bdb6edc5267572ed03532",
++  "descriptor-types.inc": "988635e846d126e5e307970293d7f6927d34585e8c0fef55f5c6abf0cca02a0c",
++  "dirty.inc": "c73817c4a66004f0a373d64f4f6ba84b6fde498a23f2417b60ad0e2463f85dfa",
++  "fence-signal_flushed.inc": "33b288a79c17f4ecd69a27ecdbdb7f543220d662fa04840ec0bfdb26d09bc881",
++  "fence-wait_flush.inc": "b4daf4444186719e58ce388b9ace66921ba4787d7e34c79b1fe179bc2fff05ee",
++  "fill.inc": "0a9bf824bf9928a3859ab450d6c4e4b0a58a8ad438a48c75678de7bf8ced8bfd",
++  "index-dispatch.inc": "e91a2eacf958d780d8c37d984f6fcd09b367c0ac6fbc886daec61a9bbd5ff1be",
++  "index-generator.inc": "c2cf24c505a3453d1202d10dffbf5cbd41be8d4531e6d53b49ee79d59fad2b71",
++  "index-size.inc": "ead44d7f136617166d155c6dbf604ed65994de42d63f7266e397ca90572d3535",
++  "layout.inc": "5e6097bc96ff4f8316418f2726e5f63173ab51f8766a8012904cad2283a74f03",
++  "mov.inc": "3b3084c57d76beb6e278cedd650544541e498afa5f441681d6ec633b4b5201c7",
++  "range.inc": "004d74c50a75d46db92b97ff8e2640ffd47784289f503a1cb3475066d74c8147",
++  "transfer.inc": "21f742d55ae7f2c1ef20bcc118bd3152b35091af8fd111d06f050ef188a738e2",
++  "transport.inc": "8fc5cb3092026f6b3be0bb04f4627466121b2d45a70346e1b4eddc529f911ca5",
++  "type.inc": "0f79f0bdfa90979d58a4d81744584b13ca6050c126e2f50d3d809a19df1ab556",
++  "validate.inc": "a77dafc0e7e32d146c502bb0fa3da969dd59b0285cc9ceca7279e2393890e4bd"
++}
+diff --git a/rpcs3/ios/tests/MinecraftReference/analyse.inc b/rpcs3/ios/tests/MinecraftReference/analyse.inc
+new file mode 100644
+index 0000000..16c6d3a
+--- /dev/null
++++ b/rpcs3/ios/tests/MinecraftReference/analyse.inc
+@@ -0,0 +1,176 @@
++void draw_command_processor::analyse_inputs_interleaved(vertex_input_layout& result, const vertex_program_metadata_t& vp_metadata)
++	{
++		const rsx_state& state = *REGS(m_ctx);
++		const u32 input_mask = state.vertex_attrib_input_mask() & vp_metadata.referenced_inputs_mask;
++
++		result.clear();
++		result.attribute_mask = static_cast<u16>(input_mask);
++
++		if (state.current_draw_clause.command == rsx::draw_command::inlined_array)
++		{
++			interleaved_range_info& info = *result.alloc_interleaved_block();
++			info.interleaved = true;
++
++			for (u8 index = 0; index < rsx::limits::vertex_count; ++index)
++			{
++				auto& vinfo = state.vertex_arrays_info[index];
++				result.attribute_placement[index] = attribute_buffer_placement::none;
++
++				if (vinfo.size() > 0)
++				{
++					// Stride must be updated even if the stream is disabled
++					info.attribute_stride += rsx::get_vertex_type_size_on_host(vinfo.type(), vinfo.size());
++					info.locations.push_back({ index, false, 1 });
++
++					if (input_mask & (1u << index))
++					{
++						result.attribute_placement[index] = attribute_buffer_placement::transient;
++					}
++				}
++				else if (state.register_vertex_info[index].size > 0 && input_mask & (1u << index))
++				{
++					// Reads from register
++					result.referenced_registers.push_back(index);
++					result.attribute_placement[index] = attribute_buffer_placement::transient;
++				}
++			}
++
++			if (info.attribute_stride)
++			{
++				// At least one array feed must be enabled for vertex input
++				result.interleaved_blocks.push_back(&info);
++			}
++
++			return;
++		}
++
++		const u32 frequency_divider_mask = REGS(m_ctx)->frequency_divider_operation_mask();
++		result.interleaved_blocks.reserve(16);
++		result.referenced_registers.reserve(16);
++
++		for (auto [ref_mask, index] = std::tuple{ input_mask, u8(0) }; ref_mask; ++index, ref_mask >>= 1)
++		{
++			ensure(index < rsx::limits::vertex_count);
++
++			if (!(ref_mask & 1u))
++			{
++				// Nothing to do, uninitialized
++				continue;
++			}
++
++			// Always reset attribute placement by default
++			result.attribute_placement[index] = attribute_buffer_placement::none;
++
++			// Check for interleaving
++			if (REGS(m_ctx)->current_draw_clause.is_immediate_draw &&
++				REGS(m_ctx)->current_draw_clause.command != rsx::draw_command::indexed)
++			{
++				// NOTE: In immediate rendering mode, all vertex setup is ignored
++				// Observed with GT5, immediate render bypasses array pointers completely, even falling back to fixed-function register defaults
++				if (m_vertex_push_buffers[index].vertex_count > 1)
++				{
++					// Ensure consistent number of vertices per attribute.
++					m_vertex_push_buffers[index].pad_to(m_vertex_push_buffers[0].vertex_count, false);
++
++					// Read temp buffer (register array)
++					std::pair<u8, u32> volatile_range_info = std::make_pair(index, static_cast<u32>(m_vertex_push_buffers[index].data.size() * sizeof(u32)));
++					result.volatile_blocks.push_back(volatile_range_info);
++					result.attribute_placement[index] = attribute_buffer_placement::transient;
++				}
++				else if (state.register_vertex_info[index].size > 0)
++				{
++					// Reads from register
++					result.referenced_registers.push_back(index);
++					result.attribute_placement[index] = attribute_buffer_placement::transient;
++				}
++
++				// Fall back to the default register value if no source is specified via register
++				continue;
++			}
++
++			const auto& info = state.vertex_arrays_info[index];
++			if (!info.size())
++			{
++				if (state.register_vertex_info[index].size > 0)
++				{
++					// Reads from register
++					result.referenced_registers.push_back(index);
++					result.attribute_placement[index] = attribute_buffer_placement::transient;
++					continue;
++				}
++			}
++			else
++			{
++				result.attribute_placement[index] = attribute_buffer_placement::persistent;
++				const u32 base_address = info.offset() & 0x7fffffff;
++				bool alloc_new_block = true;
++				bool modulo = !!(frequency_divider_mask & (1 << index));
++
++				for (auto& block : result.interleaved_blocks)
++				{
++					if (block->single_vertex)
++					{
++						// Single vertex definition, continue
++						continue;
++					}
++
++					if (block->attribute_stride != info.stride())
++					{
++						// Stride does not match, continue
++						continue;
++					}
++
++					if (base_address > block->base_offset)
++					{
++						const u32 diff = base_address - block->base_offset;
++						if (diff > info.stride())
++						{
++							// Not interleaved, continue
++							continue;
++						}
++					}
++					else
++					{
++						const u32 diff = block->base_offset - base_address;
++						if (diff > info.stride())
++						{
++							// Not interleaved, continue
++							continue;
++						}
++
++						// Matches, and this address is lower than existing
++						block->base_offset = base_address;
++					}
++
++					alloc_new_block = false;
++					block->locations.push_back({ index, modulo, info.frequency() });
++					block->interleaved = true;
++					break;
++				}
++
++				if (alloc_new_block)
++				{
++					interleaved_range_info& block = *result.alloc_interleaved_block();
++					block.base_offset = base_address;
++					block.attribute_stride = info.stride();
++					block.memory_location = info.offset() >> 31;
++					block.locations.reserve(16);
++					block.locations.push_back({ index, modulo, info.frequency() });
++
++					if (block.attribute_stride == 0)
++					{
++						block.single_vertex = true;
++						block.attribute_stride = rsx::get_vertex_type_size_on_host(info.type(), info.size());
++					}
++
++					result.interleaved_blocks.push_back(&block);
++				}
++			}
++		}
++
++		for (auto& info : result.interleaved_blocks)
++		{
++			// Calculate real data address to be used during upload
++			info->real_offset_address = rsx::get_address(rsx::get_vertex_offset_from_base(state.vertex_data_base_offset(), info->base_offset), info->memory_location);
++		}
++	}
+diff --git a/rpcs3/ios/tests/MinecraftReference/cache.inc b/rpcs3/ios/tests/MinecraftReference/cache.inc
+new file mode 100644
+index 0000000..850f248
+--- /dev/null
++++ b/rpcs3/ios/tests/MinecraftReference/cache.inc
+@@ -0,0 +1,56 @@
++class weak_vertex_cache : public default_vertex_cache<uploaded_range>
++		{
++			using storage_type = uploaded_range;
++
++		private:
++			rsx::unordered_map<uptr, storage_type> vertex_ranges;
++
++			FORCE_INLINE u64 hash(u32 local_addr, u32 data_length) const
++			{
++				return u64(local_addr) | (u64(data_length) << 32);
++			}
++
++		public:
++
++			const storage_type* find_vertex_range(u32 local_addr, u32 data_length) override
++			{
++				const auto key = hash(local_addr, data_length);
++				const auto found = vertex_ranges.find(key);
++
++				if (found == vertex_ranges.end())
++				{
++					return nullptr;
++				}
++
++				// Check if data in local_address changed vs what was stored in the vertex_cache
++				if (auto sudo_ptr = vm::get_super_ptr<char>(local_addr);
++					data_length >= 8 && found->second.fingerprint != *utils::bless<u64>(sudo_ptr))
++				{
++					vertex_ranges.erase(key);
++					return nullptr;
++				}
++
++				return std::addressof(found->second);
++			}
++
++			void store_range(u32 local_addr, u32 data_length, u32 offset_in_heap) override
++			{
++				storage_type v = {};
++				v.data_length = data_length;
++				v.local_address = local_addr;
++				v.offset_in_heap = offset_in_heap;
++
++				if (auto sudo_ptr = vm::get_super_ptr<char>(local_addr); data_length >= 8)
++				{
++					v.fingerprint = *utils::bless<u64>(sudo_ptr);
++				}
++
++				const auto key = hash(local_addr, data_length);
++				vertex_ranges[key] = v;
++			}
++
++			void purge() override
++			{
++				vertex_ranges.clear();
++			}
++		};
+diff --git a/rpcs3/ios/tests/MinecraftReference/cmp.inc b/rpcs3/ios/tests/MinecraftReference/cmp.inc
+new file mode 100644
+index 0000000..89458e6
+--- /dev/null
++++ b/rpcs3/ios/tests/MinecraftReference/cmp.inc
+@@ -0,0 +1,37 @@
++static FORCE_INLINE int16x8_t cmp16_pair_accum_arm64(
++	int16x8_t acc, const v128& lhs0, const v128& rhs0, const v128& lhs1, const v128& rhs1)
++{
++	const int16x8_t eq0 = vreinterpretq_s16_u16(vceqq_u16(static_cast<uint16x8_t>(lhs0), static_cast<uint16x8_t>(rhs0)));
++	const int16x8_t eq1 = vreinterpretq_s16_u16(vceqq_u16(static_cast<uint16x8_t>(lhs1), static_cast<uint16x8_t>(rhs1)));
++	return vmlaq_s16(acc, eq0, eq1);
++}
++extern bool cmp_rdata(const spu_rdata_t& _lhs, const spu_rdata_t& _rhs)
++{
++#if defined(ARCH_X64)
++#ifndef __AVX__
++	if (s_tsx_avx) [[likely]]
++#endif
++	{
++		return cmp_rdata_avx(reinterpret_cast<const __m256i*>(_lhs), reinterpret_cast<const __m256i*>(_rhs));
++	}
++#endif
++
++	const auto lhs = reinterpret_cast<const v128*>(_lhs);
++	const auto rhs = reinterpret_cast<const v128*>(_rhs);
++#if defined(ARCH_ARM64)
++	int16x8_t hits = vdupq_n_s16(0);
++	hits = cmp16_pair_accum_arm64(hits, lhs[0], rhs[0], lhs[1], rhs[1]);
++	hits = cmp16_pair_accum_arm64(hits, lhs[2], rhs[2], lhs[3], rhs[3]);
++	hits = cmp16_pair_accum_arm64(hits, lhs[4], rhs[4], lhs[5], rhs[5]);
++	hits = cmp16_pair_accum_arm64(hits, lhs[6], rhs[6], lhs[7], rhs[7]);
++
++	return vaddvq_s16(hits) == 32;
++#else
++	const v128 a = (lhs[0] ^ rhs[0]) | (lhs[1] ^ rhs[1]);
++	const v128 c = (lhs[4] ^ rhs[4]) | (lhs[5] ^ rhs[5]);
++	const v128 b = (lhs[2] ^ rhs[2]) | (lhs[3] ^ rhs[3]);
++	const v128 d = (lhs[6] ^ rhs[6]) | (lhs[7] ^ rhs[7]);
++	const v128 r = (a | b) | (c | d);
++	return gv_testz(r);
++#endif
++}
+diff --git a/rpcs3/ios/tests/MinecraftReference/descriptor-bind-BufferInfo.inc b/rpcs3/ios/tests/MinecraftReference/descriptor-bind-BufferInfo.inc
+new file mode 100644
+index 0000000..78e97ec
+--- /dev/null
++++ b/rpcs3/ios/tests/MinecraftReference/descriptor-bind-BufferInfo.inc
+@@ -0,0 +1,9 @@
++void program::bind_uniform(const VkDescriptorBufferInfoEx &buffer_descriptor, u32 set_id, u32 binding_point)
++		{
++			if (m_sets[set_id].m_descriptor_slots[binding_point] == buffer_descriptor)
++			{
++				return;
++			}
++
++			m_sets[set_id].notify_descriptor_slot_updated(binding_point, buffer_descriptor);
++		}
+\ No newline at end of file
+diff --git a/rpcs3/ios/tests/MinecraftReference/descriptor-bind-BufferView.inc b/rpcs3/ios/tests/MinecraftReference/descriptor-bind-BufferView.inc
+new file mode 100644
+index 0000000..85d25f1
+--- /dev/null
++++ b/rpcs3/ios/tests/MinecraftReference/descriptor-bind-BufferView.inc
+@@ -0,0 +1,9 @@
++void program::bind_uniform(const VkDescriptorBufferViewEx& buffer_view, u32 set_id, u32 binding_point)
++		{
++			if (m_sets[set_id].m_descriptor_slots[binding_point] == buffer_view)
++			{
++				return;
++			}
++
++			m_sets[set_id].notify_descriptor_slot_updated(binding_point, buffer_view);
++		}
+\ No newline at end of file
+diff --git a/rpcs3/ios/tests/MinecraftReference/descriptor-bind-ImageInfo.inc b/rpcs3/ios/tests/MinecraftReference/descriptor-bind-ImageInfo.inc
+new file mode 100644
+index 0000000..79d65a2
+--- /dev/null
++++ b/rpcs3/ios/tests/MinecraftReference/descriptor-bind-ImageInfo.inc
+@@ -0,0 +1,9 @@
++void program::bind_uniform(const VkDescriptorImageInfoEx& image_descriptor, u32 set_id, u32 binding_point)
++		{
++			if (m_sets[set_id].m_descriptor_slots[binding_point] == image_descriptor)
++			{
++				return;
++			}
++
++			m_sets[set_id].notify_descriptor_slot_updated(binding_point, image_descriptor);
++		}
+\ No newline at end of file
+diff --git a/rpcs3/ios/tests/MinecraftReference/descriptor-eq-BufferInfo.inc b/rpcs3/ios/tests/MinecraftReference/descriptor-eq-BufferInfo.inc
+new file mode 100644
+index 0000000..ce93fb2
+--- /dev/null
++++ b/rpcs3/ios/tests/MinecraftReference/descriptor-eq-BufferInfo.inc
+@@ -0,0 +1,9 @@
++bool operator == (const descriptor_slot_t& a, const VkDescriptorBufferInfoEx& b)
++		{
++			const auto ptr = std::get_if<VkDescriptorBufferInfoEx>(&a);
++			return !!ptr &&
++				ptr->resourceId == b.resourceId &&
++				ptr->buffer == b.buffer &&
++				ptr->offset == b.offset &&
++				ptr->range == b.range;
++		}
+\ No newline at end of file
+diff --git a/rpcs3/ios/tests/MinecraftReference/descriptor-eq-BufferView.inc b/rpcs3/ios/tests/MinecraftReference/descriptor-eq-BufferView.inc
+new file mode 100644
+index 0000000..8cb8ece
+--- /dev/null
++++ b/rpcs3/ios/tests/MinecraftReference/descriptor-eq-BufferView.inc
+@@ -0,0 +1,5 @@
++bool operator == (const descriptor_slot_t& a, const VkDescriptorBufferViewEx& b)
++		{
++			const auto ptr = std::get_if<VkDescriptorBufferViewEx>(&a);
++			return !!ptr && ptr->resourceId == b.resourceId;
++		}
+\ No newline at end of file
+diff --git a/rpcs3/ios/tests/MinecraftReference/descriptor-eq-ImageInfo.inc b/rpcs3/ios/tests/MinecraftReference/descriptor-eq-ImageInfo.inc
+new file mode 100644
+index 0000000..2041b09
+--- /dev/null
++++ b/rpcs3/ios/tests/MinecraftReference/descriptor-eq-ImageInfo.inc
+@@ -0,0 +1,9 @@
++bool operator == (const descriptor_slot_t& a, const VkDescriptorImageInfoEx& b)
++		{
++			const auto ptr = std::get_if<VkDescriptorImageInfoEx>(&a);
++			return !!ptr &&
++				ptr->resourceId == b.resourceId &&
++				ptr->imageView == b.imageView &&
++				ptr->sampler == b.sampler &&
++				ptr->imageLayout == b.imageLayout;
++		}
+\ No newline at end of file
+diff --git a/rpcs3/ios/tests/MinecraftReference/descriptor-types.inc b/rpcs3/ios/tests/MinecraftReference/descriptor-types.inc
+new file mode 100644
+index 0000000..5b6232e
+--- /dev/null
++++ b/rpcs3/ios/tests/MinecraftReference/descriptor-types.inc
+@@ -0,0 +1,25 @@
++struct VkDescriptorImageInfoEx : public VkDescriptorImageInfo
++	{
++		u64 resourceId = 0ull;
++
++		VkDescriptorImageInfoEx() = default;
++		VkDescriptorImageInfoEx(const vk::image_view& view, const vk::sampler& sampler, VkImageLayout layout);
++		VkDescriptorImageInfoEx(const vk::image_view& view, const vk::sampler& sampler);
++		VkDescriptorImageInfoEx(const vk::image_view& view, VkSampler sampler);
++		VkDescriptorImageInfoEx(const vk::image_view& view);
++	};
++struct VkDescriptorBufferInfoEx : public VkDescriptorBufferInfo
++	{
++		u64 resourceId = 0ull;
++
++		VkDescriptorBufferInfoEx() = default;
++		VkDescriptorBufferInfoEx(const vk::buffer& buffer, u64 offset, u64 range);
++	};
++struct VkDescriptorBufferViewEx
++	{
++		u64 resourceId = 0ull;
++		VkBufferView view = VK_NULL_HANDLE;
++
++		VkDescriptorBufferViewEx() = default;
++		VkDescriptorBufferViewEx(const vk::buffer_view& view);
++	};
+\ No newline at end of file
+diff --git a/rpcs3/ios/tests/MinecraftReference/dirty.inc b/rpcs3/ios/tests/MinecraftReference/dirty.inc
+new file mode 100644
+index 0000000..26fbeae
+--- /dev/null
++++ b/rpcs3/ios/tests/MinecraftReference/dirty.inc
+@@ -0,0 +1,6 @@
++inline void notify_descriptor_slot_updated(u32 slot, const T& data)
++			{
++				m_descriptors_dirty[slot] = true;
++				m_descriptor_slots[slot] = data;
++				m_any_descriptors_dirty = true;
++			}
+diff --git a/rpcs3/ios/tests/MinecraftReference/fence-signal_flushed.inc b/rpcs3/ios/tests/MinecraftReference/fence-signal_flushed.inc
+new file mode 100644
+index 0000000..f0a8dd8
+--- /dev/null
++++ b/rpcs3/ios/tests/MinecraftReference/fence-signal_flushed.inc
+@@ -0,0 +1,4 @@
++void fence::signal_flushed()
++	{
++		flushed.release(true);
++	}
+\ No newline at end of file
+diff --git a/rpcs3/ios/tests/MinecraftReference/fence-wait_flush.inc b/rpcs3/ios/tests/MinecraftReference/fence-wait_flush.inc
+new file mode 100644
+index 0000000..472ba7d
+--- /dev/null
++++ b/rpcs3/ios/tests/MinecraftReference/fence-wait_flush.inc
+@@ -0,0 +1,7 @@
++void fence::wait_flush()
++	{
++		while (!flushed)
++		{
++			utils::pause();
++		}
++	}
+\ No newline at end of file
+diff --git a/rpcs3/ios/tests/MinecraftReference/fill.inc b/rpcs3/ios/tests/MinecraftReference/fill.inc
+new file mode 100644
+index 0000000..f2c79ee
+--- /dev/null
++++ b/rpcs3/ios/tests/MinecraftReference/fill.inc
+@@ -0,0 +1,212 @@
++void draw_command_processor::fill_vertex_layout_state(
++		const vertex_input_layout& layout,
++		const vertex_program_metadata_t& vp_metadata,
++		u32 first_vertex,
++		u32 vertex_count,
++		s32* buffer,
++		u32 persistent_offset_base,
++		u32 volatile_offset_base) const
++	{
++		std::array<s32, 16> offset_in_block = {};
++		u32 volatile_offset = volatile_offset_base;
++		u32 persistent_offset = persistent_offset_base;
++
++		// NOTE: Order is important! Transient ayout is always push_buffers followed by register data
++		if (REGS(m_ctx)->current_draw_clause.is_immediate_draw)
++		{
++			for (const auto& info : layout.volatile_blocks)
++			{
++				offset_in_block[info.first] = volatile_offset;
++				volatile_offset += info.second;
++			}
++		}
++
++		for (u8 index : layout.referenced_registers)
++		{
++			offset_in_block[index] = volatile_offset;
++			volatile_offset += 16;
++		}
++
++		if (REGS(m_ctx)->current_draw_clause.command == rsx::draw_command::inlined_array)
++		{
++			const auto& block = layout.interleaved_blocks[0];
++			u32 inline_data_offset = volatile_offset;
++			for (const auto& attrib : block->locations)
++			{
++				auto& info = REGS(m_ctx)->vertex_arrays_info[attrib.index];
++
++				offset_in_block[attrib.index] = inline_data_offset;
++				inline_data_offset += rsx::get_vertex_type_size_on_host(info.type(), info.size());
++			}
++		}
++		else
++		{
++			for (const auto& block : layout.interleaved_blocks)
++			{
++				for (const auto& attrib : block->locations)
++				{
++					const u32 local_address = (REGS(m_ctx)->vertex_arrays_info[attrib.index].offset() & 0x7fffffff);
++					offset_in_block[attrib.index] = persistent_offset + (local_address - block->base_offset);
++				}
++
++				const auto range = block->calculate_required_range(first_vertex, vertex_count);
++				persistent_offset += block->attribute_stride * range.second;
++			}
++		}
++
++		// Fill the data
++		// Each descriptor field is 64 bits wide
++		// [0-8] attribute stride
++		// [8-24] attribute divisor
++		// [24-27] attribute type
++		// [27-30] attribute size
++		// [30-31] reserved
++		// [31-60] starting offset
++		// [60-21] swap bytes flag
++		// [61-22] volatile flag
++		// [62-63] modulo enable flag
++
++		const s32 default_frequency_mask = (1 << 8);
++		const s32 swap_storage_mask = (1 << 29);
++		const s32 volatile_storage_mask = (1 << 30);
++		const s32 modulo_op_frequency_mask = smin;
++
++		const u32 modulo_mask = REGS(m_ctx)->frequency_divider_operation_mask();
++		const auto max_index = (first_vertex + vertex_count) - 1;
++
++		for (u16 ref_mask = vp_metadata.referenced_inputs_mask, index = 0; ref_mask; ++index, ref_mask >>= 1)
++		{
++			if (!(ref_mask & 1u))
++			{
++				// Unused input, ignore this
++				continue;
++			}
++
++			if (layout.attribute_placement[index] == attribute_buffer_placement::none)
++			{
++				static constexpr u64 zero = 0;
++				std::memcpy(buffer + index * 2, &zero, sizeof(zero));
++				continue;
++			}
++
++			rsx::vertex_base_type type = {};
++			s32 size = 0;
++			s32 attrib0 = 0;
++			s32 attrib1 = 0;
++
++			if (layout.attribute_placement[index] == attribute_buffer_placement::transient)
++			{
++				if (REGS(m_ctx)->current_draw_clause.command == rsx::draw_command::inlined_array)
++				{
++					const auto& info = REGS(m_ctx)->vertex_arrays_info[index];
++
++					if (!info.size())
++					{
++						// Register
++						const auto& reginfo = REGS(m_ctx)->register_vertex_info[index];
++						type = reginfo.type;
++						size = reginfo.size;
++
++						attrib0 = rsx::get_vertex_type_size_on_host(type, size);
++					}
++					else
++					{
++						// Array
++						type = info.type();
++						size = info.size();
++
++						attrib0 = layout.interleaved_blocks[0]->attribute_stride | default_frequency_mask;
++					}
++				}
++				else
++				{
++					// Data is either from an immediate render or register input
++					// Immediate data overrides register input
++
++					if (REGS(m_ctx)->current_draw_clause.is_immediate_draw &&
++						m_vertex_push_buffers[index].vertex_count > 1)
++					{
++						// Push buffer
++						const auto& info = m_vertex_push_buffers[index];
++						type = info.type;
++						size = info.size;
++
++						attrib0 = rsx::get_vertex_type_size_on_host(type, size) | default_frequency_mask;
++					}
++					else
++					{
++						// Register
++						const auto& info = REGS(m_ctx)->register_vertex_info[index];
++						type = info.type;
++						size = info.size;
++
++						attrib0 = rsx::get_vertex_type_size_on_host(type, size);
++					}
++				}
++
++				attrib1 |= volatile_storage_mask;
++			}
++			else
++			{
++				auto& info = REGS(m_ctx)->vertex_arrays_info[index];
++				type = info.type();
++				size = info.size();
++
++				auto stride = info.stride();
++				attrib0 = stride;
++
++				if (stride > 0) // when stride is 0, input is not an array but a single element
++				{
++					const u32 frequency = info.frequency();
++					switch (frequency)
++					{
++					case 0:
++					case 1:
++					{
++						attrib0 |= default_frequency_mask;
++						break;
++					}
++					default:
++					{
++						if (modulo_mask & (1 << index))
++						{
++							if (max_index >= frequency)
++							{
++								// Only set modulo mask if a modulo op is actually necessary!
++								// This requires that the uploaded range for this attr = [0, freq-1]
++								// Ignoring modulo op if the rendered range does not wrap allows for range optimization
++								attrib0 |= (frequency << 8);
++								attrib1 |= modulo_op_frequency_mask;
++							}
++							else
++							{
++								attrib0 |= default_frequency_mask;
++							}
++						}
++						else
++						{
++							// Division
++							attrib0 |= (frequency << 8);
++						}
++						break;
++					}
++					}
++				}
++			} // end attribute placement check
++
++			// Special compressed 4 components into one 4-byte value. Decoded as one value.
++			if (type == rsx::vertex_base_type::cmp)
++			{
++				size = 1;
++			}
++
++			// All data is passed in in PS3-native order (BE) so swap flag should be set
++			attrib1 |= swap_storage_mask;
++			attrib0 |= (static_cast<s32>(type) << 24);
++			attrib0 |= (size << 27);
++			attrib1 |= offset_in_block[index];
++
++			buffer[index * 2 + 0] = attrib0;
++			buffer[index * 2 + 1] = attrib1;
++		}
++	}
+diff --git a/rpcs3/ios/tests/MinecraftReference/index-dispatch.inc b/rpcs3/ios/tests/MinecraftReference/index-dispatch.inc
+new file mode 100644
+index 0000000..0893d90
+--- /dev/null
++++ b/rpcs3/ios/tests/MinecraftReference/index-dispatch.inc
+@@ -0,0 +1,13 @@
++void dma_manager::emulate_as_indexed(void *dst, rsx::primitive_type primitive, u32 count)
++	{
++		if (!g_cfg.video.multithreaded_rsx)
++		{
++			write_index_array_for_non_indexed_non_native_primitive_to_buffer(
++				static_cast<char*>(dst), primitive, count);
++		}
++		else
++		{
++			m_thread->m_enqueued_count++;
++			m_thread->m_work_queue.push(dst, primitive, count);
++		}
++	}
+\ No newline at end of file
+diff --git a/rpcs3/ios/tests/MinecraftReference/index-generator.inc b/rpcs3/ios/tests/MinecraftReference/index-generator.inc
+new file mode 100644
+index 0000000..b9a9c9d
+--- /dev/null
++++ b/rpcs3/ios/tests/MinecraftReference/index-generator.inc
+@@ -0,0 +1,110 @@
++void write_non_native_indices_naive(char* dst, rsx::primitive_type draw_mode, unsigned count)
++{
++	auto typedDst = reinterpret_cast<u32*>(dst);
++	switch (draw_mode)
++	{
++	case rsx::primitive_type::line_loop:
++		iota32(typedDst, count);
++		typedDst[count] = 0;
++		return;
++	case rsx::primitive_type::triangle_fan:
++	case rsx::primitive_type::polygon:
++		for (unsigned i = 0; i < (count - 2); i++)
++		{
++			typedDst[3 * i] = 0;
++			typedDst[3 * i + 1] = i + 2 - 1;
++			typedDst[3 * i + 2] = i + 2;
++		}
++		return;
++	case rsx::primitive_type::quads:
++		for (unsigned i = 0; i < count / 4; i++)
++		{
++			// First triangle
++			typedDst[6 * i] = 4 * i;
++			typedDst[6 * i + 1] = 4 * i + 1;
++			typedDst[6 * i + 2] = 4 * i + 2;
++			// Second triangle
++			typedDst[6 * i + 3] = 4 * i + 2;
++			typedDst[6 * i + 4] = 4 * i + 3;
++			typedDst[6 * i + 5] = 4 * i;
++		}
++		return;
++	case rsx::primitive_type::quad_strip:
++	case rsx::primitive_type::points:
++	case rsx::primitive_type::lines:
++	case rsx::primitive_type::line_strip:
++	case rsx::primitive_type::triangles:
++	case rsx::primitive_type::triangle_strip:
++		fmt::throw_exception("Native primitive type doesn't require expansion");
++	}
++
++	fmt::throw_exception("Tried to load invalid primitive type");
++}
++
++constexpr u32 max_precomputed_vertices = 65536;
++
++const std::vector<u32>& quad_index_table()
++{
++	static const std::vector<u32> table = []
++	{
++		std::vector<u32> result(max_precomputed_vertices / 4 * 6);
++		for (u32 i = 0; i < max_precomputed_vertices / 4; i++)
++		{
++			result[6 * i + 0] = static_cast<u32>(4 * i + 0);
++			result[6 * i + 1] = static_cast<u32>(4 * i + 1);
++			result[6 * i + 2] = static_cast<u32>(4 * i + 2);
++			result[6 * i + 3] = static_cast<u32>(4 * i + 2);
++			result[6 * i + 4] = static_cast<u32>(4 * i + 3);
++			result[6 * i + 5] = static_cast<u32>(4 * i + 0);
++		}
++		return result;
++	}();
++
++	return table;
++}
++
++const std::vector<u32>& fan_index_table()
++{
++	static const std::vector<u32> table = []
++	{
++		std::vector<u32> result((max_precomputed_vertices - 2) * 3);
++		for (u32 i = 0; i < max_precomputed_vertices - 2; i++)
++		{
++			result[3 * i + 0] = 0;
++			result[3 * i + 1] = static_cast<u32>(i + 1);
++			result[3 * i + 2] = static_cast<u32>(i + 2);
++		}
++		return result;
++	}();
++
++	return table;
++}
++
++void write_non_native_indices_precomputed(char* dst, rsx::primitive_type draw_mode, unsigned count)
++{
++	auto* typed_dst = reinterpret_cast<u32*>(dst);
++
++	switch (draw_mode)
++	{
++	case rsx::primitive_type::triangle_fan:
++	case rsx::primitive_type::polygon:
++		if (count >= 2 && count <= max_precomputed_vertices) [[likely]]
++		{
++			std::memcpy(typed_dst, fan_index_table().data(), (count - 2) * 3 * sizeof(u32));
++			return;
++		}
++		break;
++	case rsx::primitive_type::quads:
++		if (count <= max_precomputed_vertices) [[likely]]
++		{
++			std::memcpy(typed_dst, quad_index_table().data(), (count / 4) * 6 * sizeof(u32));
++			return;
++		}
++		break;
++	default:
++		break;
++	}
++
++	write_non_native_indices_naive(dst, draw_mode, count);
++}
++
+diff --git a/rpcs3/ios/tests/MinecraftReference/index-size.inc b/rpcs3/ios/tests/MinecraftReference/index-size.inc
+new file mode 100644
+index 0000000..5e2cf0c
+--- /dev/null
++++ b/rpcs3/ios/tests/MinecraftReference/index-size.inc
+@@ -0,0 +1,9 @@
++u32 get_index_type_size(rsx::index_array_type type)
++{
++	switch (type)
++	{
++	case rsx::index_array_type::u16: return sizeof(u16);
++	case rsx::index_array_type::u32: return sizeof(u32);
++	}
++	fmt::throw_exception("Wrong index type");
++}
+\ No newline at end of file
+diff --git a/rpcs3/ios/tests/MinecraftReference/layout.inc b/rpcs3/ios/tests/MinecraftReference/layout.inc
+new file mode 100644
+index 0000000..280939e
+--- /dev/null
++++ b/rpcs3/ios/tests/MinecraftReference/layout.inc
+@@ -0,0 +1,97 @@
++class vertex_input_layout
++	{
++		int m_num_used_blocks = 0;
++		std::array<interleaved_range_info, 16> m_blocks_data{};
++
++	public:
++		rsx::simple_array<interleaved_range_info*> interleaved_blocks{};  // Interleaved blocks to be uploaded as-is
++		std::vector<std::pair<u8, u32>> volatile_blocks{};                // Volatile data blocks (immediate draw vertex data for example)
++		rsx::simple_array<u8> referenced_registers{};                     // Volatile register data
++		u16 attribute_mask = 0;                                           // ATTRn mask
++
++		std::array<attribute_buffer_placement, 16> attribute_placement = fill_array(attribute_buffer_placement::none);
++
++		vertex_input_layout() = default;
++
++		interleaved_range_info* alloc_interleaved_block()
++		{
++			auto result = &m_blocks_data[m_num_used_blocks++];
++			result->attribute_stride = 0;
++			result->base_offset = 0;
++			result->memory_location = 0;
++			result->real_offset_address = 0;
++			result->single_vertex = false;
++			result->locations.clear();
++			result->interleaved = true;
++			result->vertex_range.second = 0;
++			return result;
++		}
++
++		void clear()
++		{
++			m_num_used_blocks = 0;
++			attribute_mask = 0;
++			interleaved_blocks.clear();
++			volatile_blocks.clear();
++			referenced_registers.clear();
++		}
++
++		bool validate() const
++		{
++			// Criteria: At least one array stream has to be defined to feed vertex positions
++			// This stream cannot be a const register as the vertices cannot create a zero-area primitive
++			if (!interleaved_blocks.empty() && interleaved_blocks[0]->attribute_stride != 0)
++				return true;
++
++			if (!volatile_blocks.empty())
++				return true;
++
++			for (u16 ref_mask = attribute_mask, index = 0; ref_mask; ++index, ref_mask >>= 1)
++			{
++				if (!(ref_mask & 1))
++				{
++					// Disabled
++					continue;
++				}
++
++				switch (attribute_placement[index])
++				{
++				case attribute_buffer_placement::transient:
++				{
++					// Ignore register reference
++					if (std::find(referenced_registers.begin(), referenced_registers.end(), index) != referenced_registers.end())
++						continue;
++
++					// The source is inline array or immediate draw push buffer
++					return true;
++				}
++				case attribute_buffer_placement::persistent:
++				{
++					return true;
++				}
++				case attribute_buffer_placement::none:
++				{
++					continue;
++				}
++				default:
++				{
++					fmt::throw_exception("Unreachable");
++				}
++				}
++			}
++
++			return false;
++		}
++
++		u32 calculate_interleaved_memory_requirements(u32 first_vertex, u32 vertex_count) const
++		{
++			u32 mem = 0;
++			for (auto& block : interleaved_blocks)
++			{
++				const auto range = block->calculate_required_range(first_vertex, vertex_count);
++				mem += range.second * block->attribute_stride;
++			}
++
++			return mem;
++		}
++	};
+diff --git a/rpcs3/ios/tests/MinecraftReference/mov.inc b/rpcs3/ios/tests/MinecraftReference/mov.inc
+new file mode 100644
+index 0000000..a54204f
+--- /dev/null
++++ b/rpcs3/ios/tests/MinecraftReference/mov.inc
+@@ -0,0 +1,34 @@
++extern void mov_rdata(spu_rdata_t& _dst, const spu_rdata_t& _src)
++{
++#if defined(ARCH_X64)
++#ifndef __AVX__
++	if (s_tsx_avx) [[likely]]
++#endif
++	{
++		mov_rdata_avx(reinterpret_cast<__m256i*>(_dst), reinterpret_cast<const __m256i*>(_src));
++		return;
++	}
++
++	{
++		const __m128i v0 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(_src + 0));
++		const __m128i v1 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(_src + 16));
++		const __m128i v2 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(_src + 32));
++		const __m128i v3 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(_src + 48));
++		_mm_storeu_si128(reinterpret_cast<__m128i*>(_dst + 0), v0);
++		_mm_storeu_si128(reinterpret_cast<__m128i*>(_dst + 16), v1);
++		_mm_storeu_si128(reinterpret_cast<__m128i*>(_dst + 32), v2);
++		_mm_storeu_si128(reinterpret_cast<__m128i*>(_dst + 48), v3);
++	}
++
++	const __m128i v0 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(_src + 64));
++	const __m128i v1 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(_src + 80));
++	const __m128i v2 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(_src + 96));
++	const __m128i v3 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(_src + 112));
++	_mm_storeu_si128(reinterpret_cast<__m128i*>(_dst + 64), v0);
++	_mm_storeu_si128(reinterpret_cast<__m128i*>(_dst + 80), v1);
++	_mm_storeu_si128(reinterpret_cast<__m128i*>(_dst + 96), v2);
++	_mm_storeu_si128(reinterpret_cast<__m128i*>(_dst + 112), v3);
++#else
++	std::memcpy(_dst, _src, 128);
++#endif
++}
+diff --git a/rpcs3/ios/tests/MinecraftReference/range.inc b/rpcs3/ios/tests/MinecraftReference/range.inc
+new file mode 100644
+index 0000000..6ef0e66
+--- /dev/null
++++ b/rpcs3/ios/tests/MinecraftReference/range.inc
+@@ -0,0 +1,165 @@
++std::pair<u32, u32> interleaved_range_info::calculate_required_range(u32 first, u32 count)
++	{
++		if (vertex_range.second)
++		{
++			// Cached result
++			return vertex_range;
++		}
++
++		if (single_vertex)
++		{
++			return { 0, 1 };
++		}
++
++		const u32 max_index = (first + count) - 1;
++		u32 _max_index = 0;
++		u32 _min_index = first;
++
++		u32 frequencies[rsx::limits::vertex_count];
++		u32 freq_count = rsx::method_registers.current_draw_clause.command == rsx::draw_command::indexed ? 0 : u32{umax};
++		u32 max_result_by_division = 0; // Guaranteed maximum
++
++		for (const auto &attrib : locations)
++		{
++			if (attrib.frequency <= 1) [[likely]]
++			{
++				freq_count = umax;
++				_max_index = max_index;
++			}
++			else
++			{
++				if (attrib.modulo)
++				{
++					if (max_index >= attrib.frequency)
++					{
++						// Actually uses the modulo operator
++						_min_index = 0;
++						_max_index = std::max<u32>(_max_index, attrib.frequency - 1);
++
++						if (max_result_by_division < _max_index)
++						{
++							if (freq_count != umax)
++							{
++								if (std::find(frequencies, frequencies + freq_count, attrib.frequency) == frequencies + freq_count)
++								{
++									frequencies[freq_count++] = attrib.frequency;
++								}
++							}
++						}
++					}
++					else
++					{
++						// Same as having no modulo
++						_max_index = max_index;
++						freq_count = umax;
++					}
++				}
++				else
++				{
++					// Division operator
++					_min_index = std::min(_min_index, first / attrib.frequency);
++					_max_index = std::max<u32>(_max_index, utils::aligned_div(max_index, attrib.frequency));
++
++					if (freq_count > 0 && freq_count != umax)
++					{
++						const u32 max = utils::aligned_div(max_index, attrib.frequency);
++						max_result_by_division = std::max<u32>(max_result_by_division, max);
++
++						// Discard lower frequencies because it has been proven that there are indices higher than them
++						const usz discard_cnt = frequencies + freq_count - std::remove_if(frequencies, frequencies + freq_count, [&max_result_by_division](u32 freq)
++						{
++							return freq <= max_result_by_division;
++						});
++
++						freq_count -= static_cast<u32>(discard_cnt);
++					}
++				}
++			}
++		}
++
++		while (freq_count > 0 && freq_count != umax)
++		{
++			const rsx::index_array_type index_type = rsx::method_registers.current_draw_clause.is_immediate_draw ?
++				rsx::index_array_type::u32 :
++				rsx::method_registers.index_type();
++
++			const u32 index_size = index_type == rsx::index_array_type::u32 ? 4 : 2;
++
++			const auto render = rsx::get_current_renderer();
++
++			// If we can access a bit a more memory than required - do it
++			// The alternative would be re-iterating again over all of them
++			if (get_location(real_offset_address) == CELL_GCM_LOCATION_LOCAL)
++			{
++				if (utils::add_saturate<u32>(real_offset_address - rsx::constants::local_mem_base, (_max_index + 1) * attribute_stride) <= render->local_mem_size)
++				{
++					break;
++				}
++			}
++			else if (real_offset_address % 0x100000 + (_max_index + 1) * attribute_stride <= 0x100000)//(vm::check_addr(real_offset_address, vm::page_readable, (_max_index + 1) * attribute_stride))
++			{
++				break;
++			}
++
++			_max_index = 0;
++
++			const auto re_evaluate = [&] <typename T> (const std::byte* ptr, T)
++			{
++				const u64 restart = rsx::method_registers.restart_index_enabled() ? rsx::method_registers.restart_index() : u64{umax};
++
++				for (u32 _index = first; _index < first + count; _index++)
++				{
++					const auto value = read_from_ptr_unsafe<be_t<T>>(ptr, _index * sizeof(T));
++
++					if (value == restart)
++					{
++						continue;
++					}
++
++					for (u32 freq_it = 0; freq_it < freq_count; freq_it++)
++					{
++						const auto res = value % frequencies[freq_it];
++
++						if (res > _max_index)
++						{
++							_max_index = res;
++						}
++					}
++				}
++			};
++
++			const auto element_push_buffer = render->draw_processor()->element_push_buffer();
++			if (index_size == 4)
++			{
++				if (!element_push_buffer.empty()) [[unlikely]]
++				{
++					// Indices provided via immediate mode
++					re_evaluate(reinterpret_cast<const std::byte*>(element_push_buffer.data()), u32{});
++				}
++				else
++				{
++					const u32 address = (0 - index_size) & get_address(rsx::method_registers.index_array_address(), rsx::method_registers.index_array_location());
++					re_evaluate(vm::get_super_ptr<std::byte>(address), u32{});
++				}
++			}
++			else
++			{
++				if (!element_push_buffer.empty()) [[unlikely]]
++				{
++					// Indices provided via immediate mode
++					re_evaluate(reinterpret_cast<const std::byte*>(element_push_buffer.data()), u16{});
++				}
++				else
++				{
++					const u32 address = (0 - index_size) & get_address(rsx::method_registers.index_array_address(), rsx::method_registers.index_array_location());
++					re_evaluate(vm::get_super_ptr<std::byte>(address), u16{});
++				}
++			}
++
++			break;
++		}
++
++		ensure(_max_index >= _min_index);
++		vertex_range = { _min_index, (_max_index - _min_index) + 1 };
++		return vertex_range;
++	}
+diff --git a/rpcs3/ios/tests/MinecraftReference/transfer.inc b/rpcs3/ios/tests/MinecraftReference/transfer.inc
+new file mode 100644
+index 0000000..c7f41a5
+--- /dev/null
++++ b/rpcs3/ios/tests/MinecraftReference/transfer.inc
+@@ -0,0 +1,25 @@
++void fragment_program_texture_config::masked_transfer(void* dst, const void* src, u16 mask)
++	{
++		// Try to optimize for the very common case (first 4 slots used)
++		switch (mask)
++		{
++		case 0:
++			return;
++		case 1:
++			std::memcpy(dst, src, sizeof(TIU_slot)); return;
++		case 3:
++			std::memcpy(dst, src, sizeof(TIU_slot) * 2); return;
++		case 7:
++			std::memcpy(dst, src, sizeof(TIU_slot) * 3); return;
++		case 15:
++			std::memcpy(dst, src, sizeof(TIU_slot) * 4); return;
++		default:
++			break;
++		}
++
++		const auto start = std::countr_zero(mask);
++		const auto end = 16 - std::countl_zero(mask);
++		const auto mem_offset = (start * sizeof(TIU_slot));
++		const auto mem_size = (end - start) * sizeof(TIU_slot);
++		std::memcpy(static_cast<u8*>(dst) + mem_offset, reinterpret_cast<const u8*>(src) + mem_offset, mem_size);
++	}
+diff --git a/rpcs3/ios/tests/MinecraftReference/transport.inc b/rpcs3/ios/tests/MinecraftReference/transport.inc
+new file mode 100644
+index 0000000..48daae7
+--- /dev/null
++++ b/rpcs3/ios/tests/MinecraftReference/transport.inc
+@@ -0,0 +1,29 @@
++struct transport_packet
++		{
++			op type{};
++			std::vector<u8> opt_storage{};
++			void* src{};
++			void* dst{};
++			u32 length{};
++			u32 aux_param0{};
++			u32 aux_param1{};
++
++			transport_packet(void *_dst, void *_src, u32 len)
++				: type(op::raw_copy), src(_src), dst(_dst), length(len)
++			{}
++
++			transport_packet(void *_dst, std::vector<u8>& _src, u32 len)
++				: type(op::vector_copy), opt_storage(std::move(_src)), dst(_dst), length(len)
++			{}
++
++			transport_packet(void *_dst, rsx::primitive_type prim, u32 len)
++				: type(op::index_emulate), dst(_dst), length(len), aux_param0(static_cast<u8>(prim))
++			{}
++
++			transport_packet(u32 command, void* args)
++				: type(op::callback), src(args), aux_param0(command)
++			{}
++
++			transport_packet(const transport_packet&) = delete;
++			transport_packet& operator=(const transport_packet&) = delete;
++		};
+\ No newline at end of file
+diff --git a/rpcs3/ios/tests/MinecraftReference/type.inc b/rpcs3/ios/tests/MinecraftReference/type.inc
+new file mode 100644
+index 0000000..1583677
+--- /dev/null
++++ b/rpcs3/ios/tests/MinecraftReference/type.inc
+@@ -0,0 +1,52 @@
++u32 get_vertex_type_size_on_host(vertex_base_type type, u32 size)
++	{
++		switch (type)
++		{
++		case vertex_base_type::s1:
++		case vertex_base_type::s32k:
++			switch (size)
++			{
++			case 1:
++			case 2:
++			case 4:
++				return sizeof(u16) * size;
++			case 3:
++				return sizeof(u16) * 4;
++			default:
++				break;
++			}
++			fmt::throw_exception("Wrong vector size");
++		case vertex_base_type::f: return sizeof(f32) * size;
++		case vertex_base_type::sf:
++			switch (size)
++			{
++			case 1:
++			case 2:
++			case 4:
++				return sizeof(f16) * size;
++			case 3:
++				return sizeof(f16) * 4;
++			default:
++				break;
++			}
++			fmt::throw_exception("Wrong vector size");
++		case vertex_base_type::ub:
++			switch (size)
++			{
++			case 1:
++			case 2:
++			case 4:
++				return sizeof(u8) * size;
++			case 3:
++				return sizeof(u8) * 4;
++			default:
++				break;
++			}
++			fmt::throw_exception("Wrong vector size");
++		case vertex_base_type::cmp: return 4;
++		case vertex_base_type::ub256: ensure(size == 4); return sizeof(u8) * 4;
++		default:
++			break;
++		}
++		fmt::throw_exception("Bad vertex data type (%d)!", static_cast<u8>(type));
++	}
+diff --git a/rpcs3/ios/tests/MinecraftReference/validate.inc b/rpcs3/ios/tests/MinecraftReference/validate.inc
+new file mode 100644
+index 0000000..0f4ec85
+--- /dev/null
++++ b/rpcs3/ios/tests/MinecraftReference/validate.inc
+@@ -0,0 +1,46 @@
++bool validate() const
++		{
++			// Criteria: At least one array stream has to be defined to feed vertex positions
++			// This stream cannot be a const register as the vertices cannot create a zero-area primitive
++			if (!interleaved_blocks.empty() && interleaved_blocks[0]->attribute_stride != 0)
++				return true;
++
++			if (!volatile_blocks.empty())
++				return true;
++
++			for (u16 ref_mask = attribute_mask, index = 0; ref_mask; ++index, ref_mask >>= 1)
++			{
++				if (!(ref_mask & 1))
++				{
++					// Disabled
++					continue;
++				}
++
++				switch (attribute_placement[index])
++				{
++				case attribute_buffer_placement::transient:
++				{
++					// Ignore register reference
++					if (std::find(referenced_registers.begin(), referenced_registers.end(), index) != referenced_registers.end())
++						continue;
++
++					// The source is inline array or immediate draw push buffer
++					return true;
++				}
++				case attribute_buffer_placement::persistent:
++				{
++					return true;
++				}
++				case attribute_buffer_placement::none:
++				{
++					continue;
++				}
++				default:
++				{
++					fmt::throw_exception("Unreachable");
++				}
++				}
++			}
++
++			return false;
++		}
+diff --git a/rpcs3/ios/tests/MinecraftReservationTests.cpp b/rpcs3/ios/tests/MinecraftReservationTests.cpp
+new file mode 100644
+index 0000000..49c2c95
+--- /dev/null
++++ b/rpcs3/ios/tests/MinecraftReservationTests.cpp
+@@ -0,0 +1,156 @@
++#include "ios/IOSReservationData.h"
++#include <algorithm>
++#include <array>
++#include <cassert>
++#include <chrono>
++#include <cstdio>
++#include <random>
++#include <vector>
++#include <sys/mman.h>
++#include <unistd.h>
++using spu_rdata_t = std::byte[128];
++extern bool cmp_rdata(const spu_rdata_t&, const spu_rdata_t&);
++extern void mov_rdata(spu_rdata_t&, const spu_rdata_t&);
++static volatile u64 sink;
++template <class F>
++double measure(F f, unsigned n)
++{
++	u64 r = 0;
++	auto t = std::chrono::steady_clock::now();
++	for (unsigned i = 0; i < n; ++i)
++	{
++		asm volatile("" ::: "memory");
++		r += f(i);
++	}
++	sink = r;
++	return std::chrono::duration<double, std::nano>(std::chrono::steady_clock::now() - t).count() / n;
++}
++template <class A, class B>
++void bench(const char* name, A a, B b, unsigned n = 1000000)
++{
++	std::vector<double> t[2];
++	for (unsigned rep = 0; rep < 12; ++rep)
++		for (unsigned j = 0; j < 2; ++j)
++		{
++			unsigned v = (rep + j) % 2;
++			double x = v ? measure(b, n) : measure(a, n);
++			if (rep >= 2)
++				t[v].push_back(x);
++		}
++	for (auto& v : t)
++		std::sort(v.begin(), v.end());
++	double x = (t[0][4] + t[0][5]) / 2, y = (t[1][4] + t[1][5]) / 2;
++	std::printf("%s baseline=%.3f candidate=%.3f ns saving=%.2f%%\n", name, x, y, 100 * (1 - y / x));
++}
++int main(int argc, char**)
++{
++	std::mt19937 rng(310);
++	alignas(128) std::array<std::byte, 4096> a, b, c;
++	auto check = [&](unsigned off)
++	{
++		auto& x = *reinterpret_cast<spu_rdata_t*>(a.data() + off);
++		auto& y = *reinterpret_cast<spu_rdata_t*>(b.data() + off);
++		assert(cmp_rdata(x, y) == rpcs3::ios::compare_reservation_data(x, y));
++		assert(cmp_rdata(x, y) == (std::memcmp(x, y, 128) == 0));
++	};
++	for (unsigned off = 0; off <= 128; off += 16)
++	{
++		for (auto& v : a)
++			v = std::byte(rng());
++		b = a;
++		check(off);
++		for (unsigned byte = 0; byte < 128; ++byte)
++			for (unsigned bit = 0; bit < 8; ++bit)
++			{
++				b = a;
++				b[off + byte] ^= std::byte(1u << bit);
++				check(off);
++			}
++	}
++	for (unsigned n = 0; n < 50000; ++n)
++	{
++		for (auto& v : a)
++			v = std::byte(rng());
++		b.fill(std::byte(0xa5));
++		c = b;
++		unsigned source = (rng() % 240) * 16, dst = (rng() % 240) * 16;
++		mov_rdata(*reinterpret_cast<spu_rdata_t*>(b.data() + dst), *reinterpret_cast<spu_rdata_t*>(a.data() + source));
++		rpcs3::ios::copy_reservation_data(*reinterpret_cast<spu_rdata_t*>(c.data() + dst), *reinterpret_cast<spu_rdata_t*>(a.data() + source));
++		assert(b == c);
++		assert(std::memcmp(b.data() + dst, a.data() + source, 128) == 0);
++		b = a;
++		if (n % 2)
++			b[(rng() % 256) * 16] ^= std::byte(1);
++		check(0);
++	}
++	auto page = sysconf(_SC_PAGESIZE);
++	auto* mem = static_cast<std::byte*>(mmap(nullptr, page * 3, PROT_NONE, MAP_PRIVATE | MAP_ANON, -1, 0));
++	assert(mem != MAP_FAILED && mprotect(mem + page, page, PROT_READ | PROT_WRITE) == 0);
++	for (unsigned off : {0u, unsigned(page) - 128})
++	{
++		auto& x = *reinterpret_cast<spu_rdata_t*>(mem + page + off);
++		auto& y = *reinterpret_cast<spu_rdata_t*>(b.data());
++		mov_rdata(x, y);
++		assert(cmp_rdata(x, y));
++		rpcs3::ios::copy_reservation_data(x, y);
++		assert(rpcs3::ios::compare_reservation_data(x, y));
++	}
++	munmap(mem, page * 3);
++	std::puts("PASS: separate-TU originals, exact 128 bytes, every bit, randomized destinations, bounded guard pages");
++	if (argc == 1)
++		return 0;
++	for (auto& v : a)
++		v = std::byte(rng());
++	b = a;
++	bench("FIFO_compare_equal", [&](unsigned i)
++		{
++			auto off = (i % 240) * 16;
++			return cmp_rdata(*reinterpret_cast<spu_rdata_t*>(a.data() + off), *reinterpret_cast<spu_rdata_t*>(b.data() + off));
++		},
++		[&](unsigned i)
++		{
++			auto off = (i % 240) * 16;
++			return rpcs3::ios::compare_reservation_data(*reinterpret_cast<spu_rdata_t*>(a.data() + off), *reinterpret_cast<spu_rdata_t*>(b.data() + off));
++		});
++	b[64] ^= std::byte(1);
++	bench("FIFO_compare_mixed", [&](unsigned i)
++		{
++			auto off = (i % 240) * 16;
++			return cmp_rdata(*reinterpret_cast<spu_rdata_t*>(a.data() + off), *reinterpret_cast<spu_rdata_t*>(b.data() + off));
++		},
++		[&](unsigned i)
++		{
++			auto off = (i % 240) * 16;
++			return rpcs3::ios::compare_reservation_data(*reinterpret_cast<spu_rdata_t*>(a.data() + off), *reinterpret_cast<spu_rdata_t*>(b.data() + off));
++		});
++	bench("FIFO_copy", [&](unsigned i)
++		{
++			auto off = (i % 240) * 16;
++			mov_rdata(*reinterpret_cast<spu_rdata_t*>(b.data() + off), *reinterpret_cast<spu_rdata_t*>(a.data() + off));
++			return u8(b[off + i % 128]);
++		},
++		[&](unsigned i)
++		{
++			auto off = (i % 240) * 16;
++			rpcs3::ios::copy_reservation_data(*reinterpret_cast<spu_rdata_t*>(b.data() + off), *reinterpret_cast<spu_rdata_t*>(a.data() + off));
++			return u8(b[off + i % 128]);
++		});
++	bench("FIFO_copy_compare", [&](unsigned i)
++		{
++			auto off = (i % 240) * 16;
++			auto& x = *reinterpret_cast<spu_rdata_t*>(a.data() + off);
++			auto& y = *reinterpret_cast<spu_rdata_t*>(b.data() + off);
++			mov_rdata(y, x);
++			asm volatile("" ::: "memory");
++			return cmp_rdata(y, x);
++		},
++		[&](unsigned i)
++		{
++			auto off = (i % 240) * 16;
++			auto& x = *reinterpret_cast<spu_rdata_t*>(a.data() + off);
++			auto& y = *reinterpret_cast<spu_rdata_t*>(b.data() + off);
++			rpcs3::ios::copy_reservation_data(y, x);
++			asm volatile("" ::: "memory");
++			return rpcs3::ios::compare_reservation_data(y, x);
++		});
++}
+diff --git a/rpcs3/ios/tests/MinecraftVertexTests.cpp b/rpcs3/ios/tests/MinecraftVertexTests.cpp
+new file mode 100644
+index 0000000..90962b5
+--- /dev/null
++++ b/rpcs3/ios/tests/MinecraftVertexTests.cpp
+@@ -0,0 +1,614 @@
++#include "util/types.hpp"
++#include "util/endian.hpp"
++#include <algorithm>
++#include <array>
++#include <cassert>
++#include <cstdio>
++#include <cstring>
++#include <random>
++#include <span>
++#include <stdexcept>
++#include <vector>
++#define ensure(value, ...)                      \
++	do                                          \
++	{                                           \
++		if (!(value))                           \
++			throw std::runtime_error("ensure"); \
++	} while (false)
++#include "Emu/RSX/Common/simple_array.hpp"
++namespace fmt
++{
++	template <class... T>
++	[[noreturn]] void throw_exception(const char* s, T...)
++	{
++		throw std::runtime_error(s);
++	}
++} // namespace fmt
++namespace rsx
++{
++	namespace limits
++	{
++		constexpr unsigned vertex_count = 16;
++	}
++	namespace constants
++	{
++		constexpr u32 local_mem_base = 0xc0000000u;
++	}
++	constexpr unsigned CELL_GCM_LOCATION_LOCAL = 0;
++	enum class vertex_base_type : u8
++	{
++		s1 = 1,
++		f = 2,
++		sf = 3,
++		ub = 4,
++		s32k = 5,
++		cmp = 6,
++		ub256 = 7
++	};
++	enum class draw_command
++	{
++		array,
++		indexed,
++		inlined_array
++	};
++	enum class index_array_type
++	{
++		u16,
++		u32
++	};
++	enum attribute_buffer_placement : u8
++	{
++		none,
++		persistent,
++		transient
++	};
++	struct array_info
++	{
++		u32 sz = 0, st = 0, off = 0, freq = 1;
++		vertex_base_type ty = vertex_base_type::f;
++		u32 size() const
++		{
++			return sz;
++		}
++		u32 stride() const
++		{
++			return st;
++		}
++		u32 offset() const
++		{
++			return off;
++		}
++		u16 frequency() const
++		{
++			return static_cast<u16>(freq);
++		}
++		vertex_base_type type() const
++		{
++			return ty;
++		}
++	};
++	struct register_info
++	{
++		u32 size = 0;
++		vertex_base_type type = vertex_base_type::f;
++	};
++	struct clause
++	{
++		draw_command command = draw_command::array;
++		bool is_immediate_draw = false;
++	};
++	struct rsx_state
++	{
++		std::array<array_info, 16> vertex_arrays_info{};
++		std::array<register_info, 16> register_vertex_info{};
++		clause current_draw_clause;
++		u32 mask = 0, mod = 0, base = 0;
++		bool restart = false;
++		u32 restart_value = ~0u;
++		index_array_type it = index_array_type::u16;
++		u32 vertex_attrib_input_mask() const
++		{
++			return mask;
++		}
++		u32 frequency_divider_operation_mask() const
++		{
++			return mod;
++		}
++		u32 vertex_data_base_offset() const
++		{
++			return base;
++		}
++		index_array_type index_type() const
++		{
++			return it;
++		}
++		bool restart_index_enabled() const
++		{
++			return restart;
++		}
++		u32 restart_index() const
++		{
++			return restart_value;
++		}
++		u32 index_array_address() const
++		{
++			return 0;
++		}
++		u32 index_array_location() const
++		{
++			return 0;
++		}
++	};
++	rsx_state method_registers;
++	struct push_info
++	{
++		u32 vertex_count = 0;
++		std::vector<u32> data;
++		vertex_base_type type = vertex_base_type::f;
++		u32 size = 0;
++		std::vector<u32> pads;
++		void pad_to(u32 n, bool)
++		{
++			pads.push_back(n);
++			data.resize(n * 4);
++		}
++	};
++	u32 get_address(u32 x, u32 location)
++	{
++		return x + (location ? 0x10000 : 0);
++	}
++	u32 get_vertex_offset_from_base(u32 b, u32 o)
++	{
++		return b + o;
++	}
++	u32 get_location(u32 x)
++	{
++		return x >= constants::local_mem_base ? CELL_GCM_LOCATION_LOCAL : 1;
++	}
++	std::vector<u32> push_indices;
++	struct fake_processor
++	{
++		std::span<const u32> element_push_buffer()
++		{
++			return push_indices;
++		}
++	};
++	struct fake_renderer
++	{
++		u32 local_mem_size = 0x1000000;
++		fake_processor processor;
++		fake_processor* draw_processor()
++		{
++			return &processor;
++		}
++	} renderer;
++	fake_renderer* get_current_renderer()
++	{
++		return &renderer;
++	}
++#include "old-type.inc"
++} // namespace rsx
++using namespace rsx;
++namespace utils
++{
++	template <class T>
++	T aligned_div(T x, std::type_identity_t<T> d)
++	{
++		return x / d + T{!!(x % d)};
++	}
++	template <class T>
++	T add_saturate(T a, T b)
++	{
++		return a > std::numeric_limits<T>::max() - b ? std::numeric_limits<T>::max() : a + b;
++	}
++} // namespace utils
++namespace vm
++{
++	alignas(128) std::array<std::byte, 131072> memory{};
++	template <class T>
++	T* get_super_ptr(u32 x)
++	{
++		return reinterpret_cast<T*>(memory.data() + (x % memory.size()));
++	}
++} // namespace vm
++template <class T>
++T read_from_ptr_unsafe(const std::byte* p, std::size_t i)
++{
++	T v;
++	std::memcpy(&v, p + i, sizeof(v));
++	return v;
++}
++#define REGS(ctx) (ctx)
++struct vertex_program_metadata_t
++{
++	u16 referenced_inputs_mask = 0;
++};
++struct interleaved_attribute_t
++{
++	u8 index;
++	bool modulo;
++	u16 frequency;
++};
++#define RANGE_FIELDS                                                                         \
++	u32 attribute_stride = 0, base_offset = 0, memory_location = 0, real_offset_address = 0; \
++	bool single_vertex = false, interleaved = false;                                         \
++	std::pair<u32, u32> vertex_range{};                                                      \
++	rsx::simple_array<interleaved_attribute_t> locations;                                    \
++	std::pair<u32, u32> calculate_required_range(u32, u32);
++#define PROCESSOR_FIELDS                                                                     \
++	rsx_state* m_ctx;                                                                        \
++	std::array<push_info, 16> m_vertex_push_buffers;                                         \
++	void analyse_inputs_interleaved(vertex_input_layout&, const vertex_program_metadata_t&); \
++	void fill_vertex_layout_state(const vertex_input_layout&, const vertex_program_metadata_t&, u32, u32, s32*, u32, u32) const;
++struct slot
++{
++	float scale[3], bias[3], clamp_min[2], clamp_max[2];
++	u32 remap, control;
++};
++static_assert(sizeof(slot) == 48);
++#define TEXTURE_FIELDS     \
++	using TIU_slot = slot; \
++	static void masked_transfer(void*, const void*, u16);
++namespace old
++{
++#include "old-index-size.inc"
++	struct interleaved_range_info
++	{
++		RANGE_FIELDS
++	};
++#include "old-layout.inc"
++	struct draw_command_processor
++	{
++		PROCESSOR_FIELDS
++	};
++#include "old-analyse.inc"
++#include "old-range.inc"
++#include "old-fill.inc"
++	struct fragment_program_texture_config
++	{
++		TEXTURE_FIELDS
++	};
++#include "old-transfer.inc"
++} // namespace old
++namespace candidate
++{
++#include "new-index-size.inc"
++#include "new-type.inc"
++	struct interleaved_range_info
++	{
++		RANGE_FIELDS
++#include "new-fast-range.inc"
++	};
++#include "new-layout.inc"
++	struct draw_command_processor
++	{
++		PROCESSOR_FIELDS
++	};
++#include "new-analyse.inc"
++#include "new-range.inc"
++#include "new-fill.inc"
++	struct fragment_program_texture_config
++	{
++		TEXTURE_FIELDS
++	};
++#include "new-transfer.inc"
++} // namespace candidate
++static volatile u64 sink;
++template <class F>
++double measure(F f, unsigned n)
++{
++	u64 r = 0;
++	auto t = std::chrono::steady_clock::now();
++	for (unsigned i = 0; i < n; ++i)
++	{
++		asm volatile("" ::: "memory");
++		r += f(i);
++	}
++	sink = r;
++	return std::chrono::duration<double, std::nano>(std::chrono::steady_clock::now() - t).count() / n;
++}
++template <class A, class B>
++void bench(const char* name, A a, B b, unsigned count = 300000)
++{
++	std::vector<double> t[2];
++	for (unsigned round = 0; round < 12; ++round)
++		for (unsigned order = 0; order < 2; ++order)
++		{
++			auto v = (round + order) % 2;
++			double n = v ? measure(b, count) : measure(a, count);
++			if (round >= 2)
++				t[v].push_back(n);
++		}
++	for (auto& v : t)
++		std::sort(v.begin(), v.end());
++	double x = (t[0][4] + t[0][5]) / 2, y = (t[1][4] + t[1][5]) / 2;
++	std::printf("%s baseline=%.3f candidate=%.3f ns/call saving=%.2f%%\n", name, x, y, 100 * (1 - y / x));
++}
++template <class A, class B>
++void same(const A& a, const B& b)
++{
++	assert(a.attribute_mask == b.attribute_mask && a.attribute_placement == b.attribute_placement);
++	assert(a.volatile_blocks == b.volatile_blocks);
++	assert(std::equal(a.referenced_registers.begin(), a.referenced_registers.end(), b.referenced_registers.begin(), b.referenced_registers.end()));
++	assert(a.interleaved_blocks.size() == b.interleaved_blocks.size());
++	for (unsigned i = 0; i < a.interleaved_blocks.size(); ++i)
++	{
++		auto& x = *a.interleaved_blocks[i];
++		auto& y = *b.interleaved_blocks[i];
++		assert(x.attribute_stride == y.attribute_stride && x.base_offset == y.base_offset && x.memory_location == y.memory_location && x.real_offset_address == y.real_offset_address && x.single_vertex == y.single_vertex && x.interleaved == y.interleaved);
++		assert(x.locations.size() == y.locations.size());
++		for (unsigned j = 0; j < x.locations.size(); ++j)
++		{
++			auto u = x.locations[j], v = y.locations[j];
++			assert(u.index == v.index && u.modulo == v.modulo && u.frequency == v.frequency);
++		}
++	}
++}
++int main(int argc, char**)
++{
++	std::mt19937 rng(310);
++	bool benchmark = argc > 1;
++	old::draw_command_processor op;
++	candidate::draw_command_processor np;
++	rsx_state state;
++	op.m_ctx = np.m_ctx = &state;
++	old::vertex_input_layout ol;
++	candidate::vertex_input_layout nl;
++	std::array<s32, 32> ob, nb;
++	for (unsigned n = 0; n < 100000; ++n)
++	{
++		state.mask = rng() & 65535;
++		state.mod = rng() & 65535;
++		state.base = rng() % 0x10000;
++		state.current_draw_clause.command = draw_command(n % 3);
++		state.current_draw_clause.is_immediate_draw = n % 4 == 0;
++		vertex_program_metadata_t meta{u16(rng())};
++		for (unsigned i = 0; i < 16; ++i)
++		{
++			auto& v = state.vertex_arrays_info[i];
++			v.sz = rng() % 5;
++			v.ty = vertex_base_type(1 + rng() % 7);
++			if (v.ty == vertex_base_type::ub256)
++				v.sz = 4;
++			v.st = (rng() % 5) * 16;
++			v.off = ((rng() % 16) * 16) | ((rng() % 2) << 31);
++			v.freq = rng() % 9;
++			state.register_vertex_info[i] = {rng() % 5, vertex_base_type::f};
++			op.m_vertex_push_buffers[i].vertex_count = np.m_vertex_push_buffers[i].vertex_count = rng() % 4;
++			op.m_vertex_push_buffers[i].size = np.m_vertex_push_buffers[i].size = 4;
++			op.m_vertex_push_buffers[i].data.resize(rng() % 16);
++			np.m_vertex_push_buffers[i].data = op.m_vertex_push_buffers[i].data;
++			op.m_vertex_push_buffers[i].pads.clear();
++			np.m_vertex_push_buffers[i].pads.clear();
++		}
++		op.analyse_inputs_interleaved(ol, meta);
++		np.analyse_inputs_interleaved(nl, meta);
++		same(ol, nl);
++		assert(ol.validate() == nl.validate());
++		for (unsigned i = 0; i < 16; ++i)
++			assert(op.m_vertex_push_buffers[i].data == np.m_vertex_push_buffers[i].data && op.m_vertex_push_buffers[i].pads == np.m_vertex_push_buffers[i].pads);
++		rsx::method_registers = state;
++		ob.fill(0x55555555);
++		nb = ob;
++		// Compare descriptor emission using identical cached ranges. The new
++		// division semantics are checked against a shader oracle by WRC4 tests.
++		for (unsigned i = 0; i < nl.interleaved_blocks.size(); ++i)
++			ol.interleaved_blocks[i]->vertex_range = nl.interleaved_blocks[i]->calculate_required_range(0, 64);
++		op.fill_vertex_layout_state(ol, meta, 0, 64, ob.data(), 256, 8192);
++		np.fill_vertex_layout_state(nl, meta, 0, 64, nb.data(), 256, 8192);
++		assert(ob == nb);
++		same(ol, nl);
++	}
++	for (unsigned type = 0; type < 256; ++type)
++		for (u32 size : {0u, 1u, 2u, 3u, 4u, 5u, 255u, 0x40000000u, ~0u})
++		{
++			std::string errors[2];
++			u32 values[2]{};
++			for (unsigned v = 0; v < 2; ++v)
++				try
++				{
++					values[v] = v ? candidate::get_vertex_type_size_on_host(vertex_base_type(type), size) : rsx::get_vertex_type_size_on_host(vertex_base_type(type), size);
++				}
++				catch (const std::exception& e)
++				{
++					errors[v] = e.what();
++				}
++			assert(errors[0] == errors[1] && values[0] == values[1]);
++		}
++	for (unsigned type = 0; type < 256; ++type)
++	{
++		std::string errors[2]; u32 values[2]{};
++		for (unsigned v = 0; v < 2; ++v)
++			try { values[v] = v ? candidate::get_index_type_size(rsx::index_array_type(type)) : old::get_index_type_size(rsx::index_array_type(type)); }
++			catch (const std::exception& e) { errors[v] = e.what(); }
++		assert(errors[0] == errors[1] && values[0] == values[1]);
++	}
++	alignas(16) std::array<u8, 16 * 48 + 32> src, dst1, dst2;
++	for (auto& v : src)
++		v = rng();
++	for (unsigned mask = 0; mask < 65536; ++mask)
++		for (unsigned off : {0u, 1u, 15u})
++		{
++			dst1.fill(0xa5);
++			dst2 = dst1;
++			old::fragment_program_texture_config::masked_transfer(dst1.data() + off, src.data() + off, u16(mask));
++			candidate::fragment_program_texture_config::masked_transfer(dst2.data() + off, src.data() + off, u16(mask));
++			assert(dst1 == dst2);
++		}
++	// Immutable differential controls for modulo/unit frequency, cache, boundaries and errors.
++	// Division ranges intentionally differ after the WRC4 correction; their shader
++	// semantics and mixed division/modulo cases run in WRC4VertexRangeTests.cpp.
++	for (unsigned n = 0; n < 100000; ++n)
++	{
++		old::interleaved_range_info o;
++		candidate::interleaved_range_info c;
++		o.single_vertex = c.single_vertex = n % 29 == 0;
++		o.attribute_stride = c.attribute_stride = 16;
++		o.real_offset_address = c.real_offset_address = n % 2 ? 0xffff0 : 0xc0000000;
++		method_registers.current_draw_clause.command = draw_command(n % 2);
++		method_registers.it = n % 3 ? index_array_type::u16 : index_array_type::u32;
++		method_registers.restart = n % 7 == 0;
++		method_registers.restart_value = 0;
++		u32 first = rng() % 256, count = rng() % 256;
++		for (unsigned j = 0, end = rng() % 16; j < end; ++j)
++		{
++			interleaved_attribute_t a{u8(j), bool(rng() % 2), u16(rng() % 16)};
++			a.modulo = a.modulo || a.frequency > 1;
++			o.locations.push_back(a);
++			c.locations.push_back(a);
++		}
++		std::string errors[2];
++		std::pair<u32, u32> values[2];
++		for (unsigned v = 0; v < 2; ++v)
++			try
++			{
++				values[v] = v ? c.get_required_range(first, count) : o.calculate_required_range(first, count);
++			}
++			catch (const std::exception& e)
++			{
++				errors[v] = e.what();
++			}
++		assert(errors[0] == errors[1]);
++		if (errors[0].empty())
++		{
++			assert(values[0] == values[1] && o.vertex_range == c.vertex_range);
++			assert(o.calculate_required_range(first + 1, count + 1) == c.get_required_range(first + 1, count + 1));
++		}
++	}
++	std::puts("PASS: full production analyse/fill/validate 100k layouts; type values/errors; all 65536 texture masks; full range/cache/modulo/error cases");
++	if (!benchmark)
++		return 0;
++	state = {};
++	state.mask = 0x8001;
++	vertex_program_metadata_t meta{0x8001};
++	state.current_draw_clause.command = draw_command::array;
++	for (unsigned i = 0; i < 16; ++i)
++	{
++		state.vertex_arrays_info[i] = {4, 16, i * 32, 1, vertex_base_type::f};
++	}
++	method_registers = state;
++	bench("analyse_sparse", [&](unsigned i)
++		{
++			state.base = i & 255;
++			op.analyse_inputs_interleaved(ol, meta);
++			return ol.interleaved_blocks.size();
++		},
++		[&](unsigned i)
++		{
++			state.base = i & 255;
++			np.analyse_inputs_interleaved(nl, meta);
++			return nl.interleaved_blocks.size();
++		});
++	op.analyse_inputs_interleaved(ol, meta);
++	np.analyse_inputs_interleaved(nl, meta);
++	bench("fill_sparse", [&](unsigned i)
++		{
++			op.fill_vertex_layout_state(ol, meta, 0, 64, ob.data(), i & 255, 8192);
++			return u32(ob[30]);
++		},
++		[&](unsigned i)
++		{
++			np.fill_vertex_layout_state(nl, meta, 0, 64, nb.data(), i & 255, 8192);
++			return u32(nb[30]);
++		});
++	state.mask = meta.referenced_inputs_mask = 0xffff;
++	bench("analyse_dense", [&](unsigned i)
++		{
++			state.base = i & 255;
++			op.analyse_inputs_interleaved(ol, meta);
++			return ol.interleaved_blocks.size();
++		},
++		[&](unsigned i)
++		{
++			state.base = i & 255;
++			np.analyse_inputs_interleaved(nl, meta);
++			return nl.interleaved_blocks.size();
++		});
++	op.analyse_inputs_interleaved(ol, meta);
++	np.analyse_inputs_interleaved(nl, meta);
++	bench("fill_dense", [&](unsigned i)
++		{
++			op.fill_vertex_layout_state(ol, meta, 0, 64, ob.data(), i & 255, 8192);
++			return u32(ob[30]);
++		},
++		[&](unsigned i)
++		{
++			np.fill_vertex_layout_state(nl, meta, 0, 64, nb.data(), i & 255, 8192);
++			return u32(nb[30]);
++		});
++	old::interleaved_range_info orng;
++	candidate::interleaved_range_info nrng;
++	for (unsigned i = 0; i < 4; ++i)
++	{
++		orng.locations.push_back({u8(i), false, 1});
++		nrng.locations.push_back({u8(i), false, 1});
++	}
++	bench("range_unit_frequency", [&](unsigned i)
++		{
++			orng.vertex_range.second = 0;
++			return orng.calculate_required_range(i & 255, 64).second;
++		},
++		[&](unsigned i)
++		{
++			nrng.vertex_range.second = 0;
++			return nrng.calculate_required_range(i & 255, 64).second;
++		});
++	orng.vertex_range = nrng.vertex_range = {17, 64};
++	bench("range_cached", [&](unsigned i)
++		{
++			return orng.calculate_required_range(i & 255, 64).second;
++		},
++		[&](unsigned i)
++		{
++			return nrng.get_required_range(i & 255, 64).second;
++		});
++	ol.interleaved_blocks.clear();
++	nl.interleaved_blocks.clear();
++	ol.volatile_blocks.clear();
++	nl.volatile_blocks.clear();
++	ol.referenced_registers.clear();
++	nl.referenced_registers.clear();
++	ol.attribute_placement.fill(attribute_buffer_placement::none);
++	nl.attribute_placement.fill(attribute_buffer_placement::none);
++	ol.attribute_placement[15] = nl.attribute_placement[15] = attribute_buffer_placement::persistent;
++	bench("native_validate_sparse", [&](unsigned i)
++		{
++			ol.attribute_mask = 0x8000 | (1u << (i % 8));
++			return ol.validate();
++		},
++		[&](unsigned i)
++		{
++			nl.attribute_mask = 0x8000 | (1u << (i % 8));
++			return nl.validate();
++		});
++	bench("index_type", [&](unsigned i) { return old::get_index_type_size(rsx::index_array_type(i & 1)); }, [&](unsigned i) { return candidate::get_index_type_size(rsx::index_array_type(i & 1)); });
++	bench("vertex_type", [&](unsigned i)
++		{
++			return rsx::get_vertex_type_size_on_host(vertex_base_type(1 + i % 7), i % 7 == 6 ? 4 : 1 + (i / 7) % 4);
++		},
++		[&](unsigned i)
++		{
++			return candidate::get_vertex_type_size_on_host(vertex_base_type(1 + i % 7), i % 7 == 6 ? 4 : 1 + (i / 7) % 4);
++		});
++	bench("transfer_single", [&](unsigned i)
++		{
++			old::fragment_program_texture_config::masked_transfer(dst1.data(), src.data(), u16(1u << (4 + i % 12)));
++			return dst1[i % 768];
++		},
++		[&](unsigned i)
++		{
++			candidate::fragment_program_texture_config::masked_transfer(dst2.data(), src.data(), u16(1u << (4 + i % 12)));
++			return dst2[i % 768];
++		});
++	bench("transfer_common", [&](unsigned i)
++		{
++			old::fragment_program_texture_config::masked_transfer(dst1.data(), src.data(), u16((1u << (1 + i % 4)) - 1));
++			return dst1[i % 768];
++		},
++		[&](unsigned i)
++		{
++			candidate::fragment_program_texture_config::masked_transfer(dst2.data(), src.data(), u16((1u << (1 + i % 4)) - 1));
++			return dst2[i % 768];
++		});
++	return 0;
++}
 diff --git a/rpcs3/ios/tests/NativeProgressCompletionTests.cpp b/rpcs3/ios/tests/NativeProgressCompletionTests.cpp
 new file mode 100644
 index 0000000..cc8d484
@@ -16429,6 +20767,909 @@ index 0000000..cc8d484
 +		{"Compiling SPU modules", 0, 0, 0, 0, 9, 7},
 +		{"", 0, 0, 0, 0, 9, 9}}, true, 2);
 +}
+diff --git a/rpcs3/ios/tests/RSXAlphaCoverageTests.cpp b/rpcs3/ios/tests/RSXAlphaCoverageTests.cpp
+new file mode 100644
+index 0000000..4f2c82f
+--- /dev/null
++++ b/rpcs3/ios/tests/RSXAlphaCoverageTests.cpp
+@@ -0,0 +1,143 @@
++#include <algorithm>
++#include <cmath>
++#include <cstdint>
++#include <cstdio>
++
++using u32 = std::uint32_t;
++#include "flags.inc"
++constexpr u32 NV4097_SET_ANTI_ALIASING_CONTROL = 0;
++namespace rsx
++{
++enum class surface_antialiasing { center_1_sample, multiple_samples };
++constexpr u32 pipeline_config_dirty = 1, fragment_program_state_dirty = 2;
++}
++struct backend_t { bool supports_hw_a2c, supports_hw_a2c_1spp; };
++struct decoded_t
++{
++    u32 bits;
++    bool msaa_alpha_to_coverage() const { return bits & 0x10; }
++    bool msaa_alpha_to_one() const { return bits & 0x100; }
++};
++struct registers_t
++{
++    u32 latch = 0;
++    decoded_t value{0};
++    rsx::surface_antialiasing samples = rsx::surface_antialiasing::center_1_sample;
++    bool msaa_alpha_to_coverage_enabled() const { return value.msaa_alpha_to_coverage(); }
++    bool msaa_alpha_to_one_enabled() const { return value.msaa_alpha_to_one(); }
++    auto surface_antialias() const { return samples; }
++    template<u32> decoded_t decode(u32 bits) const { return {bits}; }
++};
++struct context
++{
++    registers_t regs;
++    backend_t backend_config{};
++    u32 m_graphics_state = 0;
++    const backend_t& get_backend_config() const { return backend_config; }
++};
++#define REGS(ctx) (&(ctx)->regs)
++#define RSX(ctx) (ctx)
++#include "invalidation.inc"
++u32 select(context* m_ctx)
++{
++    const auto& backend_config = m_ctx->backend_config;
++    struct { u32 ctrl = 0x80; } current_fragment_program;
++#include "selection.inc"
++    return current_fragment_program.ctrl;
++}
++
++struct vec4
++{
++    float r, g, b, a;
++    explicit vec4(float v) : r(v), g(v), b(v), a(v) {}
++    vec4(float r, float g, float b, float a) : r(r), g(g), b(b), a(a) {}
++    vec4() = default;
++};
++struct discarded {};
++float threshold;
++bool coverage_test_passes(const vec4& value) { return value.a > threshold; }
++#define _mrt_color_t(expr) expr
++#define discard throw discarded{}
++#define _ENABLE_ALPHA_TO_COVERAGE_TEST
++#define _MRT_BUFFERS_COUNT 1
++#define MRT0_DO(...) __VA_ARGS__
++#define MRT1_DO(...)
++#define MRT2_DO(...)
++#define MRT3_DO(...)
++vec4 coverage_only(vec4 col0)
++{
++    vec4 ocol0{};
++#include "rop.inc"
++    return ocol0;
++}
++#define _ENABLE_ALPHA_TO_ONE
++vec4 coverage_and_one(vec4 col0)
++{
++    vec4 ocol0{};
++#include "rop.inc"
++    return ocol0;
++}
++#undef _ENABLE_ALPHA_TO_COVERAGE_TEST
++vec4 one_without_coverage(vec4 col0)
++{
++    vec4 ocol0{};
++#include "rop.inc"
++    return ocol0;
++}
++
++int failures = 0;
++void check(bool value, const char* message)
++{
++    if (!value) { ++failures; std::fprintf(stderr, "%s\n", message); }
++}
++int main()
++{
++    for (bool hw : {false, true}) for (bool single_hw : {false, true})
++    for (bool multisample : {false, true}) for (bool coverage : {false, true})
++    for (bool one : {false, true})
++    {
++        context ctx;
++        ctx.backend_config = {hw, single_hw};
++        ctx.regs.samples = multisample ? rsx::surface_antialiasing::multiple_samples : rsx::surface_antialiasing::center_1_sample;
++        ctx.regs.value.bits = (coverage ? 0x10 : 0) | (one ? 0x100 : 0);
++        const bool emulated = coverage && (!hw || (!multisample && !single_hw));
++        const u32 expected = 0x80 | (emulated ? RSX_SHADER_CONTROL_ALPHA_TO_COVERAGE : 0)
++            | (emulated && one ? RSX_SHADER_CONTROL_ALPHA_TO_ONE : 0);
++        check(select(&ctx) == expected, "program selection / existing control preservation");
++
++        for (u32 old : {0u, 0x10u, 0x100u, 0x110u})
++        {
++            ctx.regs.latch = old;
++            ctx.m_graphics_state = 0;
++            set_aa_control(&ctx, 0, ctx.regs.value.bits);
++            const bool changed = old != ctx.regs.value.bits;
++            const bool shader_changed = changed && !(hw && single_hw)
++                && (((old ^ ctx.regs.value.bits) & 0x10) || (coverage && ((old ^ ctx.regs.value.bits) & 0x100)));
++            check(ctx.m_graphics_state == ((changed ? 1u : 0u) | (shader_changed ? 2u : 0u)), "AA state shader invalidation");
++        }
++    }
++
++    for (float alpha : {0.f, 1.f / 255.f, .49f, .5f, .75f, 1.f})
++    for (float cutoff : {0.f, .001f, .1f, .5f, .9f})
++    {
++        threshold = cutoff;
++        const vec4 sample{108.f / 255.f, 117.f / 255.f, 65.f / 255.f, alpha};
++        for (bool one : {false, true})
++        {
++            bool survived = false;
++            try
++            {
++                const auto result = one ? coverage_and_one(sample) : coverage_only(sample);
++                survived = true;
++                check(result.a == (one ? 1.f : alpha), "surviving output alpha");
++                check(result.r == sample.r && result.g == sample.g && result.b == sample.b, "RGB preserved");
++                if (one) check(std::max(result.g / std::max(result.a, 1.f / 255.f) - 8.f, 0.f) == 0.f, "captured tree pixel no false bloom amplification");
++            }
++            catch (const discarded&) {}
++            check(survived == (alpha > cutoff), "coverage must use original alpha before alpha-to-one");
++        }
++        check(one_without_coverage(sample).a == 1.f, "epilogue alpha-to-one without coverage test");
++    }
++    if (failures) { std::fprintf(stderr, "%d failures\n", failures); return 1; }
++    std::puts("A2C program selection, state invalidation, original-alpha coverage, RGB preservation and HDR amplification checks pass.");
++}
+diff --git a/rpcs3/ios/tests/VKImagePoolTests.cpp b/rpcs3/ios/tests/VKImagePoolTests.cpp
+new file mode 100644
+index 0000000..fccfb36
+--- /dev/null
++++ b/rpcs3/ios/tests/VKImagePoolTests.cpp
+@@ -0,0 +1,224 @@
++#include <array>
++#include <atomic>
++#include <cstdint>
++#include <deque>
++#include <functional>
++#include <iostream>
++#include <memory>
++#include <mutex>
++#include <shared_mutex>
++#include <stdexcept>
++#include <thread>
++#include <unordered_map>
++#include <vector>
++
++using u8 = uint8_t;
++using u16 = uint16_t;
++using u32 = uint32_t;
++using u64 = uint64_t;
++using usz = size_t;
++using VkFormat = u32;
++using VkImageType = u32;
++using VkImageCreateFlags = u32;
++using VkImageUsageFlags = u32;
++using VkSharingMode = u32;
++using shared_mutex = std::shared_mutex;
++
++static std::atomic<unsigned> checks{0};
++template <typename T> static void ensure(const T& value)
++{
++    ++checks;
++    if (!value) throw std::runtime_error("Image-pool ownership/accounting assertion failed");
++}
++template <typename T> u32 size32(const T& values) { return static_cast<u32>(values.size()); }
++struct reader_lock
++{
++    shared_mutex& mutex;
++    bool exclusive = false;
++    explicit reader_lock(shared_mutex& m) : mutex(m) { mutex.lock_shared(); }
++    void upgrade() { mutex.unlock_shared(); mutex.lock(); exclusive = true; }
++    ~reader_lock() { if (exclusive) mutex.unlock(); else mutex.unlock_shared(); }
++};
++namespace rsx { enum class problem_severity { low, moderate, severe, fatal }; }
++struct { void warning(const char*) {} } rsx_log;
++namespace vk
++{
++struct memory_block { u64 bytes = 4096; u64 size() const { return bytes; } };
++struct viewable_image
++{
++    // Match the reported arm64 image usage offset, verified from product DWARF.
++    std::array<u8, 0xb8> padding{};
++    struct { u32 usage = 3, imageType = 0, flags = 0, sharingMode = 0; } info;
++    u32 current_layout{}, current_queue_family{}, identity{};
++    std::unique_ptr<memory_block> memory = std::make_unique<memory_block>();
++    u32 format() const { return 1; }
++    u16 width() const { return 2; }
++    u16 height() const { return 2; }
++    u16 depth() const { return 1; }
++    u16 mipmaps() const { return 1; }
++};
++static_assert(offsetof(viewable_image, info) == 0xb8);
++constexpr u32 VK_IMAGE_LAYOUT_UNDEFINED = 0;
++constexpr u32 VK_QUEUE_FAMILY_IGNORED = ~0u;
++struct resource_manager
++{
++    std::vector<std::unique_ptr<viewable_image>> pending;
++    std::function<void()> during_disposal;
++    void dispose(std::unique_ptr<viewable_image>& image)
++    {
++        pending.push_back(std::move(image));
++        if (during_disposal)
++        {
++            auto callback = std::move(during_disposal);
++            during_disposal = nullptr;
++            callback();
++        }
++    }
++} gc;
++resource_manager* get_resource_manager() { return &gc; }
++struct basecache
++{
++    bool handle_memory_pressure(rsx::problem_severity) { return false; }
++    void clear() {}
++    void on_frame_end() {}
++    u32 get_unreleased_textures_count() const { return 0; }
++};
++struct texture_cache : basecache
++{
++    using baseclass = basecache;
++    struct cached_image_reference_t
++    {
++        std::unique_ptr<viewable_image> data;
++        texture_cache* parent;
++        cached_image_reference_t(texture_cache*, std::unique_ptr<viewable_image>&);
++        ~cached_image_reference_t();
++    };
++    struct cached_image_t
++    {
++        u64 key{};
++        std::unique_ptr<viewable_image> data;
++        cached_image_t() = default;
++        cached_image_t(u64 k, std::unique_ptr<viewable_image>& image) : key(k), data(std::move(image)) {}
++    };
++    std::deque<cached_image_t> m_cached_images;
++    std::atomic<u64> m_cached_memory_size{0};
++    mutable shared_mutex m_cached_pool_lock;
++    bool m_cache_is_exiting = false;
++    std::mutex m_cache_mutex;
++    std::unordered_map<u32, std::pair<u32, unsigned*>> m_temporary_subresource_cache;
++    struct { u32 m_unreleased_texture_objects = 0; } m_storage;
++    u32 m_max_zombie_objects = 10, max_cached_image_pool_size = 256, released_views = 0;
++    void release_temporary_subresource(unsigned* view) { delete view; ++released_views; }
++    void trim_sections() {}
++    void purge_unreleased_sections() {}
++    void reset_frame_statistics() {}
++    void clear();
++    void on_frame_end();
++    bool handle_memory_pressure(rsx::problem_severity);
++    u32 get_unreleased_textures_count() const;
++    std::unique_ptr<viewable_image> find_cached_image(VkFormat, u16, u16, u16, u16, VkImageType, VkImageCreateFlags, VkImageUsageFlags, VkSharingMode);
++    void driver_return(u32 id)
++    {
++        auto image = std::make_unique<viewable_image>();
++        image->identity = id;
++        cached_image_reference_t completion(this, image);
++    }
++    std::unique_ptr<viewable_image> lookup(u32 usage = 1)
++    {
++        return find_cached_image(1, 2, 2, 1, 1, 0, 0, usage, 0);
++    }
++};
++}
++#include "VKImagePool.inc"
++
++int main()
++{
++    using rsx::problem_severity;
++    using vk::gc;
++    // Pause eviction immediately after its first unique_ptr has been moved.
++    // A completed GPU image returns on the driver thread before eviction resumes.
++    // That later return must survive, with its bytes accounted for exactly once.
++    for (auto severity : {problem_severity::moderate, problem_severity::severe, problem_severity::fatal})
++    {
++        vk::texture_cache cache;
++        cache.driver_return(1);
++        if (severity == problem_severity::moderate)
++            cache.m_cached_memory_size = 64 * 0x100000;
++        gc.during_disposal = [&]
++        {
++            std::thread driver([&] { cache.driver_return(2); });
++            driver.join();
++        };
++        ensure(cache.handle_memory_pressure(severity));
++        ensure(cache.get_unreleased_textures_count() == 1);
++        ensure(cache.m_cached_memory_size == 4096);
++        auto returned = cache.lookup();
++        ensure(returned && returned->identity == 2);
++        ensure(!cache.lookup());
++        ensure(cache.m_cached_memory_size == 0);
++        gc.pending.clear();
++
++        // Returns after the detached batch must survive cleanup with exact bytes.
++        cache.driver_return(3);
++        gc.during_disposal = [&]
++        {
++            std::thread driver([&] { cache.driver_return(4); });
++            driver.join();
++        };
++        if (severity == problem_severity::moderate)
++            cache.m_cached_memory_size = 64 * 0x100000;
++        ensure(cache.handle_memory_pressure(severity));
++        ensure(cache.m_cached_memory_size == 4096);
++        auto survivor = cache.lookup();
++        ensure(survivor && survivor->identity == 4);
++        ensure(cache.m_cached_memory_size == 0);
++        gc.pending.clear();
++    }
++    vk::texture_cache cache;
++    cache.driver_return(5);
++    ensure(!cache.handle_memory_pressure(problem_severity::low));
++    ensure(!cache.handle_memory_pressure(problem_severity::moderate));
++    ensure(!cache.lookup(4)); // Incompatible usage must leave the resource cached.
++    ensure(cache.get_unreleased_textures_count() == 1);
++    ensure(cache.lookup()->identity == 5);
++    ensure(!cache.lookup());
++    for (u32 i = 0; i < 258; ++i) cache.driver_return(i);
++    cache.on_frame_end();
++    ensure(cache.get_unreleased_textures_count() == 129);
++    ensure(cache.m_cached_memory_size == 129 * 4096);
++    cache.m_temporary_subresource_cache.emplace(1, std::make_pair(0, new unsigned(1)));
++    ensure(cache.handle_memory_pressure(problem_severity::severe));
++    ensure(cache.released_views == 1);
++    ensure(cache.m_cached_memory_size == 0);
++    gc.pending.clear();
++    cache.driver_return(6);
++    cache.clear();
++    std::thread late_driver([&] { cache.driver_return(7); });
++    late_driver.join();
++    cache.clear();
++    ensure(cache.get_unreleased_textures_count() == 0);
++    ensure(cache.m_cached_memory_size == 0);
++    // The real two-thread schedule: RSX alternates pressure, lookups and frame
++    // trimming while the driver returns completed resources to the same deque.
++    vk::texture_cache stress;
++    std::atomic<bool> begin{false};
++    std::thread driver([&]
++    {
++        while (!begin.load()) std::this_thread::yield();
++        for (u32 i = 0; i < 100000; ++i) stress.driver_return(i);
++    });
++    begin = true;
++    while (stress.get_unreleased_textures_count() < 100) std::this_thread::yield();
++    for (u32 i = 0; i < 10000; ++i)
++    {
++        (void)stress.handle_memory_pressure(problem_severity::severe);
++        (void)stress.lookup();
++        stress.on_frame_end();
++        (void)stress.get_unreleased_textures_count();
++    }
++    driver.join();
++    ensure(stress.m_cached_memory_size == u64(stress.get_unreleased_textures_count()) * 4096);
++    stress.clear();
++    gc.pending.clear();
++    std::cout << "Vulkan image pool: " << checks << " ownership/accounting checks passed\n";
++}
+diff --git a/rpcs3/ios/tests/WRC4VertexRangeTests.cpp b/rpcs3/ios/tests/WRC4VertexRangeTests.cpp
+new file mode 100644
+index 0000000..afc294b
+--- /dev/null
++++ b/rpcs3/ios/tests/WRC4VertexRangeTests.cpp
+@@ -0,0 +1,136 @@
++// Reuse the production extraction harness and its immutable pre-fix control.
++#define main minecraft_differential_main
++#include "MinecraftVertexTests.cpp"
++#undef main
++#include <sys/mman.h>
++#include <unistd.h>
++
++template <typename Range>
++void check_ranges(bool check_captured_range = true)
++{
++    method_registers = {};
++    renderer.local_mem_size = 0xf900000;
++
++    // Captured BLUS31509: 290 vertices, four per-instance attributes sharing
++    // a 68-byte record at 0xcf8fff80. Integer division fetches only record 0.
++    Range captured;
++    captured.attribute_stride = 68;
++    captured.real_offset_address = 0xcf8fff80;
++    for (u8 index : {1, 4, 5, 6})
++        captured.locations.push_back({index, false, 290});
++    auto range = captured.calculate_required_range(0, 290);
++    if (check_captured_range)
++    {
++        assert(range == std::make_pair(0u, 1u));
++        assert(captured.calculate_required_range(1, 592) == range); // Cached result.
++    }
++
++    // An actual guarded read at the captured boundary, not only arithmetic.
++    const auto page = static_cast<std::size_t>(sysconf(_SC_PAGESIZE));
++    auto* allocation = static_cast<std::byte*>(mmap(nullptr, page * 2,
++        PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0));
++    assert(allocation != MAP_FAILED);
++    assert(mprotect(allocation + page, page, PROT_NONE) == 0);
++    std::memset(allocation + page - 128, 0x5a, 128);
++    std::vector<std::byte> output(range.second * captured.attribute_stride);
++    std::memcpy(output.data(), allocation + page - 128, output.size());
++    for (auto value : output) assert(value == std::byte{0x5a});
++    assert(munmap(allocation, page * 2) == 0);
++
++    // Independently enumerate shader fetches instead of comparing to the buggy
++    // baseline. Covers mixed divisors, modulo, zero/unit frequency and nonzero
++    // first vertices. Array-mode modulo bounds may conservatively start at 0.
++    std::mt19937 random(0x31509);
++    for (u32 n = 0; n < 100000; ++n)
++    {
++        Range info;
++        info.attribute_stride = 16;
++        info.real_offset_address = 0xc0000000;
++        const u32 first = random() % 128;
++        const u32 count = 1 + random() % 256;
++        u32 maximum = 0, minimum = first;
++        for (u8 index = 0, end = 1 + random() % 8; index < end; ++index)
++        {
++            const u16 frequency = random() % 320;
++            const bool modulo = random() % 2;
++            info.locations.push_back({index, modulo, frequency});
++            if (frequency <= 1) maximum = std::max(maximum, first + count - 1);
++            else if (modulo)
++            {
++                if (first + count - 1 >= frequency)
++                {
++                    minimum = 0;
++                    maximum = std::max(maximum, u32(frequency - 1));
++                }
++                for (u32 vertex = first; vertex < first + count; ++vertex)
++                    maximum = std::max(maximum, vertex % frequency);
++            }
++            else
++            {
++                minimum = std::min(minimum, first / frequency);
++                for (u32 vertex = first; vertex < first + count; ++vertex)
++                    maximum = std::max(maximum, vertex / frequency);
++            }
++        }
++        assert(info.calculate_required_range(first, count) ==
++            std::make_pair(minimum, maximum - minimum + 1));
++    }
++
++    // Indexed modulo tightening near local/main boundaries, with division
++    // before/after modulo. A rounded-up divided index wrongly prunes frequency
++    // 2 and bypasses re-evaluation, yielding three records instead of two.
++    for (bool local : {false, true})
++    for (bool reverse : {false, true})
++    for (bool restart : {false, true})
++    for (bool wide : {false, true})
++    for (bool immediate : {false, true})
++    {
++        method_registers = {};
++        method_registers.current_draw_clause.command = draw_command::indexed;
++        method_registers.current_draw_clause.is_immediate_draw = immediate;
++        method_registers.it = wide ? index_array_type::u32 : index_array_type::u16;
++        method_registers.restart = restart;
++        method_registers.restart_value = wide || immediate ? ~0u : 65535;
++        push_indices.clear();
++        const bool use_u32 = wide || immediate;
++        for (unsigned index = 0; index < 6; ++index)
++        {
++            const u32 value = restart && index % 2 ? method_registers.restart_value : 0;
++            if (immediate) push_indices.push_back(value);
++            else if (use_u32)
++            {
++                const be_t<u32> encoded = value;
++                std::memcpy(vm::memory.data() + index * 4, &encoded, 4);
++            }
++            else
++            {
++                const be_t<u16> encoded = static_cast<u16>(value);
++                std::memcpy(vm::memory.data() + index * 2, &encoded, 2);
++            }
++        }
++        Range info;
++        info.attribute_stride = 68;
++        info.real_offset_address = local ? 0xcf8fff80 : 0xffff80;
++        const interleaved_attribute_t divided{1, false, 4}, modulo{2, true, 2};
++        info.locations.push_back(reverse ? modulo : divided);
++        info.locations.push_back(reverse ? divided : modulo);
++        assert(info.calculate_required_range(0, 6) == std::make_pair(0u, 2u));
++        // Division needs records 0 and 1, even when all modulo fetches are 0.
++    }
++    push_indices.clear();
++    method_registers = {};
++    Range single;
++    single.single_vertex = true;
++    assert(single.calculate_required_range(100, 290) == std::make_pair(0u, 1u));
++}
++
++int main(int argc, char** argv)
++{
++    if (argc > 1 && std::string(argv[1]) == "original-copy")
++        check_ranges<old::interleaved_range_info>(false);
++    else if (argc > 1 && std::string(argv[1]) == "original")
++        check_ranges<old::interleaved_range_info>();
++    else
++        check_ranges<candidate::interleaved_range_info>();
++    std::puts("PASS: WRC4 captured boundary/guarded copy; 100000 shader-semantic ranges; indexed/restart/immediate/mixed-frequency controls");
++}
+diff --git a/rpcs3/ios/tests/run-framebuffer-source-tests.py b/rpcs3/ios/tests/run-framebuffer-source-tests.py
+new file mode 100644
+index 0000000..8736de8
+--- /dev/null
++++ b/rpcs3/ios/tests/run-framebuffer-source-tests.py
+@@ -0,0 +1,41 @@
++#!/usr/bin/env python3
++"""Exercise the production framebuffer selector with surface metadata fixtures."""
++import argparse
++import os
++from pathlib import Path
++import subprocess
++import tempfile
++
++HERE = Path(__file__).resolve().parent
++ROOT = HERE.parents[2]
++parser = argparse.ArgumentParser()
++parser.add_argument('--sanitize', action='store_true')
++parser.add_argument('--negative-control', action='store_true')
++args = parser.parse_args()
++source = (ROOT / 'rpcs3/Emu/RSX/Common/texture_cache_helpers.h').read_text()
++start = source.index('\t\ttemplate <typename OverlapList>')
++end = source.index('\n\t\tstatic inline bool force_strict_fbo_sampling', start)
++selector = source[start:end]
++cache = (ROOT / 'rpcs3/Emu/RSX/Common/texture_cache.h').read_text()
++assert 'helpers::select_framebuffer_source(overlapping_fbos, helpers::is_gcm_depth_format(attr.gcm_format))' in cache
++if args.negative_control:
++    selector = '''template <typename OverlapList>
++const auto& select_framebuffer_source(const OverlapList& overlaps, bool)
++{ return overlaps.back(); }
++'''
++with tempfile.TemporaryDirectory(prefix='rpcs3-framebuffer-source-tests-') as directory:
++    temp = Path(directory)
++    (temp / 'FramebufferSourceUnderTest.inc').write_text(selector)
++    executable = temp / 'FramebufferSourceTests'
++    command = [os.environ.get('CXX', 'clang++'), '-std=c++20', '-O2', '-Wall', '-Wextra', '-Werror',
++               '-I', str(temp), str(HERE / 'FramebufferSourceTests.cpp'), '-o', str(executable)]
++    if args.sanitize:
++        command[1:1] = ['-fsanitize=address,undefined', '-fno-omit-frame-pointer']
++    subprocess.run(command, check=True)
++    result = subprocess.run([str(executable)], capture_output=args.negative_control)
++    if args.negative_control:
++        assert result.returncode != 0, 'Original last-candidate policy unexpectedly passed'
++        assert b'Assertion failed' in result.stderr or b'Assertion' in result.stderr
++        print('Negative control: original selection fails the mirror regression as expected')
++    else:
++        result.check_returncode()
+diff --git a/rpcs3/ios/tests/run-minecraft-descriptor-tests.py b/rpcs3/ios/tests/run-minecraft-descriptor-tests.py
+new file mode 100644
+index 0000000..e726a27
+--- /dev/null
++++ b/rpcs3/ios/tests/run-minecraft-descriptor-tests.py
+@@ -0,0 +1,24 @@
++#!/usr/bin/env python3
++from pathlib import Path
++import argparse, subprocess, tempfile, os
++HERE=Path(__file__).resolve().parent; CORE=HERE.parents[2]
++p=argparse.ArgumentParser(); p.add_argument('--candidate-root',type=Path,default=CORE); p.add_argument('--benchmark',action='store_true'); p.add_argument('--sanitize',action='store_true'); args=p.parse_args()
++def block(s,marker):
++ a=s.index(marker); b=s.index('{',a)+1; depth=1
++ while depth: depth+=(s[b]=='{')-(s[b]=='}'); b+=1
++ return s[a:b]
++with tempfile.TemporaryDirectory(prefix='minecraft-descriptors-') as d:
++ t=Path(d); h=(args.candidate_root/'rpcs3/Emu/RSX/VK/VKProgramPipeline.h').read_text(); cpp=(args.candidate_root/'rpcs3/Emu/RSX/VK/VKProgramPipeline.cpp').read_text(); ref=HERE/'MinecraftReference'
++ (t/'types.inc').write_bytes((ref/'descriptor-types.inc').read_bytes())
++ for typ in ['ImageInfo','BufferInfo','BufferView']:
++  name='VkDescriptor'+typ+'Ex'; old=(ref/('descriptor-bind-'+typ+'.inc')).read_text()
++  eq_marker='bool operator == (const descriptor_slot_t& a, const '+name+'& b)'
++  (t/('old-eq-'+typ+'.inc')).write_bytes((ref/('descriptor-eq-'+typ+'.inc')).read_bytes())
++  (t/('new-eq-'+typ+'.inc')).write_text('inline '+block(h if 'inline bool operator ==' in h else cpp,eq_marker))
++  (t/('old-bind-'+typ+'.inc')).write_text('__attribute__((noinline)) '+old)
++  marker='void bind_uniform(const '+name
++  new=block(h,marker) if 'inline bool operator ==' in h else old.replace('program::','')
++  (t/('new-bind-'+typ+'.inc')).write_text(new)
++ cmd=[os.environ.get('CXX','clang++'),'-std=c++20','-O2','-Wall','-Wextra','-Werror','-I',str(t),'-I',str(CORE/'rpcs3'),str(HERE/'MinecraftDescriptorTests.cpp'),'-o',str(t/'test')]
++ if args.sanitize: cmd[1:1]=['-fsanitize=address,undefined','-fno-omit-frame-pointer']
++ subprocess.run(cmd,check=True); subprocess.run([str(t/'test'),*(['benchmark'] if args.benchmark else [])],check=True)
+diff --git a/rpcs3/ios/tests/run-minecraft-dma-tests.py b/rpcs3/ios/tests/run-minecraft-dma-tests.py
+new file mode 100644
+index 0000000..e2ea30b
+--- /dev/null
++++ b/rpcs3/ios/tests/run-minecraft-dma-tests.py
+@@ -0,0 +1,13 @@
++#!/usr/bin/env python3
++from pathlib import Path
++import argparse,subprocess,tempfile,os
++HERE=Path(__file__).resolve().parent;CORE=HERE.parents[2]
++p=argparse.ArgumentParser();p.add_argument('--candidate-root',type=Path,default=CORE);p.add_argument('--benchmark',action='store_true');p.add_argument('--sanitize',action='store_true');args=p.parse_args()
++with tempfile.TemporaryDirectory(prefix='minecraft-dma-') as d:
++ t=Path(d);(t/'dma-original.h').write_text((HERE/'MinecraftReference/IOSDMACopy.h').read_text().replace('rpcs3::ios','baseline::ios'))
++ common=[os.environ.get('CXX','clang++'),'-std=c++20','-O2','-Wall','-Wextra','-Werror','-I',str(t),'-I',str(args.candidate_root/'rpcs3'),'-I',str(CORE),'-I',str(CORE/'rpcs3')]
++ if args.sanitize:common[1:1]=['-fsanitize=address,undefined','-fno-omit-frame-pointer']
++ subprocess.run([*common,str(HERE/'IOSFPSBatchTests.cpp'),str(CORE/'rpcs3/ios/IOSTextureHash.cpp'),'-o',str(t/'test')],check=True)
++ subprocess.run([str(t/'test')],check=True)
++ if args.benchmark:
++  subprocess.run([*common,str(HERE/'MinecraftDMABenchmark.cpp'),'-o',str(t/'bench')],check=True);subprocess.run([str(t/'bench')],check=True)
+diff --git a/rpcs3/ios/tests/run-minecraft-fence-tests.py b/rpcs3/ios/tests/run-minecraft-fence-tests.py
+new file mode 100644
+index 0000000..5d5a72e
+--- /dev/null
++++ b/rpcs3/ios/tests/run-minecraft-fence-tests.py
+@@ -0,0 +1,18 @@
++#!/usr/bin/env python3
++from pathlib import Path
++import argparse,subprocess,tempfile,os
++HERE=Path(__file__).resolve().parent;CORE=HERE.parents[2]
++p=argparse.ArgumentParser();p.add_argument('--candidate-root',type=Path,default=CORE);p.add_argument('--benchmark',action='store_true');p.add_argument('--sanitize',action='store_true');p.add_argument('--native-atomic',action='store_true');args=p.parse_args()
++def block(s,marker):
++ a=s.index(marker);b=s.index('{',a)+1;depth=1
++ while depth:depth+=(s[b]=='{')-(s[b]=='}');b+=1
++ return s[a:b]
++with tempfile.TemporaryDirectory(prefix='minecraft-fence-') as d:
++ t=Path(d);s=(args.candidate_root/'rpcs3/Emu/RSX/VK/vkutils/sync.cpp').read_text()
++ for name in ['wait_flush','signal_flushed']:
++  (t/('new-'+name+'.inc')).write_text(block(s,'void fence::'+name+'()'))
++  (t/('old-'+name+'.inc')).write_bytes((HERE/'MinecraftReference'/('fence-'+name+'.inc')).read_bytes())
++ cmd=[os.environ.get('CXX','clang++'),'-std=c++20','-O2','-Wall','-Wextra','-Werror','-pthread','-DRPCS3_IOS=1','-I',str(t),str(HERE/'MinecraftFenceTests.cpp'),'-o',str(t/'test')]
++ if args.native_atomic:cmd[1:1]=['-DMINECRAFT_NATIVE_ATOMIC=1','-I',str(CORE),'-I',str(CORE/'rpcs3'),str(CORE/'rpcs3/util/atomic.cpp'),str(HERE/'MinecraftAtomicSupport.cpp')]
++ if args.sanitize:cmd[1:1]=['-fsanitize=address,undefined','-fno-omit-frame-pointer']
++ subprocess.run(cmd,check=True);subprocess.run([str(t/'test'),*(['benchmark'] if args.benchmark else [])],check=True,timeout=90)
+diff --git a/rpcs3/ios/tests/run-minecraft-index-tests.py b/rpcs3/ios/tests/run-minecraft-index-tests.py
+new file mode 100644
+index 0000000..750c574
+--- /dev/null
++++ b/rpcs3/ios/tests/run-minecraft-index-tests.py
+@@ -0,0 +1,16 @@
++#!/usr/bin/env python3
++from pathlib import Path
++import argparse,subprocess,tempfile,os
++HERE=Path(__file__).resolve().parent;CORE=HERE.parents[2]
++p=argparse.ArgumentParser();p.add_argument('--candidate-root',type=Path,default=CORE);p.add_argument('--benchmark',action='store_true');p.add_argument('--sanitize',action='store_true');args=p.parse_args()
++def block(s,marker):
++ a=s.index(marker);b=s.index('{',a)+1;depth=1
++ while depth:depth+=(s[b]=='{')-(s[b]=='}');b+=1
++ return s[a:b]
++with tempfile.TemporaryDirectory(prefix='minecraft-index-') as d:
++ t=Path(d);s=(args.candidate_root/'rpcs3/Emu/RSX/RSXOffload.cpp').read_text();ref=HERE/'MinecraftReference'
++ (t/'new-dispatch.inc').write_text('__attribute__((noinline)) '+block(s,'void dma_manager::emulate_as_indexed('));(t/'old-dispatch.inc').write_text('__attribute__((noinline)) '+(ref/'index-dispatch.inc').read_text())
++ for name in ['transport','index-generator']:(t/(name+'.inc')).write_bytes((ref/(name+'.inc')).read_bytes())
++ cmd=[os.environ.get('CXX','clang++'),'-std=c++20','-O2','-Wall','-Wextra','-Werror','-pthread','-DRPCS3_IOS=1','-I',str(t),'-I',str(CORE),'-I',str(CORE/'rpcs3'),str(HERE/'MinecraftIndexTests.cpp'),'-o',str(t/'test')]
++ if args.sanitize:cmd[1:1]=['-fsanitize=address,undefined','-fno-omit-frame-pointer']
++ subprocess.run(cmd,check=True);subprocess.run([str(t/'test'),*(['benchmark'] if args.benchmark else [])],check=True)
+diff --git a/rpcs3/ios/tests/run-minecraft-optimization-tests.py b/rpcs3/ios/tests/run-minecraft-optimization-tests.py
+new file mode 100644
+index 0000000..d1138ee
+--- /dev/null
++++ b/rpcs3/ios/tests/run-minecraft-optimization-tests.py
+@@ -0,0 +1,34 @@
++#!/usr/bin/env python3
++"""Compare extracted production paths against the immutable pre-batch reference."""
++from pathlib import Path
++import argparse,subprocess,os,tempfile,json
++HERE=Path(__file__).resolve().parent;CORE=HERE.parents[2]
++p=argparse.ArgumentParser();p.add_argument('--candidate-root',type=Path,default=CORE);p.add_argument('--sanitize',action='store_true');p.add_argument('--benchmark',action='store_true');args=p.parse_args()
++def block(s,marker):
++ a=s.index(marker);b=s.index('{',a)+1;depth=1
++ while depth:
++  depth+=(s[b]=='{')-(s[b]=='}');b+=1
++ return s[a:b]
++def extract(root):
++ spu=(root/'rpcs3/Emu/Cell/SPUThread.cpp').read_text()
++ cache=(root/'rpcs3/Emu/RSX/rsx_cache.h').read_text()
++ vertex=(root/'rpcs3/Emu/RSX/Core/RSXVertexTypes.h').read_text()
++ return {
++ 'cmp':block(spu,'static FORCE_INLINE int16x8_t cmp16_pair_accum_arm64(')+'\n'+block(spu,'extern bool cmp_rdata('),
++ 'cache':block(cache,'class weak_vertex_cache')+';',
++ 'validate':block(vertex,'bool validate() const'),
++ 'dirty':block((root/'rpcs3/Emu/RSX/VK/VKProgramPipeline.h').read_text(),'inline void notify_descriptor_slot_updated('),
++ }
++# The baseline files are committed source snapshots, never regenerated by tests.
++new=extract(args.candidate_root)
++with tempfile.TemporaryDirectory(prefix='minecraft-perf-') as d:
++ t=Path(d)
++ for name,s in new.items():
++  (t/('new-'+name+'.inc')).write_text(s)
++  (t/('old-'+name+'.inc')).write_bytes((HERE/'MinecraftReference'/(name+'.inc')).read_bytes())
++ header=(args.candidate_root/'rpcs3/Emu/RSX/VK/VKProgramPipeline.h').read_text()
++ (t/'dirty-type.inc').write_text('using dirty_type = std::vector<'+('bool' if 'std::vector<bool> m_descriptors_dirty;' in header else 'u8')+'>;')
++ cmd=[os.environ.get('CXX','clang++'),'-std=c++20','-O2','-Wall','-Wextra','-Werror','-pthread','-I',str(t),'-I',str(CORE/'rpcs3'),'-I',str(CORE),'-I',str(CORE/'3rdparty/asmjit/asmjit/src'),'-I',str(CORE/'3rdparty/unordered_dense/include'),str(HERE/'MinecraftOptimizationTests.cpp'),'-o',str(t/'test')]
++ if args.sanitize:cmd[1:1]=['-fsanitize=address,undefined','-fno-omit-frame-pointer']
++ subprocess.run(cmd,check=True)
++ subprocess.run([str(t/'test'),*(['benchmark'] if args.benchmark else [])],check=True)
+diff --git a/rpcs3/ios/tests/run-minecraft-reservation-tests.py b/rpcs3/ios/tests/run-minecraft-reservation-tests.py
+new file mode 100644
+index 0000000..9427373
+--- /dev/null
++++ b/rpcs3/ios/tests/run-minecraft-reservation-tests.py
+@@ -0,0 +1,12 @@
++#!/usr/bin/env python3
++"""Verify inlined reservation operations against original separate-TU functions."""
++from pathlib import Path
++import argparse,os,subprocess,tempfile
++HERE=Path(__file__).resolve().parent;CORE=HERE.parents[2]
++p=argparse.ArgumentParser();p.add_argument('--candidate-root',type=Path,default=CORE);p.add_argument('--sanitize',action='store_true');p.add_argument('--benchmark',action='store_true');args=p.parse_args()
++with tempfile.TemporaryDirectory(prefix='minecraft-reservation-') as d:
++ t=Path(d);old='#include <arm_neon.h>\n#include "util/v128.hpp"\nusing spu_rdata_t = std::byte[128];\n'+(HERE/'MinecraftReference/cmp.inc').read_text()+'\n'+(HERE/'MinecraftReference/mov.inc').read_text()
++ (t/'old.cpp').write_text(old)
++ cmd=[os.environ.get('CXX','clang++'),'-std=c++20','-O2','-Wall','-Wextra','-Werror','-I',str(args.candidate_root/'rpcs3'),'-I',str(CORE/'rpcs3'),str(HERE/'MinecraftReservationTests.cpp'),str(t/'old.cpp'),'-o',str(t/'test')]
++ if args.sanitize:cmd[1:1]=['-fsanitize=address,undefined','-fno-omit-frame-pointer']
++ subprocess.run(cmd,check=True);subprocess.run([str(t/'test'),*(['benchmark'] if args.benchmark else [])],check=True)
+diff --git a/rpcs3/ios/tests/run-minecraft-vertex-tests.py b/rpcs3/ios/tests/run-minecraft-vertex-tests.py
+new file mode 100644
+index 0000000..24c072d
+--- /dev/null
++++ b/rpcs3/ios/tests/run-minecraft-vertex-tests.py
+@@ -0,0 +1,23 @@
++#!/usr/bin/env python3
++"""Execute full production vertex-layout/range and texture transfer functions."""
++from pathlib import Path
++import argparse,os,subprocess,tempfile
++HERE=Path(__file__).resolve().parent;CORE=HERE.parents[2]
++p=argparse.ArgumentParser();p.add_argument('--candidate-root',type=Path,default=CORE);p.add_argument('--sanitize',action='store_true');p.add_argument('--benchmark',action='store_true');p.add_argument('--test-source',type=Path,default=HERE/'MinecraftVertexTests.cpp');p.add_argument('--test-argument',action='append',default=[]);args=p.parse_args()
++def block(s,marker):
++ a=s.index(marker);b=s.index('{',a)+1;depth=1
++ while depth:depth+=(s[b]=='{')-(s[b]=='}');b+=1
++ return s[a:b]
++def extract(root):
++ draw=(root/'rpcs3/Emu/RSX/Core/RSXDrawCommands.cpp').read_text();header=(root/'rpcs3/Emu/RSX/Core/RSXVertexTypes.h').read_text();thread=(root/'rpcs3/Emu/RSX/RSXThread.cpp').read_text();prog=(root/'rpcs3/Emu/RSX/Program/program_util.cpp').read_text()
++ bufcpp=(root/'rpcs3/Emu/RSX/Common/BufferUtils.cpp').read_text();bufh=(root/'rpcs3/Emu/RSX/Common/BufferUtils.h').read_text()
++ return {'index-size':block(bufcpp if 'u32 get_index_type_size(' in bufcpp else bufh,'u32 get_index_type_size('), 'fast-range': block(header,'std::pair<u32, u32> get_required_range(') if 'get_required_range(' in header else 'std::pair<u32,u32> get_required_range(u32 first,u32 count){return calculate_required_range(first,count);}', 'layout':block(header,'class vertex_input_layout')+';','range':block(thread,'std::pair<u32, u32> interleaved_range_info::calculate_required_range('),'type':block(thread if 'u32 get_vertex_type_size_on_host(' in thread else (root/'rpcs3/Emu/RSX/RSXThread.h').read_text(),'u32 get_vertex_type_size_on_host('),'analyse':block(draw,'void draw_command_processor::analyse_inputs_interleaved('),'fill':block(draw,'void draw_command_processor::fill_vertex_layout_state('),'transfer':block(prog,'void fragment_program_texture_config::masked_transfer(')}
++with tempfile.TemporaryDirectory(prefix='minecraft-vertex-') as d:
++ t=Path(d)
++ for k,s in extract(args.candidate_root).items():
++  (t/('new-'+k+'.inc')).write_text(('inline ' if k == 'index-size' and 'u32 get_index_type_size(' not in (args.candidate_root/'rpcs3/Emu/RSX/Common/BufferUtils.cpp').read_text() else '__attribute__((noinline)) ' if k == 'index-size' else 'FORCE_INLINE ' if k == 'type' and 'u32 get_vertex_type_size_on_host(' not in (args.candidate_root/'rpcs3/Emu/RSX/RSXThread.cpp').read_text() else '__attribute__((noinline)) ' if k in ['analyse','fill','range','type'] else '')+s+'\n')
++  if k != 'fast-range':
++   old=(HERE/'MinecraftReference'/(k+'.inc')).read_text();(t/('old-'+k+'.inc')).write_text(('__attribute__((noinline)) ' if k in ['analyse','fill','range','type','index-size'] else '')+old)
++ cmd=[os.environ.get('CXX','clang++'),'-std=c++20','-O2','-Wall','-Wextra','-Werror','-I',str(t),'-I',str(CORE/'rpcs3'),str(args.test_source),'-o',str(t/'test')]
++ if args.sanitize:cmd[1:1]=['-fsanitize=address,undefined','-fno-omit-frame-pointer']
++ subprocess.run(cmd,check=True);subprocess.run([str(t/'test'),*(['benchmark'] if args.benchmark else []),*args.test_argument],check=True)
+diff --git a/rpcs3/ios/tests/run-rsx-alpha-coverage-tests.py b/rpcs3/ios/tests/run-rsx-alpha-coverage-tests.py
+new file mode 100644
+index 0000000..bc8adca
+--- /dev/null
++++ b/rpcs3/ios/tests/run-rsx-alpha-coverage-tests.py
+@@ -0,0 +1,64 @@
++#!/usr/bin/env python3
++"""Execute production A2C selection, invalidation and ROP ordering with C++ stubs."""
++import argparse
++import os
++from pathlib import Path
++import re
++import subprocess
++import tempfile
++
++HERE = Path(__file__).resolve().parent
++CORE = Path(os.environ.get("RPCS3_TEST_SOURCE_ROOT", HERE.parents[2]))
++RSX = CORE / "rpcs3/Emu/RSX"
++parser = argparse.ArgumentParser()
++parser.add_argument("--sanitize", action="store_true")
++parser.add_argument("--negative-control", action="store_true")
++args = parser.parse_args()
++
++
++def block(source, marker):
++    start = source.index(marker)
++    end = source.index("{", start) + 1
++    depth = 1
++    while depth:
++        depth += (source[end] == "{") - (source[end] == "}")
++        end += 1
++    return source[start:end]
++
++
++selection = block((RSX / "RSXThread.cpp").read_text(),
++                  "if (REGS(m_ctx)->msaa_alpha_to_coverage_enabled())")
++invalidation = block((RSX / "NV47/HW/nv4097.cpp").read_text(), "void set_aa_control(")
++enums = (RSX / "gcm_enums.h").read_text()
++flags = "\n".join("constexpr u32 " + re.search(
++    rf"{name}\s*=\s*0x[0-9a-fA-F]+", enums).group() + ";"
++    for name in ("RSX_SHADER_CONTROL_ALPHA_TO_COVERAGE", "RSX_SHADER_CONTROL_ALPHA_TO_ONE"))
++
++# Ensure both frontend consumers connect the program key to the shared epilogue.
++for frontend in ("GL/GLFragmentProgram.cpp", "VK/VKFragmentProgram.cpp"):
++    assert "m_shader_props.ROP_alpha_to_one = !!(m_prog.ctrl & RSX_SHADER_CONTROL_ALPHA_TO_ONE);" in (RSX / frontend).read_text()
++switch = block((RSX / "Program/GLSLCommon.cpp").read_text(), "if (props.ROP_alpha_to_one)")
++assert 'enabled_options.push_back("_ENABLE_ALPHA_TO_ONE")' in switch
++epilogue = (RSX / "Program/GLSLSnippets/RSXProg/RSXROPEpilogue.glsl").read_text()
++epilogue = epilogue[epilogue.index('R"(') + 3:epilogue.rindex(')"')]
++if args.negative_control:
++    epilogue = epilogue.replace("col0.a = _mrt_color_t(vec4(1.)).a;", "/* omitted alpha-to-one */")
++
++with tempfile.TemporaryDirectory(prefix="rsx-alpha-coverage-") as directory:
++    target = Path(directory)
++    (target / "selection.inc").write_text(selection)
++    (target / "invalidation.inc").write_text(invalidation)
++    (target / "flags.inc").write_text(flags)
++    (target / "rop.inc").write_text(epilogue)
++    executable = target / "test"
++    command = [os.environ.get("CXX", "clang++"), "-std=c++20", "-O2", "-I", str(target),
++               str(HERE / "RSXAlphaCoverageTests.cpp"), "-o", str(executable)]
++    if args.sanitize:
++        command[1:1] = ["-fsanitize=address,undefined", "-fno-omit-frame-pointer"]
++    subprocess.run(command, check=True)
++    result = subprocess.run([str(executable)])
++    if args.negative_control:
++        assert result.returncode == 1, "missing alpha-to-one must fail executed tests"
++        print("Negative control failed as expected.")
++    else:
++        result.check_returncode()
+diff --git a/rpcs3/ios/tests/run-vk-image-pool-tests.py b/rpcs3/ios/tests/run-vk-image-pool-tests.py
+new file mode 100644
+index 0000000..d59b084
+--- /dev/null
++++ b/rpcs3/ios/tests/run-vk-image-pool-tests.py
+@@ -0,0 +1,61 @@
++#!/usr/bin/env python3
++"""Exercise production image-pool ownership during an interleaved driver return.
++
++GPU disposal is stubbed; the cache methods and deque ownership are production code.
++"""
++import argparse
++import os
++from pathlib import Path
++import subprocess
++import tempfile
++
++HERE = Path(__file__).resolve().parent
++ROOT = HERE.parents[2]
++parser = argparse.ArgumentParser(description=__doc__)
++parser.add_argument('--source', type=Path, default=ROOT / 'rpcs3/Emu/RSX/VK/VKTextureCache.cpp')
++parser.add_argument('--sanitize', action='store_true')
++parser.add_argument('--negative-control', action='store_true')
++args = parser.parse_args()
++source = args.source.read_text()
++
++
++def block(marker):
++    start = source.index(marker)
++    pos = source.index('{', start)
++    depth = 1
++    end = pos + 1
++    while depth:
++        depth += (source[end] == '{') - (source[end] == '}')
++        end += 1
++    return source[start:end]
++
++
++markers = (
++    'u64 hash_image_properties(',
++    'texture_cache::cached_image_reference_t::cached_image_reference_t(',
++    'texture_cache::cached_image_reference_t::~cached_image_reference_t()',
++    'void texture_cache::clear()',
++    'std::unique_ptr<vk::viewable_image> texture_cache::find_cached_image(',
++    'bool texture_cache::handle_memory_pressure(',
++    'void texture_cache::on_frame_end()',
++    'u32 texture_cache::get_unreleased_textures_count() const',
++)
++with tempfile.TemporaryDirectory(prefix='rpcs3-vk-image-pool-') as directory:
++    temp = Path(directory)
++    (temp / 'VKImagePool.inc').write_text('namespace vk {\n' + '\n'.join(map(block, markers)) + '\n}')
++    binary = temp / 'tests'
++    command = [os.environ.get('CXX', 'clang++'), '-std=c++20', '-O2', '-pthread',
++               '-Wall', '-Wextra', '-Werror', '-I', str(temp),
++               str(HERE / 'VKImagePoolTests.cpp'), '-o', str(binary)]
++    if args.sanitize:
++        command[1:1] = ['-fsanitize=address,undefined', '-fno-omit-frame-pointer']
++    subprocess.run(command, check=True)
++    result = subprocess.run([str(binary)], capture_output=True, text=True, timeout=30)
++    if args.negative_control:
++        if result.returncode == 0 or 'Image-pool ownership/accounting assertion failed' not in result.stderr:
++            raise SystemExit('Expected original cleanup to lose the interleaved driver return:\n' + result.stdout + result.stderr)
++        print('Original cleanup negative control loses the interleaved driver return as expected')
++    else:
++        print(result.stdout, end='')
++        if result.returncode:
++            raise SystemExit(result.stderr)
+diff --git a/rpcs3/ios/tests/run-wrc4-vertex-range-tests.py b/rpcs3/ios/tests/run-wrc4-vertex-range-tests.py
+new file mode 100644
+index 0000000..9af25b9
+--- /dev/null
++++ b/rpcs3/ios/tests/run-wrc4-vertex-range-tests.py
+@@ -0,0 +1,10 @@
++#!/usr/bin/env python3
++"""Run shader-semantic range checks against extracted production functions."""
++from pathlib import Path
++import subprocess
++import sys
++
++here = Path(__file__).resolve().parent
++subprocess.run([sys.executable, str(here / 'run-minecraft-vertex-tests.py'),
++                '--test-source', str(here / 'WRC4VertexRangeTests.cpp'),
++                *sys.argv[1:]], check=True)
 diff --git a/rpcs3/util/logs.cpp b/rpcs3/util/logs.cpp
 index 930cdaa..b37b326 100644
 --- a/rpcs3/util/logs.cpp

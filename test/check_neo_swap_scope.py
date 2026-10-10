@@ -835,8 +835,11 @@ current=build435_manifest
 # (docs/rpcs3-build436-gow3-black-screen.md). Exactly one postimage changes, by
 # exactly the switch and its comment; the policies stay host-tested.
 BUILD436_FILES={'rpcs3/Emu/Cell/SPUDeferredCompilePolicy.h'}
-build436_manifest=json.loads((ROOT/'build-utils/rpcs3/canonical-source.json').read_text())
-build436_patch=(ROOT/'build-utils/rpcs3/embedded-core.patch').read_bytes()
+# Frozen at the commit that switched the deferral off; the XITRIX v0.11 import
+# of the same build is reviewed against this stage below.
+BUILD436_SWITCH_REVIEWED='cf89082c2157669a172cc4667c035e4a3aced6f8'
+build436_manifest=json.loads(original('build-utils/rpcs3/canonical-source.json',BUILD436_SWITCH_REVIEWED))
+build436_patch=original('build-utils/rpcs3/embedded-core.patch',BUILD436_SWITCH_REVIEWED)
 build436_sections=sections(build436_patch)
 assert hashlib.sha256(build436_patch).hexdigest()==build436_manifest['patch_sha256']
 assert set(build436_manifest)==set(current), 'Build436 changed the canonical manifest shape'
@@ -863,6 +866,122 @@ assert dict(switch_after-switch_before)=={
     b'inline constexpr bool deferred_compile_enabled = false;\n': 1,
 }, 'Build436 added other deferred-compile lines'
 current=build436_manifest
+# Build436 XITRIX v0.11 (10 October 2026): five RSX/Vulkan commits of
+# XITRIX/rpcs3 ios-port imported verbatim with their upstream fixtures, which
+# test/rpcs3_xitrix_v011_native_test.py executes against the materialized Core
+# (docs/rpcs3-xitrix-v011-build436.md). Seven reviewed sections change, the
+# new sections are exactly the imported RSX/Vulkan files and fixtures, and no
+# SPU, PPU, JIT, VM, memory or lifecycle file is touched.
+V011_COMMITS=[
+    '3dc496307b86f81a409f03816af07261a49748d3',
+    '7137b41aed01d94345e35719a98fdc4190d08e50',
+    '3ebf5c99fada6cd15da346ab216c96ba09a81f63',
+    '57ce3bf6a9f6a522fcb7b8f2ae140b59b19f0cd3',
+    '395636f5a64ec33fc3b9b44c8f01f1c5d69b9217',
+]
+V011_CHANGED={
+    'rpcs3/Emu/RSX/Common/BufferUtils.cpp',
+    'rpcs3/Emu/RSX/Common/texture_cache.h',
+    'rpcs3/Emu/RSX/RSXOffload.cpp',
+    'rpcs3/Emu/RSX/VK/VKProgramPipeline.cpp',
+    'rpcs3/Emu/RSX/VK/VKProgramPipeline.h',
+    'rpcs3/Emu/RSX/VK/vkutils/sync.cpp',
+    'rpcs3/Emu/RSX/VK/vkutils/sync.h',
+}
+V011_ADDED={
+    'rpcs3/Emu/RSX/Capture/rsx_replay.h',
+    'rpcs3/Emu/RSX/Common/BufferUtils.h',
+    'rpcs3/Emu/RSX/Common/texture_cache_helpers.h',
+    'rpcs3/Emu/RSX/Core/RSXDrawCommands.cpp',
+    'rpcs3/Emu/RSX/Core/RSXVertexTypes.h',
+    'rpcs3/Emu/RSX/GL/GLFragmentProgram.cpp',
+    'rpcs3/Emu/RSX/NV47/HW/nv4097.cpp',
+    'rpcs3/Emu/RSX/Program/GLSLCommon.cpp',
+    'rpcs3/Emu/RSX/Program/GLSLSnippets/RSXProg/RSXROPEpilogue.glsl',
+    'rpcs3/Emu/RSX/Program/GLSLTypes.h',
+    'rpcs3/Emu/RSX/RSXThread.cpp',
+    'rpcs3/Emu/RSX/RSXThread.h',
+    'rpcs3/Emu/RSX/VK/VKFragmentProgram.cpp',
+    'rpcs3/Emu/RSX/VK/VKTextureCache.cpp',
+    'rpcs3/Emu/RSX/VK/VKTextureCache.h',
+    'rpcs3/Emu/RSX/gcm_enums.h',
+    'rpcs3/ios/IOSDMACopy.h',
+    'rpcs3/ios/tests/FramebufferSourceTests.cpp',
+    'rpcs3/ios/tests/MinecraftAtomicSupport.cpp',
+    'rpcs3/ios/tests/MinecraftDMABenchmark.cpp',
+    'rpcs3/ios/tests/MinecraftDescriptorTests.cpp',
+    'rpcs3/ios/tests/MinecraftFenceTests.cpp',
+    'rpcs3/ios/tests/MinecraftIndexTests.cpp',
+    'rpcs3/ios/tests/MinecraftOptimizationTests.cpp',
+    'rpcs3/ios/tests/MinecraftReference/IOSDMACopy.h',
+    'rpcs3/ios/tests/MinecraftReference/README.md',
+    'rpcs3/ios/tests/MinecraftReference/SHA256.json',
+    'rpcs3/ios/tests/MinecraftReference/analyse.inc',
+    'rpcs3/ios/tests/MinecraftReference/cache.inc',
+    'rpcs3/ios/tests/MinecraftReference/cmp.inc',
+    'rpcs3/ios/tests/MinecraftReference/descriptor-bind-BufferInfo.inc',
+    'rpcs3/ios/tests/MinecraftReference/descriptor-bind-BufferView.inc',
+    'rpcs3/ios/tests/MinecraftReference/descriptor-bind-ImageInfo.inc',
+    'rpcs3/ios/tests/MinecraftReference/descriptor-eq-BufferInfo.inc',
+    'rpcs3/ios/tests/MinecraftReference/descriptor-eq-BufferView.inc',
+    'rpcs3/ios/tests/MinecraftReference/descriptor-eq-ImageInfo.inc',
+    'rpcs3/ios/tests/MinecraftReference/descriptor-types.inc',
+    'rpcs3/ios/tests/MinecraftReference/dirty.inc',
+    'rpcs3/ios/tests/MinecraftReference/fence-signal_flushed.inc',
+    'rpcs3/ios/tests/MinecraftReference/fence-wait_flush.inc',
+    'rpcs3/ios/tests/MinecraftReference/fill.inc',
+    'rpcs3/ios/tests/MinecraftReference/index-dispatch.inc',
+    'rpcs3/ios/tests/MinecraftReference/index-generator.inc',
+    'rpcs3/ios/tests/MinecraftReference/index-size.inc',
+    'rpcs3/ios/tests/MinecraftReference/layout.inc',
+    'rpcs3/ios/tests/MinecraftReference/mov.inc',
+    'rpcs3/ios/tests/MinecraftReference/range.inc',
+    'rpcs3/ios/tests/MinecraftReference/transfer.inc',
+    'rpcs3/ios/tests/MinecraftReference/transport.inc',
+    'rpcs3/ios/tests/MinecraftReference/type.inc',
+    'rpcs3/ios/tests/MinecraftReference/validate.inc',
+    'rpcs3/ios/tests/MinecraftReservationTests.cpp',
+    'rpcs3/ios/tests/MinecraftVertexTests.cpp',
+    'rpcs3/ios/tests/RSXAlphaCoverageTests.cpp',
+    'rpcs3/ios/tests/VKImagePoolTests.cpp',
+    'rpcs3/ios/tests/WRC4VertexRangeTests.cpp',
+    'rpcs3/ios/tests/run-framebuffer-source-tests.py',
+    'rpcs3/ios/tests/run-minecraft-descriptor-tests.py',
+    'rpcs3/ios/tests/run-minecraft-dma-tests.py',
+    'rpcs3/ios/tests/run-minecraft-fence-tests.py',
+    'rpcs3/ios/tests/run-minecraft-index-tests.py',
+    'rpcs3/ios/tests/run-minecraft-optimization-tests.py',
+    'rpcs3/ios/tests/run-minecraft-reservation-tests.py',
+    'rpcs3/ios/tests/run-minecraft-vertex-tests.py',
+    'rpcs3/ios/tests/run-rsx-alpha-coverage-tests.py',
+    'rpcs3/ios/tests/run-vk-image-pool-tests.py',
+    'rpcs3/ios/tests/run-wrc4-vertex-range-tests.py',
+}
+v011_manifest=json.loads((ROOT/'build-utils/rpcs3/canonical-source.json').read_text())
+v011_patch=(ROOT/'build-utils/rpcs3/embedded-core.patch').read_bytes()
+v011_sections=sections(v011_patch)
+build436_sections=sections(build436_patch)
+assert hashlib.sha256(v011_patch).hexdigest()==v011_manifest['patch_sha256']
+assert set(v011_manifest)==set(current)|{'xitrix_v011_backports'}, 'XITRIX v0.11 changed the canonical manifest shape'
+for key in set(current)-{'files_sha256','patch_sha256','policy'}:
+    assert v011_manifest[key]==current[key], 'XITRIX v0.11 changed unrelated Core policy: '+key
+assert v011_manifest['policy'].startswith(current['policy']+'; Build436 XITRIX v0.11: ')
+assert v011_manifest['policy'].endswith('no device validation of the XITRIX v0.11 import.')
+backports=v011_manifest['xitrix_v011_backports']
+assert backports['release']=='v0.11' and backports['source_branch']=='ios-port'
+assert backports['source_head']=='395636f5a64ec33fc3b9b44c8f01f1c5d69b9217'
+assert backports['commits']==V011_COMMITS
+assert backports['device_runtime_tested'] is False
+assert set(v011_manifest['files_sha256'])==set(current['files_sha256'])|V011_ADDED
+assert not V011_ADDED & set(current['files_sha256']) and V011_CHANGED <= set(current['files_sha256'])
+assert {p for p,h in current['files_sha256'].items() if v011_manifest['files_sha256'][p]!=h}==V011_CHANGED
+assert set(v011_sections)==set(build436_sections)|V011_ADDED
+assert {p for p in build436_sections if build436_sections[p]!=v011_sections[p]}==V011_CHANGED
+for path in V011_CHANGED|V011_ADDED:
+    assert path.startswith(('rpcs3/Emu/RSX/','rpcs3/ios/tests/')) or path=='rpcs3/ios/IOSDMACopy.h', path
+    assert b'GIT binary patch' not in v011_sections[path], path
+AUDITED_CORE_FILES |= V011_CHANGED | V011_ADDED
+current=v011_manifest
 assert candidate['manifest']['rpcs3_postimages_sha256'] == {
     path: current['files_sha256'][path] for path in sorted(AUDITED_CORE_FILES)
 }, 'Candidate/Core postimage identity drift'

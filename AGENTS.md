@@ -37,6 +37,7 @@ Ces règles expriment les exigences du mainteneur du 18 septembre 2026 et s'appl
 
 - Le mainteneur refuse le retour au Core 434 : il faut corriger la Build 435. Les journaux de l’iPhone montrent God of War III figé environ 5 s après le démarrage dans 3 sessions sur 3 avec le Core 435 (images présentées, PPU/SPU/RSX inactifs, mémoire plate), alors que le Core 434 le fait tourner. La Build 436 désactive la compilation SPU différée (delta B, `deferred_compile_enabled = false`) et conserve les deltas A et C. Ne pas la réactiver sans preuve sur l’iPhone. Voir `docs/rpcs3-build436-gow3-black-screen.md`.
 - NeoSwap est conservé (sa suppression avait été demandée à cause de l’écran noir, qui ne vient pas de lui). Pendant le jeu, la mémoire libre de tout l’iPhone (≈ 0,6 Go) limite les donneurs : ne pas présenter NeoSwap comme une source de RAM supplémentaire au-delà de la mémoire libre du système.
+- À la demande du mainteneur, le même Core 436 importe cinq commits RSX/Vulkan de XITRIX v0.11 (`ios-port` `395636f5`) tels quels, avec leurs fixtures exécutées par `test/rpcs3_xitrix_v011_native_test.py`. Le correctif de blocage au démarrage `a5c5ed56` ne s’applique pas à notre base ; les commits audio, JIT, horloge invitée, cubemaps et occlusion restent à examiner. Toute modification du patch RPCS3 met aussi à jour `PATCH_SHA256` de `test/neo_swap_core_pin_test.py` avant la construction du Core. Voir `docs/rpcs3-xitrix-v011-build436.md`.
 
 ## Précision du mainteneur — 9 octobre 2026, 13 h
 

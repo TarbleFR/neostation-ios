@@ -846,6 +846,7 @@ jobs:
             test/rpcs3_ios_ppu_compile_budget_test.cpp \
             test/rpcs3_ppu_no_size_split_policy_test.cpp \
             test/rpcs3_xitrix_v0101_native_test.py \
+            test/rpcs3_xitrix_v011_native_test.py \
             test/native/rpcs3_spu_analyzer_support.h \
             test/native/rpcs3_spu_branch_analyzer_test.cpp \
             test/rpcs3_spu_warmup_test.py \
