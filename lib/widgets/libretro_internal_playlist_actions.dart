@@ -1,24 +1,44 @@
-import 'dart:io';
-
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 import '../l10n/libretro_locale.dart';
+import '../models/system_model.dart';
+import '../screens/libretro/libretro_library_actions.dart';
+import '../screens/libretro/libretro_skin_manager_screen.dart';
+import '../services/libretro_core_catalog.dart';
 import '../services/libretro_internal_service.dart';
 
 /// Import button of the playlists run by the embedded libretro engine: the
-/// same floating button and tab action as the other embedded engines.
+/// same floating button and tab action as the other embedded engines. Its
+/// menu also opens the skins of the playlist's console.
 class LibretroInternalPlaylistActions extends StatefulWidget {
   const LibretroInternalPlaylistActions({
     super.key,
-    required this.systemFolder,
+    required this.system,
     required this.onLibraryChanged,
     this.onInteractionChanged,
+    this.libraryFolders,
     this.embedded = false,
   });
 
-  final String systemFolder;
-  final Future<void> Function() onLibraryChanged;
+  /// System of the playlist. A copy named after an alias folder during a
+  /// scan (folder "n3ds" of the 3DS) imports games and opens skins as its
+  /// bound system, like its launches.
+  final SystemModel system;
+
+  /// Canonical catalog key of [system] ([LibretroInternalService.systemKey]),
+  /// also the console folder its games are imported into.
+  String get systemFolder => LibretroInternalService.systemKey(system);
+
+  /// Called after games were imported, with the outcome (it names
+  /// NeoStation's `roms` folder when that folder received them because no
+  /// library folder was registered).
+  final Future<void> Function(LibretroImportResult result) onLibraryChanged;
+
+  /// The registered library folders (the configuration's ROM folders): the
+  /// games go to one of them, chosen by the user when there are several.
+  final List<String> Function()? libraryFolders;
   final ValueChanged<bool>? onInteractionChanged;
   final bool embedded;
 
@@ -37,6 +57,25 @@ class _LibretroInternalPlaylistActionsState
 
   void _interaction(bool active) => widget.onInteractionChanged?.call(active);
 
+  /// Embedded console of the playlist (skins belong to the console, not to
+  /// the folder); null when the folder is not bound to one.
+  String? get _console => LibretroCoreCatalog.bindingFor(widget.systemFolder)?.console;
+
+  Future<void> _openSkins() async {
+    final console = _console;
+    _interaction(true);
+    try {
+      if (console == null) return;
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => LibretroSkinManagerScreen(console: console),
+        ),
+      );
+    } finally {
+      if (mounted) _interaction(false);
+    }
+  }
+
   void _notice(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
@@ -44,15 +83,34 @@ class _LibretroInternalPlaylistActionsState
 
   Future<void> _selected(String action) async {
     if (_busy) return;
+    if (action == 'skins') {
+      await _openSkins();
+      return;
+    }
     setState(() => _busy = true);
     _interaction(true);
     try {
       if (action == 'games') {
-        final result = await LibretroInternalService.importGames(widget.systemFolder);
+        final destination = await chooseLibretroImportDestination(
+          context,
+          systemFolder: widget.systemFolder,
+          registeredRoots: widget.libraryFolders?.call() ?? const <String>[],
+          folderAliases: <String>[widget.system.folderName, ...widget.system.folders],
+        );
+        if (destination.unavailable) {
+          _notice(_t('importLibraryUnavailable'));
+          return;
+        }
+        if (destination.cancelled || !mounted) return;
+        final result = await LibretroInternalService.importGamesForSystem(
+          widget.system,
+          library: destination.library,
+        );
         if (result.imported > 0) {
-          await widget.onLibraryChanged();
+          await widget.onLibraryChanged(result);
           _notice(_f('gamesImported', {'count': result.imported}));
         }
+        if (result.alreadyPresent > 0) _notice(_f('importAlreadyPresent', {'count': result.alreadyPresent}));
         if (result.rejected > 0) _notice(_t('gamesRejected'));
       } else if (action == 'retroarch') {
         final copied = await LibretroInternalService.copyRetroArchData();
@@ -79,7 +137,9 @@ class _LibretroInternalPlaylistActionsState
 
   @override
   Widget build(BuildContext context) {
-    if (!Platform.isIOS) return const SizedBox.shrink();
+    // The embedded engine runs on iOS only (the platform Flutter reports, so
+    // a widget test can stand in for an iPhone).
+    if (defaultTargetPlatform != TargetPlatform.iOS) return const SizedBox.shrink();
     final scheme = Theme.of(context).colorScheme;
     final button = SizedBox(
       width: 36.r,
@@ -106,6 +166,8 @@ class _LibretroInternalPlaylistActionsState
         itemBuilder: (context) => [
           PopupMenuItem(value: 'games', child: Text(_t('importGames'))),
           PopupMenuItem(value: 'retroarch', child: Text(_t('importRetroArch'))),
+          if (_console != null)
+            PopupMenuItem(value: 'skins', child: Text(_t('skins'))),
         ],
       ),
     );

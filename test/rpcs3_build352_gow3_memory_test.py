@@ -49,9 +49,19 @@ def main() -> None:
             "the proactive path must not invoke fatal GPU drains")
     require("textures %llu MiB, surfaces %llu MiB" in manager,
             "pressure logs do not expose the two dominant Vulkan pools")
-    require("std::chrono::milliseconds(1500)" in manager and
-            "std::chrono::milliseconds(3000)" in manager,
+    # Build 435 replaces the fixed 1.5 s / 3 s GOW3 cooldown with the policy's
+    # adaptive delay: the same bases, doubled after a pass that freed nothing
+    # lasting (measured on the process headroom), capped at 24 s.
+    require("rpcs3::ios::next_moderate_reclaim_delay_ms(" in manager and
+            "rpcs3::ios::moderate_reclaim_was_effective(" in manager,
             "the GOW3 moderate reclaim cooldown does not bound allocation churn")
+    require("moderate_reclaim_relieved_delay_ms = 1500" in policy and
+            "moderate_reclaim_delay_ms = 3000" in policy and
+            "moderate_reclaim_delay_ceiling_ms = 24000" in policy,
+            "the Build 352 cooldown bases or the Build 435 ceiling are missing")
+    require("high_footprint_moderate_enter(process_limit)" in manager and
+            "rpcs3::ios::process_memory_limit_estimate()" in manager,
+            "the proactive stage is not derived from the measured allowance")
 
     # These PS3Native RSX fixes predate the pinned source and must remain in the
     # materialized tree; Build 352 must not regress them while changing policy.

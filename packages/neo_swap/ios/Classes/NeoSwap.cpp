@@ -35,15 +35,43 @@ constexpr size_t relay_block_slots = 1024;
 constexpr size_t max_blocks = legacy_block_slots + relay_block_slots;
 constexpr uint64_t small_cpu_budget = 512 * MiB;
 constexpr uint64_t small_cpu_minimum = 64 * 1024;
-constexpr size_t relay_cache_slots = 32;
 #if defined(NEOSWAP_RELAY)
 // Darwin maps relay intervals on 64 KiB boundaries; loans round up to that so
-// the padding is measured instead of silently spent. Reuse cache bounds: the
-// bytes parked between a release and the next identical request, and how long
-// a parked interval waits before the maintenance pass returns it to the relay.
+// the padding is measured instead of silently spent.
 constexpr uint64_t relay_alignment = 65536;
-constexpr uint64_t relay_cache_budget = 128 * MiB;
+// Build434 shelves: released and prepared intervals wait on one shelf per
+// size class (64 KiB, 128 KiB, ... 16 MiB) plus one exact-size shelf for the
+// other sizes. A FAST request takes a ready interval of its class without any
+// backend call; the maintenance tick refills each class from the misses it
+// measured since the previous tick, so the stock follows the RSX demand
+// instead of one prepared interval per tick for the whole process (the
+// Build411 device logs refused 7 084 of 7 462 FAST requests for want of
+// ready memory). Bounds: the bytes parked on every shelf, the entries per
+// shelf, how long an idle interval waits before the maintenance pass returns
+// it to the relay, how many intervals one tick may prepare and how long it
+// may spend preparing them outside the broker mutex.
+constexpr size_t shelf_class_count = NEOSWAP_SHELF_CLASS_COUNT;
+constexpr size_t shelf_exact_class = shelf_class_count - 1;
+constexpr size_t shelf_capacity = 32;
+constexpr uint64_t shelf_smallest_class_bytes = 64 * 1024;
+constexpr uint64_t shelf_largest_class_bytes = 16 * MiB;
+constexpr uint64_t relay_cache_budget = 256 * MiB;
 constexpr uint64_t relay_cache_max_age_ms = 2000;
+constexpr unsigned shelf_max_prepares_per_tick = 8;
+constexpr uint64_t shelf_refill_time_budget_us = 4000;
+static_assert(shelf_smallest_class_bytes << (shelf_exact_class - 1) == shelf_largest_class_bytes);
+// Size class of a 64 KiB-aligned request: the smallest power-of-two class
+// that holds it, or the exact shelf index when it exceeds the largest class.
+size_t shelf_class_for(uint64_t bytes) noexcept {
+    size_t index = 0;
+    for (uint64_t size = shelf_smallest_class_bytes; size < bytes && index < shelf_exact_class; size <<= 1) ++index;
+    return index;
+}
+uint64_t shelf_class_bytes(size_t index) noexcept { return shelf_smallest_class_bytes << index; }
+bool shelf_class_exact(uint64_t bytes) noexcept {
+    const size_t index = shelf_class_for(bytes);
+    return index < shelf_exact_class && shelf_class_bytes(index) == bytes;
+}
 #endif
 // Four diagnostic size bins: [64,128), [128,256), [256,512), [512,1024) KiB.
 unsigned cpu_size_bin(uint64_t bytes) noexcept {
@@ -71,6 +99,7 @@ struct RelayLoanCounters {
     std::atomic<uint64_t> quota_bytes{0}, policy_refusals{0}, quota_refusals{0}, backend_refusals{0};
     std::atomic<uint64_t> reuse_hits{0}, cached_bytes{0}, cached_blocks{0}, cache_flushes{0};
     std::atomic<uint64_t> release_failures{0}, padding_bytes{0};
+    std::atomic<uint64_t> shelf_prepared{0}, shelf_prepare_skips{0}, shelf_last_refill_us{0}, shelf_max_refill_us{0};
     std::array<std::atomic<uint64_t>, NEOSWAP_HOST_KIND_COUNT> kind_live_bytes{}, kind_live_blocks{};
     std::array<std::atomic<uint64_t>, NEOSWAP_HOST_KIND_COUNT> kind_allocation_count{}, kind_refusal_count{};
     std::atomic<int32_t> last_backend_result{0};
@@ -94,12 +123,22 @@ struct Block {
     void* region = nullptr;
     uint64_t region_size = 0;
 };
-// Released relay loans stay mapped briefly so the next identical request
-// reuses the interval without a backend scan, scrub or kernel map.
-struct CachedLoan {
-    uint64_t token = 0, bytes = 0, released_ms = 0;
+// A shelved relay interval: released or prepared, still mapped and owned by
+// the broker, waiting for the next request of its class. Every field is
+// written under the broker mutex.
+struct ShelfEntry {
+    uint64_t token = 0, bytes = 0, shelved_ms = 0;
     void* address = nullptr;
 };
+#if defined(NEOSWAP_RELAY)
+struct Shelf {
+    std::array<ShelfEntry, shelf_capacity> entries{};
+    // ready/target/hits are mirrored in atomics for the lock-free snapshot.
+    std::atomic<uint32_t> ready{0}, target{0};
+    std::atomic<uint64_t> misses{0}, hits{0};
+    uint64_t last_misses = 0; // misses already turned into a target
+};
+#endif
 struct HostCounters {
     std::atomic<uint64_t> reserved_virtual_bytes{0}, disk_free_bytes{0}, remaining_storage_bytes{0};
     std::atomic<int32_t> reservation_result{NEOSWAP_OK}, reservation_errno{0};
@@ -176,9 +215,9 @@ struct Broker {
     CPUBufferCounters cpu_buffers{};
     RelayLoanCounters relay_loans{};
     FastCounters fast{};
-    // Bounded hints, not reservations. Only the maintenance queue maps them.
-    std::array<uint64_t, 8> pending_relay_bytes{};
-    std::array<CachedLoan, relay_cache_slots> relay_cache{};
+#if defined(NEOSWAP_RELAY)
+    std::array<Shelf, shelf_class_count> shelves{};
+#endif
     int directory = -1;
     uint64_t next_name = 1;
     uint64_t file_live_bytes = 0, shared_live_bytes = 0, relay_live_bytes = 0;
@@ -466,7 +505,7 @@ Block* find_slot(Broker& b, size_t first, size_t last) {
 // Retire one cached loan (unmap + release). A failed unmap retains the
 // cached entry for a later retry; a failed release after a successful unmap
 // hands the token to the backend's retirement path, which retries scrubbing.
-bool retire_cached_loan(Broker& b, CachedLoan& cached) {
+bool retire_cached_loan(Broker& b, ShelfEntry& cached) {
     const auto* api = relay_api();
     if (!api) return false;
     const int unmapped = api->unmap(cached.token, cached.address);
@@ -512,28 +551,40 @@ bool try_relay_loan(Broker& b, uint32_t owner, uint32_t kind, uint64_t rounded, 
         }
         if (!slot) { relay_refuse(b, kind, r.policy_refusals); return false; }
     }
-    for (auto& cached : b.relay_cache) if (cached.token && cached.bytes == bytes) {
+    // Shelves first: an exact-size interval parked by a release, then the
+    // ready stock of the request's size class (a FAST request accepts the
+    // class interval even when it is larger; the padding is measured). A FAST
+    // miss records its class so the next maintenance tick restocks it; the
+    // miss never reaches create/map/scrub or a slow fallback.
+    const auto take = [&](Shelf& shelf, ShelfEntry& entry) {
+        const uint64_t loaned = entry.bytes;
         r.reuse_hits.fetch_add(1, std::memory_order_relaxed);
-        r.cached_bytes.fetch_sub(bytes, std::memory_order_relaxed);
+        shelf.hits.fetch_add(1, std::memory_order_relaxed);
+        shelf.ready.fetch_sub(1, std::memory_order_relaxed);
+        r.cached_bytes.fetch_sub(loaned, std::memory_order_relaxed);
         r.cached_blocks.fetch_sub(1, std::memory_order_relaxed);
-        r.padding_bytes.fetch_add(bytes - rounded, std::memory_order_relaxed);
-        const uint64_t token = cached.token;
-        void* address = cached.address;
-        cached = {};
-        record_allocation(b, *slot, address, bytes, owner, kind, Backing::relay, -1, token, started, out, fast);
+        r.padding_bytes.fetch_add(loaned - rounded, std::memory_order_relaxed);
+        const uint64_t token = entry.token;
+        void* address = entry.address;
+        entry = {};
+        record_allocation(b, *slot, address, loaned, owner, kind, Backing::relay, -1, token, started, out, fast);
+    };
+    for (auto& entry : b.shelves[shelf_exact_class].entries) if (entry.token && entry.bytes == bytes) {
+        take(b.shelves[shelf_exact_class], entry);
         return true;
     }
+    const size_t klass = shelf_class_for(bytes);
+    if (klass < shelf_exact_class && (fast || shelf_class_bytes(klass) == bytes)) {
+        Shelf& shelf = b.shelves[klass];
+        for (auto& entry : shelf.entries) if (entry.token) {
+            take(shelf, entry);
+            return true;
+        }
+    }
     if (fast) {
-        // Never let a miss reach create/map/scrub or a slow fallback. The
-        // existing maintenance timer can prepare one requested size off-frame.
-        if (bytes <= 16 * MiB) {
-            bool queued = false;
-            for (const auto demand : b.pending_relay_bytes) queued |= demand == bytes;
-            if (!queued) for (auto& demand : b.pending_relay_bytes) if (!demand) {
-                demand = bytes;
-                b.fast.prepare_requests.fetch_add(1, std::memory_order_relaxed);
-                break;
-            }
+        if (klass < shelf_exact_class) {
+            b.shelves[klass].misses.fetch_add(1, std::memory_order_relaxed);
+            b.fast.prepare_requests.fetch_add(1, std::memory_order_relaxed);
         }
         return false;
     }
@@ -575,8 +626,12 @@ int release_relay_loan(Broker& b, Block& block, uint64_t now_ms) {
     if (!api) return NEOSWAP_MAPPING;
     if (r.admitted.load(std::memory_order_acquire) &&
         r.cached_bytes.load(std::memory_order_relaxed) + block.size <= relay_cache_budget) {
-        for (auto& cached : b.relay_cache) if (!cached.token) {
-            cached = {block.relay_token, block.size, now_ms, block.address};
+        // A class-sized interval returns to its class shelf; any other size
+        // waits on the exact shelf for an identical request.
+        Shelf& shelf = b.shelves[shelf_class_exact(block.size) ? shelf_class_for(block.size) : shelf_exact_class];
+        for (auto& entry : shelf.entries) if (!entry.token) {
+            entry = {block.relay_token, block.size, now_ms, block.address};
+            shelf.ready.fetch_add(1, std::memory_order_relaxed);
             r.cached_bytes.fetch_add(block.size, std::memory_order_relaxed);
             r.cached_blocks.fetch_add(1, std::memory_order_relaxed);
             return NEOSWAP_OK;
@@ -973,13 +1028,34 @@ int enabled(uint32_t owner) {
 }
 const NeoSwapAPI api{sizeof(NeoSwapAPI), NEOSWAP_ABI, allocate, release, sync, enabled};
 #if defined(NEOSWAP_RELAY)
+// Refill targets: the misses each class recorded since the previous tick,
+// bounded by the shelf capacity. A class without misses needs no new stock;
+// a class whose requests hit keeps its stock through the re-shelving of its
+// releases. flush_all resets every target and the counter baselines.
+void shelf_retarget_locked(Broker& b, bool flush_all) {
+    for (auto& shelf : b.shelves) {
+        const uint64_t misses = shelf.misses.load(std::memory_order_relaxed);
+        const uint64_t fresh = misses - shelf.last_misses;
+        shelf.last_misses = misses;
+        shelf.target.store(flush_all ? 0u : static_cast<uint32_t>(std::min<uint64_t>(fresh, shelf_capacity)),
+                           std::memory_order_relaxed);
+    }
+}
+// Age the shelves: an idle interval beyond the bounded window returns to the
+// relay only while its shelf holds more than its target, so a class under
+// demand keeps its stock. flush_all drains every shelf.
 int relay_loan_maintain_locked(Broker& b, uint64_t now_ms, bool flush_all) {
     int failures = 0;
-    for (auto& cached : b.relay_cache) {
-        if (!cached.token) continue;
-        const uint64_t age_ms = now_ms > cached.released_ms ? now_ms - cached.released_ms : 0;
-        if (!flush_all && age_ms <= relay_cache_max_age_ms) continue;
-        if (!retire_cached_loan(b, cached)) ++failures;
+    shelf_retarget_locked(b, flush_all);
+    for (auto& shelf : b.shelves) {
+        for (auto& entry : shelf.entries) {
+            if (!entry.token) continue;
+            const uint64_t age_ms = now_ms > entry.shelved_ms ? now_ms - entry.shelved_ms : 0;
+            if (!flush_all && (age_ms <= relay_cache_max_age_ms ||
+                shelf.ready.load(std::memory_order_relaxed) <= shelf.target.load(std::memory_order_relaxed))) continue;
+            if (retire_cached_loan(b, entry)) shelf.ready.fetch_sub(1, std::memory_order_relaxed);
+            else ++failures;
+        }
     }
     return failures ? NEOSWAP_MAPPING : NEOSWAP_OK;
 }
@@ -1228,57 +1304,111 @@ extern "C" int NeoSwap_SetRelayHostLoanPolicy(uint64_t quota_bytes, int admitted
 #endif
 }
 extern "C" int NeoSwap_RelayLoanMaintain(uint64_t now_ms, int flush_all) {
-    auto& b = broker(); std::lock_guard guard(b.mutex);
-    maintain_fast_releases_locked(b);
+    auto& b = broker();
 #if defined(NEOSWAP_RELAY)
-    // Releases stamp cached intervals with the broker's monotonic clock; ages
-    // are only meaningful against that same clock, so 0 selects it.
-    if (!now_ms) now_ms = monotonic_ms();
-    // The caller decides when to drain (no session, shrinking, pressure); a
-    // closed admission gate alone keeps the bounded cache ageing normally so
-    // a holding sample does not hand room back and reopen the gate.
-    const int result = relay_loan_maintain_locked(b, now_ms, flush_all != 0);
-    if (flush_all) {
-        b.pending_relay_bytes.fill(0);
-        return result;
-    }
-    // One bounded mapping per existing background tick; no new worker/thread.
-    // Host cache limits and the backend quota include these prepared intervals.
-    if (!b.relay_loans.admitted.load(std::memory_order_acquire)) return result;
-    const auto* api = relay_api();
-    for (auto& demand : b.pending_relay_bytes) if (demand) {
-        const uint64_t bytes = demand;
-        const uint64_t cached_bytes = b.relay_loans.cached_bytes.load(std::memory_order_relaxed);
-        const uint64_t live_bytes = b.relay_loans.live_bytes.load(std::memory_order_relaxed);
+    struct Planned { size_t klass; uint64_t bytes; uint64_t token; void* address; };
+    std::array<Planned, shelf_max_prepares_per_tick> plan{};
+    unsigned planned = 0;
+    int result;
+    {
+        std::lock_guard guard(b.mutex);
+        maintain_fast_releases_locked(b);
+        // Releases stamp shelved intervals with the broker's monotonic clock;
+        // ages are only meaningful against that same clock, so 0 selects it.
+        if (!now_ms) now_ms = monotonic_ms();
+        // The caller decides when to drain (no session, shrinking, pressure); a
+        // closed admission gate alone keeps the bounded shelves ageing normally
+        // so a holding sample does not hand room back and reopen the gate.
+        result = relay_loan_maintain_locked(b, now_ms, flush_all != 0);
+        if (flush_all || !b.relay_loans.admitted.load(std::memory_order_acquire) || !relay_api()) return result;
+        // Plan the refill under the lock: smallest classes first so a large
+        // class cannot starve the small sizes of the quota, bounded by the
+        // deficit of each class, the shelf budget, the quota (which counts
+        // parked intervals), the free bookkeeping slots and the per-tick cap.
+        uint64_t projected_cached = b.relay_loans.cached_bytes.load(std::memory_order_relaxed);
+        const uint64_t live = b.relay_loans.live_bytes.load(std::memory_order_relaxed);
         const uint64_t quota = b.relay_loans.quota_bytes.load(std::memory_order_relaxed);
-        CachedLoan* slot = nullptr;
-        for (auto& cached : b.relay_cache) {
-            if (cached.token && cached.bytes == bytes) { demand = 0; break; }
-            if (!cached.token && !slot) slot = &cached;
+        size_t free_slots = 0;
+        for (size_t i = legacy_block_slots; i < max_blocks; ++i)
+            if (!b.blocks[i].address && !b.blocks[i].region) ++free_slots;
+        for (size_t klass = 0; klass < shelf_exact_class && planned < plan.size(); ++klass) {
+            Shelf& shelf = b.shelves[klass];
+            const uint32_t target = shelf.target.load(std::memory_order_relaxed);
+            uint32_t ready = shelf.ready.load(std::memory_order_relaxed);
+            const uint64_t bytes = shelf_class_bytes(klass);
+            while (ready < target && planned < plan.size()) {
+                if (projected_cached + bytes > relay_cache_budget || live + projected_cached > quota ||
+                    bytes > quota - live - projected_cached || free_slots <= planned) {
+                    b.relay_loans.shelf_prepare_skips.fetch_add(1, std::memory_order_relaxed);
+                    break;
+                }
+                plan[planned++] = {klass, bytes, 0, nullptr};
+                projected_cached += bytes;
+                ++ready;
+            }
         }
-        if (!demand) continue;
-        if (cached_bytes + bytes > relay_cache_budget || live_bytes + cached_bytes > quota ||
-            bytes > quota - live_bytes - cached_bytes) continue; // a large hint must not starve smaller sizes
-        if (!slot || !api) break;
-        demand = 0;
-        uint64_t token = 0;
-        void* address = nullptr;
-        int prepared = api->create(relay_host_loan_owner, bytes, &token);
-        if (prepared == NEOSWAP_RELAY_OK && token)
-            prepared = api->map(token, nullptr, NEOSWAP_RELAY_READ_WRITE, &address);
-        if (prepared == NEOSWAP_RELAY_OK && address) {
-            *slot = {token, bytes, now_ms, address};
-            b.relay_loans.cached_bytes.fetch_add(bytes, std::memory_order_relaxed);
-            b.relay_loans.cached_blocks.fetch_add(1, std::memory_order_relaxed);
-            b.fast.prepared_loans.fetch_add(1, std::memory_order_relaxed);
-        } else {
-            if (token && api->release(token) != NEOSWAP_RELAY_OK) (void)api->retire(token);
+    }
+    if (!planned) return result;
+    // Prepare outside the broker mutex: create/map are backend calls of tens
+    // of microseconds each and must not make a concurrent FAST request wait.
+    const auto* api = relay_api();
+    const auto refill_started = std::chrono::steady_clock::now();
+    unsigned prepared = 0;
+    while (prepared < planned) {
+        auto& item = plan[prepared++];
+        const auto elapsed_us = std::chrono::duration_cast<std::chrono::microseconds>(
+            std::chrono::steady_clock::now() - refill_started).count();
+        if (elapsed_us > static_cast<long long>(shelf_refill_time_budget_us)) { --prepared; break; }
+        int status = api->create(relay_host_loan_owner, item.bytes, &item.token);
+        if (status == NEOSWAP_RELAY_OK && item.token)
+            status = api->map(item.token, nullptr, NEOSWAP_RELAY_READ_WRITE, &item.address);
+        if (status != NEOSWAP_RELAY_OK || !item.address) {
+            if (item.token && api->release(item.token) != NEOSWAP_RELAY_OK) (void)api->retire(item.token);
+            item.token = 0; item.address = nullptr;
             b.fast.prepare_failures.fetch_add(1, std::memory_order_relaxed);
+            b.relay_loans.last_backend_result.store(status == NEOSWAP_RELAY_OK ? NEOSWAP_RELAY_MAPPING : status,
+                                                    std::memory_order_relaxed);
+            break; // one failure ends the tick; the next tick measures again
         }
-        break;
+    }
+    const auto refill_us = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(
+        std::chrono::steady_clock::now() - refill_started).count());
+    b.relay_loans.shelf_last_refill_us.store(refill_us, std::memory_order_relaxed);
+    uint64_t maximum = b.relay_loans.shelf_max_refill_us.load(std::memory_order_relaxed);
+    while (maximum < refill_us &&
+           !b.relay_loans.shelf_max_refill_us.compare_exchange_weak(maximum, refill_us, std::memory_order_relaxed)) {}
+    // Shelve under the lock. Admission, quota or releases may have moved in
+    // between: an interval that no longer fits was never loaned, so the
+    // backend simply owns its retirement.
+    std::lock_guard guard(b.mutex);
+    const uint64_t shelve_ms = monotonic_ms();
+    for (unsigned i = 0; i < prepared; ++i) {
+        auto& item = plan[i];
+        if (!item.token) continue;
+        Shelf& shelf = b.shelves[item.klass];
+        const uint64_t cached = b.relay_loans.cached_bytes.load(std::memory_order_relaxed);
+        const uint64_t live_now = b.relay_loans.live_bytes.load(std::memory_order_relaxed);
+        const uint64_t quota_now = b.relay_loans.quota_bytes.load(std::memory_order_relaxed);
+        ShelfEntry* slot = nullptr;
+        if (b.relay_loans.admitted.load(std::memory_order_acquire) && cached + item.bytes <= relay_cache_budget &&
+            live_now + cached <= quota_now && item.bytes <= quota_now - live_now - cached)
+            for (auto& entry : shelf.entries) if (!entry.token) { slot = &entry; break; }
+        if (!slot) {
+            (void)api->retire(item.token);
+            b.relay_loans.cache_flushes.fetch_add(1, std::memory_order_relaxed);
+            continue;
+        }
+        *slot = {item.token, item.bytes, shelve_ms, item.address};
+        shelf.ready.fetch_add(1, std::memory_order_relaxed);
+        b.relay_loans.cached_bytes.fetch_add(item.bytes, std::memory_order_relaxed);
+        b.relay_loans.cached_blocks.fetch_add(1, std::memory_order_relaxed);
+        b.relay_loans.shelf_prepared.fetch_add(1, std::memory_order_relaxed);
+        b.fast.prepared_loans.fetch_add(1, std::memory_order_relaxed);
     }
     return result;
 #else
+    std::lock_guard guard(b.mutex);
+    maintain_fast_releases_locked(b);
     (void)now_ms; (void)flush_all; return NEOSWAP_DISABLED;
 #endif
 }
@@ -1303,6 +1433,18 @@ extern "C" int NeoSwap_RelayLoanSnapshot(NeoSwapRelayLoanStats* output) {
     output->video_frames_admitted = r.video_frames.load(std::memory_order_relaxed);
 #if defined(NEOSWAP_RELAY)
     output->available = relay_api() != nullptr;
+    const auto& shelves = broker().shelves;
+    for (size_t klass = 0; klass < shelf_class_count; ++klass) {
+        output->shelf_ready_blocks[klass] = shelves[klass].ready.load(std::memory_order_relaxed);
+        output->shelf_target_blocks[klass] = shelves[klass].target.load(std::memory_order_relaxed);
+        output->shelf_misses[klass] = shelves[klass].misses.load(std::memory_order_relaxed);
+        output->shelf_hits[klass] = shelves[klass].hits.load(std::memory_order_relaxed);
+    }
+    output->shelf_prepared_blocks = r.shelf_prepared.load(std::memory_order_relaxed);
+    output->shelf_prepare_skips = r.shelf_prepare_skips.load(std::memory_order_relaxed);
+    output->shelf_budget_bytes = relay_cache_budget;
+    output->shelf_last_refill_us = r.shelf_last_refill_us.load(std::memory_order_relaxed);
+    output->shelf_max_refill_us = r.shelf_max_refill_us.load(std::memory_order_relaxed);
 #else
     output->available = 0;
 #endif

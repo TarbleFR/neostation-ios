@@ -178,6 +178,15 @@ static __unsafe_unretained LibretroCoreHost *gActiveHost = nil;
   }
 }
 
+- (NSArray<NSString *> *)recentErrors:(NSUInteger)limit {
+  NSMutableArray<NSString *> *errors = [NSMutableArray array];
+  for (NSString *line in self.recentLog.reverseObjectEnumerator) {
+    if (errors.count >= limit) break;
+    if ([line hasPrefix:@"[ERROR]"]) [errors insertObject:line atIndex:0];
+  }
+  return errors;
+}
+
 static void HostLog(enum retro_log_level level, const char *format, ...) {
   LibretroCoreHost *host = gActiveHost;
   if (host == nil || format == NULL) return;
@@ -698,6 +707,14 @@ static bool HostEnvironment(unsigned command, void *data) {
   _saveDirectoryC = strdup(_saveDirectory.fileSystemRepresentation);
   NSString *optionsPath = [_optionsDirectory stringByAppendingPathComponent:[folder stringByAppendingPathExtension:@"json"]];
   _options = [[LibretroCoreOptions alloc] initWithStorePath:optionsPath];
+  // Before retro_set_environment and retro_init: DeSmuME reads its options
+  // only in retro_init. Locked values come last so they win.
+  NSDictionary<NSString *, NSString *> *initialDefaults = self.initialOptionDefaults;
+  NSDictionary<NSString *, NSString *> *initialOverrides = self.initialSessionOverrides;
+  NSDictionary<NSString *, NSString *> *lockedOverrides = self.lockedSessionOverrides;
+  if (initialDefaults.count > 0) [_options applyDefaults:initialDefaults];
+  if (initialOverrides.count > 0) [_options applySessionOverrides:initialOverrides];
+  if (lockedOverrides.count > 0) [_options lockSessionOverrides:lockedOverrides];
 
   gActiveHost = self;
   _symbols.retro_set_environment(HostEnvironment);
@@ -1061,22 +1078,32 @@ static bool HostEnvironment(unsigned command, void *data) {
 
 #pragma mark - Unloading
 
-- (void)unloadWithHardwareTeardown:(void (^)(void))beforeUnload {
+- (void)unloadWithContextDestroy:(void (^)(void))destroyContext contextRelease:(void (^)(void))releaseContext {
+  void (^observer)(NSString *, BOOL) = self.teardownObserver;
   if (_contentLoaded) [self flushSaveRAM:nil];
-  if (beforeUnload != nil) beforeUnload();
+  if (destroyContext != nil) destroyContext();
+  // The core still reaches its hardware context and this host's callbacks
+  // (gActiveHost) until retro_deinit has returned.
   if (_contentLoaded) {
+    if (observer != nil) observer(@"retro_unload_game", NO);
     _symbols.retro_unload_game();
     _contentLoaded = NO;
+    if (observer != nil) observer(@"retro_unload_game", YES);
   }
   if (_coreInitialized) {
+    if (observer != nil) observer(@"retro_deinit", NO);
     _symbols.retro_deinit();
     _coreInitialized = NO;
+    if (observer != nil) observer(@"retro_deinit", YES);
   }
+  if (releaseContext != nil) releaseContext();
   [_options save];
   if (gActiveHost == self) gActiveHost = nil;
   if (_library != NULL) {
+    if (observer != nil) observer(@"dlclose", NO);
     dlclose(_library);
     _library = NULL;
+    if (observer != nil) observer(@"dlclose", YES);
   }
   memset(&_symbols, 0, sizeof(_symbols));
   _contentData = nil;

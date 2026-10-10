@@ -29,7 +29,6 @@ import 'package:neostation/widgets/armsx2_internal_playlist_actions.dart';
 import 'package:neostation/widgets/ports_internal_playlist_actions.dart';
 import 'package:neostation/widgets/libretro_internal_playlist_actions.dart';
 import 'package:neostation/services/libretro_internal_service.dart';
-import 'package:neostation/services/config_service.dart';
 
 // DOLPHIN_ISOLATION_END: playlist_import
 import '../../services/game_service.dart';
@@ -124,7 +123,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
   bool get _isPortsLibrary =>
       Platform.isIOS && widget.system.folderName.toLowerCase() == 'ports';
   bool get _isLibretroLibrary =>
-      LibretroInternalService.handlesSystem(widget.system.folderName);
+      LibretroInternalService.handlesSystemModel(widget.system);
   int _selectedGameIndex = 0;
   late GamepadNavigation
   _gamepadNav; // Unified controller/keyboard input handler.
@@ -942,18 +941,21 @@ class _SystemGamesListState extends State<SystemGamesList> {
   );
 
   // LIBRETRO_INTERNAL_BEGIN: import_action_builder
-  /// Imported games go to NeoStation's own Files-visible `roms` folder,
-  /// registered as a library folder, so they join this very playlist.
-  Future<void> _refreshLibretroLibrary() async {
+  /// Imported games go to one of the user's library folders, so they join
+  /// this very playlist. NeoStation's own `roms` folder received them only
+  /// when no library folder was registered: it is registered first.
+  Future<void> _refreshLibretroLibrary(LibretroImportResult result) async {
     if (!mounted) return;
     final provider = context.read<SqliteConfigProvider>();
-    final romsFolder = await ConfigService.getDefaultIOSRomsFolder();
-    if (!provider.config.romFolders.contains(romsFolder)) {
-      await provider.addRomFolder(romsFolder, scan: false);
+    final created = result.createdLibraryRoot;
+    if (created != null && !provider.config.romFolders.contains(created)) {
+      await provider.addRomFolder(created, scan: false);
     }
     await provider.rescanSystemSilent(widget.system);
     if (mounted) await _loadGames();
   }
+
+  List<String> _libretroLibraryFolders() => context.read<SqliteConfigProvider>().config.romFolders;
 
   void _libretroInteraction(bool active) {
     if (!mounted) return;
@@ -965,16 +967,18 @@ class _SystemGamesListState extends State<SystemGamesList> {
   }
 
   Widget _buildLibretroImportAction() => LibretroInternalPlaylistActions(
-    systemFolder: widget.system.folderName,
+    system: widget.system,
     onInteractionChanged: _libretroInteraction,
     onLibraryChanged: _refreshLibretroLibrary,
+    libraryFolders: _libretroLibraryFolders,
   );
 
   Widget _buildEmbeddedLibretroImportAction() => LibretroInternalPlaylistActions(
     embedded: true,
-    systemFolder: widget.system.folderName,
+    system: widget.system,
     onInteractionChanged: _libretroInteraction,
     onLibraryChanged: _refreshLibretroLibrary,
+    libraryFolders: _libretroLibraryFolders,
   );
   // LIBRETRO_INTERNAL_END: import_action_builder
 

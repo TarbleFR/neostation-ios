@@ -120,7 +120,6 @@ class Rpcs3InternalService {
   static bool get supported => Platform.isIOS;
   static bool get initialized => _initialized;
   static bool get jitPrepared => _jitPrepared;
-  static bool get gameplayMode => _initialized;
   static Rpcs3RuntimeState get runtimeState => _state;
   static Stream<Rpcs3RuntimeState> get runtimeStates => _stateController.stream;
 

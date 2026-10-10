@@ -443,18 +443,6 @@ class SqliteConfigService {
     }
   }
 
-  /// Retrieves a list of all emulators currently detected on the system.
-  static Future<List<EmulatorModel>> detectAvailableEmulators() async {
-    try {
-      return await SqliteService.getAvailableEmulators().then(
-        (emulators) => emulators.values.toList(),
-      );
-    } catch (e) {
-      _log.e('Error detecting emulators: $e');
-      return [];
-    }
-  }
-
   /// Retrieves a list of emulators compatible with a specific system.
   static Future<List<EmulatorModel>> getEmulatorsForSystem(
     String systemId,

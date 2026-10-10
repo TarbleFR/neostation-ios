@@ -168,8 +168,8 @@ jobs:
       DOLPHIN_CORE_HOST_SHA: ae7d46f90dff64ce698b8c18e0c12510dbae96fe
       ARMSX2_CORE_HOST_SHA: 899d3c44f8f465c8da0d93c763817ffca519c00c
       ARMSX2_CORE_RUN_ID: '37641466835'
-      RPCS3_CORE_HOST_SHA: afb33454db50236485bd5ec963a722dcb5f65610
-      RPCS3_CORE_RUN_ID: '37620034517'
+      RPCS3_CORE_HOST_SHA: 6fede58ae799214ce59cfecbae79b66d01d33b37
+      RPCS3_CORE_RUN_ID: '38068094552'
       DUSKLIGHT_CORE_HOST_SHA: 899d3c44f8f465c8da0d93c763817ffca519c00c
       DUSKLIGHT_CORE_RUN_ID: '37641472546'
       HOMEBREW_NO_AUTO_UPDATE: '1'
@@ -840,6 +840,8 @@ jobs:
             test/rpcs3_build351_gow3_engine_test.py \
             test/rpcs3_build353_xitrix_v010_test.py \
             test/rpcs3_armsx3_performance_patch_test.py \
+            test/rpcs3_build435_core_delta_test.py \
+            test/native/rpcs3_build435_core_delta_test.cpp \
             test/rpcs3_build352_gow3_memory_test.py \
             test/rpcs3_ios_ppu_compile_budget_test.cpp \
             test/rpcs3_ppu_no_size_split_policy_test.cpp \

@@ -43,13 +43,9 @@ boot = plugin.split("- (rpcs3_ios_status)bootTitleForCore:", 1)[1].split(
 assert "[self invalidatePerformanceSnapshotForBoot]" in boot
 assert "if (status != 0) _performanceSnapshot.end()" in boot
 assert plugin.count("_api.boot_game(") == 1
-assert plugin.count("bootTitleForCore:titleId.UTF8String savestate:") == 8
-assert plugin.count("bootTitleForCore:strongSelf.activeTitleId.UTF8String savestate:") == 1
-for start, end in [("- (void)showLanguageMenu", "- (void)applyResolutionScale"),
-                   ("- (void)applyResolutionScale", "- (void)showResolutionScaleMenu"),
-                   ("- (void)applyStretchMode", "- (void)showStretchMenu"),
-                   ("- (void)loadSavestateIdentifier", "- (void)showLoadSavestateMenu")]:
-    assert "bootTitleForCore:" in plugin.split(start, 1)[1].split(end, 1)[0]
+# The Build 260 action-sheet menus that also booted titles were never called
+# and were removed; the four remaining boot paths all go through the helper.
+assert plugin.count("bootTitleForCore:titleId.UTF8String savestate:") == 4
 assert "NSEC_PER_SEC, (uint64_t)(0.1 * NSEC_PER_SEC)" in producer
 assert "0.5 * NSEC_PER_SEC" in overlay
 assert "NeoSwapFPSValid(metrics.frames_per_second, metrics.valid_fields)" in producer

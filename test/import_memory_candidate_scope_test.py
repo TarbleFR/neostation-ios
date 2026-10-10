@@ -94,6 +94,11 @@ assert runtime_preparation == {
 
 # Additions require a review of the requested production scope. Never derive
 # this whitelist from git status or from the hash manifest itself.
+# Build434 bookkeeping: the Build 419 library rollback (afc0a96d, 8 October
+# 2026) removed lib/services/retroarch_folder_recovery.dart,
+# lib/services/retroarch_library_importer.dart and their two Dart tests;
+# their stale entries left this gate failing on every commit since. They are
+# dropped here and from the manifest; nothing else changes in the whitelists.
 PRODUCTION_FILES = {
     '.github/workflows/dolphin-pacing-check.yml',
     'tools/neoplay-receiver/build-installer.mjs',
@@ -108,6 +113,8 @@ PRODUCTION_FILES = {
     'tools/neoplay-receiver/windows-installer.nsi',
     # Build409: pure global budget policy applied by the plugin every sample.
     'packages/neo_swap/ios/Classes/NeoSwapBudget.h',
+    # Build434: cold-storage prefetch planner and POSIX read-advice helpers.
+    'packages/neo_swap/ios/Classes/NeoSwapColdPrefetch.h',
     # RPCS3-only integrity harness shares its sole supported allocation owner.
     'packages/neo_swap/ios/Classes/NeoSwapCapacityProbe.h',
     'packages/neo_swap/ios/Classes/NeoSwapExperiment.h',
@@ -295,6 +302,15 @@ SUPPORT_FILES = {
     'docs/neoswap-build409-global-budget.md',
     'test/neoswap_budget_test.cpp',
     'test/neoswap_relay_loans_test.cpp',
+    # Build434: measured host envelope, size-class shelves, cold prefetch.
+    'docs/neoswap-build434-7go-envelope.md',
+    'test/neoswap_cold_prefetch_test.cpp',
+    # Build435 Core delta (10 October 2026): host-executed policy test, its
+    # runner, the updated Build352 contract and the delivery notes.
+    'docs/neoswap-build435-core-delta.md',
+    'test/rpcs3_build352_gow3_memory_test.py',
+    'test/rpcs3_build435_core_delta_test.py',
+    'test/native/rpcs3_build435_core_delta_test.cpp',
     'docs/neoswap-swap-research.md',
     'tools/compare_neoswap_sessions.py',
     'test/neoswap_swap_research_test.cpp',
@@ -586,7 +602,6 @@ PRODUCTION_FILES |= {
     'lib/providers/sqlite_config_provider/scanning.dart',
     'lib/screens/settings_screen/new_settings_options/directories_settings_content.dart',
     'lib/services/config_service.dart',
-    'lib/services/retroarch_folder_recovery.dart',
     'lib/services/retroarch_library_protocol.dart',
     'lib/services/retroarch_library_service.dart',
     'packages/external_folder_access/ios/Classes/ExternalFolderAccessPlugin.swift',
@@ -596,7 +611,6 @@ PRODUCTION_FILES |= {
 SUPPORT_FILES |= {
     'docs/retroarch-testflight-link-recovery.md',
     'docs/neoplay/WINDOWS-0.8.0.md',
-    'test/retroarch_folder_recovery_test.dart',
     'test/retroarch_library_cache_test.dart',
     'test/retroarch_library_protocol_test.dart',
     'test/retroarch_sync_locale_test.dart',
@@ -609,10 +623,8 @@ PRODUCTION_FILES |= {
     'lib/repositories/system_repository.dart',
     'lib/screens/systems_screen/system_content.dart',
     'lib/services/ios_rom_library_root_resolver.dart',
-    'lib/services/retroarch_library_importer.dart',
 }
 SUPPORT_FILES |= {
-    'test/retroarch_library_restoration_test.dart',
     'test/ios_rom_library_root_resolver_test.dart',
 }
 
@@ -635,8 +647,15 @@ NEOPLAY_080_RETAINED_FILES = {
     'tools/neoplay-receiver/embedded-playback-smoke.mjs',
     'tools/neoplay-receiver/README-WINDOWS.txt',
 }
+# Maintainer-approved re-pin (10 October 2026): the Build 422 delivery
+# 7416150d added five lines to neoplay-check.yml after this endpoint. That one
+# file is compared with that commit; the twelve others stay at 0.8.0.
+NEOPLAY_080_RETAINED_OVERRIDES = {
+    '.github/workflows/neoplay-check.yml': '7416150dd4a5b7b414374bc6b89b2e59bc7a7aa0',
+}
 for path in NEOPLAY_080_RETAINED_FILES:
-    retained = subprocess.check_output(['git', 'show', NEOPLAY_080_RETAINED_SHA + ':' + path], cwd=ROOT)
+    revision = NEOPLAY_080_RETAINED_OVERRIDES.get(path, NEOPLAY_080_RETAINED_SHA)
+    retained = subprocess.check_output(['git', 'show', revision + ':' + path], cwd=ROOT)
     assert (ROOT / path).read_bytes() == retained, 'Unrelated inherited NeoPlay source changed: ' + path
 
 # Maintainer-authorized integration of swap and armsx2-26 into experimental.
@@ -960,9 +979,44 @@ IPA_WORKFLOW_BUILD420_LINES = (
 )
 # Build421: only catalog restoration, scan safety and delivery metadata.
 IPA_WORKFLOW_BUILD421_LINES = (('name: NeoStation NeoSwap + NeoPlay private • Build 420\n', 'name: NeoStation NeoSwap + NeoPlay private • Build 421\n'), ('run-name: NeoStation NeoSwap + NeoPlay private • Build 420 • ${{ github.sha }}\n', 'run-name: NeoStation NeoSwap + NeoPlay private • Build 421 • ${{ github.sha }}\n'), ("        default: '420'\n", "        default: '421'\n"), ('  group: neostation-neoswap-neoplay-build420-${{ github.sha }}\n', '  group: neostation-neoswap-neoplay-build421-${{ github.sha }}\n'), ('    name: Neostation iOS 0.0.2 private IPA (420)\n', '    name: Neostation iOS 0.0.2 private IPA (421)\n'), ("      BUILD_NUMBER: ${{ inputs.build_number || '420' }}\n", "      BUILD_NUMBER: ${{ inputs.build_number || '421' }}\n"), ('      ARTIFACT_NAME: NeoStation-NeoSwap-NeoPlay-Build-420-${{ github.sha }}\n', '      ARTIFACT_NAME: NeoStation-NeoSwap-NeoPlay-Build-421-${{ github.sha }}\n'), ('          flutter test test/retroarch_library_protocol_test.dart test/retroarch_library_cache_test.dart test/retroarch_folder_recovery_test.dart test/retroarch_sync_locale_test.dart test/ios_rom_library_root_resolver_test.dart test/ios_selective_rollback_test.dart test/armsx2_retroarch_routing_isolation_test.dart\n', '          flutter test test/retroarch_library_protocol_test.dart test/retroarch_library_cache_test.dart test/retroarch_folder_recovery_test.dart test/retroarch_sync_locale_test.dart test/ios_rom_library_root_resolver_test.dart test/ios_selective_rollback_test.dart test/armsx2_retroarch_routing_isolation_test.dart test/retroarch_library_restoration_test.dart test/rom_scan_symlink_alias_test.dart test/rom_scan_emulator_default_test.dart\n'), ('          cp docs/retroarch-testflight-link-recovery.md build/private-test/Notes-RetroArch-Build420.md\n', '          cp docs/retroarch-testflight-link-recovery.md build/private-test/Notes-RetroArch-Build421.md\n'))
+# Maintainer-approved re-pins (10 October 2026): three reviewed files were
+# changed by later maintainer commits. Each is compared with the last commit
+# that touched it; the other thirty stay at the integration commit, and the
+# Build410-421 line pairs above remain the record of the IPA workflow until
+# the Build 419 library restoration rewrote it.
+ARMSX2_INTEGRATION_OVERRIDES = {
+    # Build 422 delivery with measured cache reuse.
+    '.github/workflows/ios-ci.yml': '7416150dd4a5b7b414374bc6b89b2e59bc7a7aa0',
+    # Build 419 library restoration and isolated direct TestFlight link.
+    '.github/workflows/neoswap-ipa.yml': 'afc0a96db96930cbdafe76cc126353caaa5b3d36',
+    # Removal of the Armsx2 action builder left from the retired menu.
+    'packages/armsx2_internal_bridge/ios/Classes/Armsx2InternalBridgePlugin.mm':
+        'a5650b9bddefbed76f941fb53735545bebcbbd39',
+}
+# Build435 lines of the IPA workflow, applied on top of the Build 419 restoration
+# bytes (10 October 2026): the Core built from 6fede58a by run 38068094552
+# (measured memory allowance, deferred SPU compilation, writer-lock precheck)
+# and its two host-executed policy test inputs in the exact-diff guard. Each
+# pair applies exactly once; every other byte stays the maintainer's.
+IPA_WORKFLOW_BUILD435_LINES = (
+    ('      RPCS3_CORE_HOST_SHA: afb33454db50236485bd5ec963a722dcb5f65610\n',
+     '      RPCS3_CORE_HOST_SHA: 6fede58ae799214ce59cfecbae79b66d01d33b37\n'),
+    ("      RPCS3_CORE_RUN_ID: '37620034517'\n", "      RPCS3_CORE_RUN_ID: '38068094552'\n"),
+    ('            test/rpcs3_armsx3_performance_patch_test.py \\\n',
+     '            test/rpcs3_armsx3_performance_patch_test.py \\\n'
+     '            test/rpcs3_build435_core_delta_test.py \\\n'
+     '            test/native/rpcs3_build435_core_delta_test.cpp \\\n'),
+)
 for path in ARMSX2_INTEGRATION_FILES:
-    reviewed = subprocess.check_output(['git', 'show', ARMSX2_INTEGRATION_SHA + ':' + path], cwd=ROOT)
-    if path == '.github/workflows/neoswap-ipa.yml':
+    revision = ARMSX2_INTEGRATION_OVERRIDES.get(path, ARMSX2_INTEGRATION_SHA)
+    reviewed = subprocess.check_output(['git', 'show', revision + ':' + path], cwd=ROOT)
+    if path == '.github/workflows/neoswap-ipa.yml' and revision != ARMSX2_INTEGRATION_SHA:
+        text = reviewed.decode('utf-8')
+        for old, new in IPA_WORKFLOW_BUILD435_LINES:
+            assert text.count(old) == 1, 'Build435 IPA workflow line expected once: ' + old
+            text = text.replace(old, new, 1)
+        reviewed = text.encode('utf-8')
+    elif path == '.github/workflows/neoswap-ipa.yml':
         text = reviewed.decode('utf-8')
         for old, new in IPA_WORKFLOW_BUILD410_LINES:
             assert text.count(old) == 1, 'Reviewed IPA workflow line expected once: ' + old
@@ -1151,8 +1205,11 @@ for workflow_path in ('.github/workflows/neoswap-ipa.yml', '.github/workflows/io
         # neo_swap_core_pin_test verifies against the pinned commit.
         # Build412 Core: afb33454 adds writer-lock attribution and rsx::thread
         # accounting to the profiler; its inputs no longer match the Build411 Core.
-        assert re.findall(r'(?m)^      RPCS3_CORE_HOST_SHA: (.+)$', workflow) == ['afb33454db50236485bd5ec963a722dcb5f65610']
-        assert re.findall(r'(?m)^      RPCS3_CORE_RUN_ID: (.+)$', workflow) == ["'37620034517'"]
+        # Build435 Core (run 38068094552 on 6fede58a): measured memory allowance,
+        # deferred SPU compilation and writer-lock precheck; its inputs no longer
+        # match the Build412 Core.
+        assert re.findall(r'(?m)^      RPCS3_CORE_HOST_SHA: (.+)$', workflow) == ['6fede58ae799214ce59cfecbae79b66d01d33b37']
+        assert re.findall(r'(?m)^      RPCS3_CORE_RUN_ID: (.+)$', workflow) == ["'38068094552'"]
         assert "assert result['head_sha']==os.environ['RPCS3_CORE_HOST_SHA']" in workflow
         assert "assert result['conclusion']=='success'" in workflow
         assert 'validate_core_input_identity(identity)' in workflow

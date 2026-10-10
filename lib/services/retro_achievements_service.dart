@@ -132,12 +132,6 @@ class RetroAchievementsService {
     }
   }
 
-  /// Checks if a username is registered on RetroAchievements.
-  static Future<bool> userExists(String username, {String? apiKey}) async {
-    final user = await getUserProfile(username, apiKey: apiKey);
-    return user != null;
-  }
-
   /// Fetches a comprehensive summary for a user, including recent games and achievements.
   ///
   /// Employs a cache-busting timestamp to ensure fresh data.
@@ -296,23 +290,6 @@ class RetroAchievementsService {
     return RetroAchievementCommentsPage.fromJson(
       Map<String, dynamic>.from(decoded),
     );
-  }
-
-  /// Resolves a game's information and user progress using a file hash.
-  @Deprecated(
-    'The Web API does not support hash lookup on the user-progress endpoint. '
-    'Resolve the hash to a game ID locally, then call getGameInfoAndUserProgress.',
-  )
-  static Future<GameInfoAndUserProgress?> searchGameByHash(
-    String md5Hash,
-    String username, {
-    String? apiKey,
-  }) async {
-    _log.w(
-      'Ignoring unsupported RA hash-only lookup for $md5Hash. '
-      'Resolve a game ID from the local hash database first.',
-    );
-    return null;
   }
 
   static const String apiGetUserAwards = 'API_GetUserAwards.php';
@@ -493,66 +470,5 @@ class RetroAchievementsService {
 
     final data = json.decode(response.body);
     return data as Map<String, dynamic>;
-  }
-
-  /// Searches for games by name within a specific console category.
-  ///
-  /// Performs normalized string matching (removing special characters and
-  /// excessive whitespace) to improve discovery.
-  static Future<List<Map<String, dynamic>>> searchGamesByName(
-    String gameName,
-    int consoleId, {
-    String? apiKey,
-  }) async {
-    try {
-      final url = Uri.parse('$_baseUrl/API_GetGameList.php').replace(
-        queryParameters: {
-          'i': consoleId.toString(),
-          'y': resolveApiKey(apiKey),
-        },
-      );
-
-      final response = await http.get(
-        url,
-        headers: {'User-Agent': 'NeoStation/1.0', 'Accept': 'application/json'},
-      );
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-
-        if (data is List) {
-          final normalizedSearchName = gameName
-              .toLowerCase()
-              .replaceAll(RegExp(r'[^\w\s]'), '')
-              .replaceAll(RegExp(r'\s+'), ' ')
-              .trim();
-
-          final matches = <Map<String, dynamic>>[];
-
-          for (final game in data) {
-            final gameTitle = game['Title']?.toString() ?? '';
-            final normalizedGameTitle = gameTitle
-                .toLowerCase()
-                .replaceAll(RegExp(r'[^\w\s]'), '')
-                .replaceAll(RegExp(r'\s+'), ' ')
-                .trim();
-
-            if (normalizedGameTitle == normalizedSearchName ||
-                normalizedGameTitle.contains(normalizedSearchName) ||
-                normalizedSearchName.contains(normalizedGameTitle)) {
-              matches.add(game);
-            }
-          }
-
-          return matches;
-        }
-      } else {
-        _log.e('HTTP error ${response.statusCode}: ${response.body}');
-      }
-    } catch (e) {
-      _log.e('Error searching games: $e');
-    }
-
-    return [];
   }
 }

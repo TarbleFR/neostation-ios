@@ -106,19 +106,6 @@ class PermissionService {
     }
   }
 
-  /// Requests general storage permissions, delegating to All Files Access on
-  /// Android 11+ for RetroArch compatibility.
-  static Future<bool> requestStoragePermissions() async {
-    if (Platform.isAndroid) {
-      final version = await _getAndroidVersion();
-      if (version >= 30) {
-        return await requestAllFilesAccess();
-      }
-      return await Permission.storage.request().isGranted;
-    }
-    return true;
-  }
-
   /// Checks if basic storage permissions are currently granted.
   static Future<bool> hasStoragePermissions() async {
     if (!Platform.isAndroid) {
@@ -137,15 +124,6 @@ class PermissionService {
     } catch (e) {
       _log.e('Error checking storage permissions: $e');
       return false;
-    }
-  }
-
-  /// Opens the generic application settings screen.
-  static Future<void> openAppPermissionSettings() async {
-    try {
-      await openAppSettings();
-    } catch (e) {
-      _log.e('Error opening app settings: $e');
     }
   }
 

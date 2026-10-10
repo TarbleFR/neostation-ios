@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/services.dart';
 import 'logger_service.dart';
@@ -14,30 +13,6 @@ class SafDirectoryService {
   static const platform = MethodChannel('com.neogamelab.neostation/game');
 
   static final _log = LoggerService.instance;
-
-  /// Initiates the SAF directory picker intent.
-  ///
-  /// Returns a persistent 'content://' URI if successful, or null if cancelled.
-  static Future<String?> requestDirectoryAccess() async {
-    if (!Platform.isAndroid) {
-      return null;
-    }
-
-    try {
-      final String? directoryUri = await platform.invokeMethod(
-        'openDirectoryPicker',
-      );
-
-      if (directoryUri != null) {
-        _log.i('SAF directory URI obtained: $directoryUri');
-      }
-
-      return directoryUri;
-    } on PlatformException catch (e) {
-      _log.e('Error opening SAF directory picker: ${e.message}');
-      return null;
-    }
-  }
 
   /// Checks if the application currently holds persistent permission for a given URI.
   static Future<bool> hasPermission(String uri) async {
@@ -209,60 +184,6 @@ class SafDirectoryService {
     }
   }
 
-  /// Creates a directory below a SAF directory and returns its URI.
-  static Future<String?> createDirectory(String parentUri, String name) async {
-    if (!Platform.isAndroid) return null;
-    try {
-      return await platform.invokeMethod<String>('createSafDirectory', {
-        'uri': parentUri,
-        'name': name,
-      });
-    } on PlatformException catch (e) {
-      _log.e('Error creating SAF directory: ${e.message}');
-      return null;
-    }
-  }
-
-  /// Copies a SAF file into a directory and removes the original.
-  static Future<bool> moveFile(
-    String sourceUri,
-    String targetDirectoryUri,
-    String name,
-  ) async {
-    if (!Platform.isAndroid) return false;
-    try {
-      final result = await platform.invokeMethod('moveSafFile', {
-        'sourceUri': sourceUri,
-        'targetUri': targetDirectoryUri,
-        'name': name,
-      });
-      return result == true;
-    } on PlatformException catch (e) {
-      _log.e('Error moving SAF file: ${e.message}');
-      return false;
-    }
-  }
-
-  /// Writes UTF-8 text to a new file below a SAF directory.
-  static Future<bool> writeTextFile(
-    String parentUri,
-    String name,
-    String contents,
-  ) async {
-    if (!Platform.isAndroid) return false;
-    try {
-      final result = await platform.invokeMethod('writeSafFile', {
-        'uri': parentUri,
-        'name': name,
-        'contents': utf8.encode(contents),
-      });
-      return result == true;
-    } on PlatformException catch (e) {
-      _log.e('Error writing SAF file: ${e.message}');
-      return false;
-    }
-  }
-
   /// Reads a specific byte range from a SAF file URI.
   ///
   /// Essential for processing large files (e.g., ROM archives or music tracks)
@@ -285,25 +206,6 @@ class SafDirectoryService {
       return bytes;
     } on PlatformException catch (e) {
       _log.e('Error reading SAF file range: ${e.message}');
-      return null;
-    }
-  }
-
-  /// Reads the entire contents of a SAF file URI.
-  ///
-  /// Uses file descriptor streaming for efficiency. Returns null on failure.
-  static Future<Uint8List?> readFile(String uri) async {
-    if (!Platform.isAndroid) {
-      return null;
-    }
-
-    try {
-      final Uint8List? bytes = await platform.invokeMethod('readSafFile', {
-        'uri': uri,
-      });
-      return bytes;
-    } on PlatformException catch (e) {
-      _log.e('Error reading SAF file: ${e.message}');
       return null;
     }
   }

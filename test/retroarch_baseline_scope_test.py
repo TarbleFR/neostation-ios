@@ -2,6 +2,7 @@
 import hashlib
 import json
 import pathlib
+import re
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -35,6 +36,15 @@ class RetroArchBaselineScope(unittest.TestCase):
                     for current, original in edits:
                         self.assertEqual(data.count(current), 1)
                         data = data.replace(current, original, 1)
+                if name == 'lib/main.dart':
+                    # Build433, at the maintainer's request (10 October 2026):
+                    # saved library folders are found again at startup after
+                    # iOS moved an app container. Exactly these three marked
+                    # blocks are removed; every other byte stays 419.
+                    data, count = re.subn(
+                        rb'(?m)^[ \t]*// LIBRARY_RELOCATION_BEGIN: (\w+)\n.*?^[ \t]*// LIBRARY_RELOCATION_END: \1\n',
+                        b'', data, flags=re.S)
+                    self.assertEqual(count, 3)
                 self.assertEqual(hashlib.sha256(data).hexdigest(), expected)
 
     def test_native_sources_keep_their_existing_identity(self):

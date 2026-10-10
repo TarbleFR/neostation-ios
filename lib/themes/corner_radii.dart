@@ -57,12 +57,6 @@ class CornerRadii extends ThemeExtension<CornerRadii> {
   BorderRadius get radiusExternal => BorderRadius.circular(_radiusExternal.r);
   BorderRadius get radiusInternal => BorderRadius.circular(_radiusInternal.r);
 
-  /// Raw design-time radius values (before flutter_screenutil scaling).
-  double get radiusExternalRaw => _radiusExternal;
-  double get radiusInternalRaw => _radiusInternal;
-
-  /// Scaled raw radius values, for widgets that expect a `double` radius.
-  double get radiusExternalRadius => _radiusExternal.r;
   double get radiusInternalRadius => _radiusInternal.r;
 
   static CornerRadii of(BuildContext context) {

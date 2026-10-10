@@ -7,7 +7,8 @@ frontend, external bundle identifier or external app launcher is used.
 Source: https://github.com/XITRIX/rpcs3
 Commit: `22f1152783cef1f7e04af7b1c895173e28fd5b03` (iOS ABI 30).
 The iOS platform adapters are required to run the library inside NeoStation.
-The build keeps LLVM/AArch64 and applies `patch_rpcs3_embedded_boot.py`.
+The build keeps LLVM/AArch64 and applies the single reviewed delta
+`build-utils/rpcs3/embedded-core.patch` (see `build-utils/materialize_rpcs3_core.py`).
 
 The upstream temporary LLVM allocation ownership is retained. The Build 233
 no-release patch was removed because `reset_runtime()` releases only the low

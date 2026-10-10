@@ -11,7 +11,6 @@ import '../models/retro_achievements_game_info.dart';
 import '../models/retro_achievements_gotw.dart';
 import '../models/retro_achievements_user_awards.dart';
 import 'retro_achievements_credentials.dart';
-import 'retroachievements/strategy_factory.dart';
 
 /// Provider responsible for managing the integration with RetroAchievements.org.
 ///
@@ -44,47 +43,11 @@ class RetroAchievementsProvider extends ChangeNotifier {
 
   static final _log = LoggerService.instance;
 
-  /// Whether a ROM scanning process for RA compatibility is active.
-  bool _isScanning = false;
-
-  /// Normalized progress of the ROM scan (0.0 to 1.0).
-  final double _scanProgress = 0.0;
-
-  /// Human-readable status message for the scan operation.
-  String _scanStatus = '';
-
-  /// Total number of ROMs identified for the scan.
-  final int _totalRoms = 0;
-
-  /// Count of ROMs processed in the current scan.
-  final int _processedRoms = 0;
-
-  /// Count of ROMs that were successfully identified as RA-compatible.
-  final int _retroAchievementsCompatibleRoms = 0;
-
-  /// History of identifiers processed in the current scanning session.
-  final List<String> _processedItems = [];
-
-  /// Total count of ROMs in the user's local database.
-  int _totalLocalRoms = 0;
-
-  /// Count of local ROMs that have a valid RA hash.
-  int _retroAchievementsCompatibleLocalRoms = 0;
-
-  /// Whether local statistics have been successfully computed.
-  bool _localStatsLoaded = false;
-
   /// Full user summary including recent activity and badges.
   RetroAchievementsUserSummary? _userSummary;
 
-  /// Whether the full user summary has been loaded.
-  bool _summaryLoaded = false;
-
   /// Memory cache for detailed game metadata and user progress, keyed by Game ID.
   final Map<int, GameInfoAndUserProgress> _gameInfoCache = {};
-
-  /// Mapping of game titles to their corresponding RetroAchievements Game IDs.
-  final Map<String, int> _gameIdMapping = {};
 
   /// Current "Game of the Week" metadata.
   RetroAchievementsGOTW? _gotw;
@@ -132,27 +95,9 @@ class RetroAchievementsProvider extends ChangeNotifier {
   String get username => _username;
   String get apiKey => _apiKey;
 
-  bool get isScanning => _isScanning;
-  double get scanProgress => _scanProgress;
-  String get scanStatus => _scanStatus;
-  int get totalRoms => _totalRoms;
-  int get processedRoms => _processedRoms;
-  int get retroAchievementsCompatibleRoms => _retroAchievementsCompatibleRoms;
-  List<String> get processedItems => _processedItems;
-
-  int get totalLocalRoms => _totalLocalRoms;
-  int get retroAchievementsCompatibleLocalRoms =>
-      _retroAchievementsCompatibleLocalRoms;
-  bool get localStatsLoaded => _localStatsLoaded;
-
   RetroAchievementsUserSummary? get userSummary => _userSummary;
-  bool get summaryLoaded => _summaryLoaded;
-
-  Map<int, GameInfoAndUserProgress> get gameInfoCache => _gameInfoCache;
-  Map<String, int> get gameIdMapping => _gameIdMapping;
 
   RetroAchievementsGOTW? get gotw => _gotw;
-  bool get gotwLoaded => _gotwLoaded;
 
   /// Whether the current user has already earned the Achievement of the Week.
   bool get gotwEarned {
@@ -171,19 +116,15 @@ class RetroAchievementsProvider extends ChangeNotifier {
   bool get userAwardsLoading => _userAwardsLoading;
   String? get userAwardsError => _userAwardsError;
   List<RetroAchievementRecentUnlockItem> get recentUnlocks => _recentUnlocks;
-  bool get recentUnlocksLoaded => _recentUnlocksLoaded;
   bool get recentUnlocksLoading => _recentUnlocksLoading;
   String? get recentUnlocksError => _recentUnlocksError;
   List<RetroAchievementRecentlyPlayedGameItem> get recentlyPlayedGames =>
       _recentlyPlayedGames;
-  bool get recentlyPlayedLoaded => _recentlyPlayedLoaded;
   bool get recentlyPlayedLoading => _recentlyPlayedLoading;
   String? get recentlyPlayedError => _recentlyPlayedError;
   RetroAchievementCompletionProgressSummary? get completionProgress =>
       _completionProgress;
-  bool get completionProgressLoaded => _completionProgressLoaded;
   bool get completionProgressLoading => _completionProgressLoading;
-  String? get completionProgressError => _completionProgressError;
   bool get gotwLoading => _gotwLoading;
   String? get gotwError => _gotwError;
   OwnedWeekGameResolution? get ownedWeekGame => _ownedWeekGame;
@@ -233,7 +174,6 @@ class RetroAchievementsProvider extends ChangeNotifier {
 
         await _saveRAUserToConfig(_username);
         await _saveRAApiKeyToConfig(_apiKey);
-        await loadLocalStats();
         unawaited(loadUserSummary());
 
         notifyListeners();
@@ -264,7 +204,6 @@ class RetroAchievementsProvider extends ChangeNotifier {
     }
 
     if (!hasResolvedApiKey) {
-      _summaryLoaded = false;
       _error = _dashboardApiKeyError;
       notifyListeners();
       return false;
@@ -281,18 +220,15 @@ class RetroAchievementsProvider extends ChangeNotifier {
 
       if (summary != null) {
         _userSummary = summary;
-        _summaryLoaded = true;
         notifyListeners();
         return true;
       } else {
         _error = 'User summary could not be loaded';
-        _summaryLoaded = false;
         notifyListeners();
         return false;
       }
     } catch (e) {
       _error = _describeApiError(e, 'Error loading user summary');
-      _summaryLoaded = false;
       _log.e('$_error');
       notifyListeners();
       return false;
@@ -543,7 +479,6 @@ class RetroAchievementsProvider extends ChangeNotifier {
     _apiKey = '';
     _error = null;
     _userSummary = null;
-    _summaryLoaded = false;
     _gotw = null;
     _gotwLoaded = false;
     _gotwLoading = false;
@@ -576,52 +511,8 @@ class RetroAchievementsProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Calculates the RetroAchievements-specific hash for a given ROM file.
-  Future<String?> calculateRomRAHash(String filePath, String? systemId) async {
-    return await _calculateRAHash(filePath, systemId);
-  }
-
-  /// Internal logic to dispatch hash calculation to the appropriate platform strategy.
-  Future<String?> _calculateRAHash(String filePath, String? systemId) async {
-    try {
-      final strategy = RetroAchievementsStrategyFactory.getStrategy(systemId);
-      return await strategy.calculateHash(filePath);
-    } catch (e) {
-      _log.e('Error calculating RA hash for $filePath: $e');
-      return null;
-    }
-  }
-
   void _setLoading(bool loading) {
     _isLoading = loading;
-    notifyListeners();
-  }
-
-  /// Interrupts an active ROM scanning operation.
-  void stopScanning() {
-    _isScanning = false;
-    _scanStatus = 'Scan stopped by user';
-    notifyListeners();
-  }
-
-  /// Loads ROM statistics (total count and RA-compatible count) from the local database.
-  Future<void> loadLocalStats() async {
-    try {
-      final stats = await RetroAchievementsRepository.getLocalRomStats();
-      _totalLocalRoms = stats.totalRoms;
-      _retroAchievementsCompatibleLocalRoms = stats.raCompatibleRoms;
-      _localStatsLoaded = true;
-      notifyListeners();
-    } catch (e) {
-      _log.e('Error loading local stats: $e');
-      _localStatsLoaded = false;
-      notifyListeners();
-    }
-  }
-
-  /// Resets the current error state.
-  void clearError() {
-    _error = null;
     notifyListeners();
   }
 

@@ -48,12 +48,6 @@ abstract final class Rpcs3TitleCatalogService {
     return title == null || title.isEmpty ? null : title;
   }
 
-  @visibleForTesting
-  static String? resolveFromCatalogForTesting(
-    String titleId,
-    Map<String, String> catalog,
-  ) => resolveFromCatalog(titleId, catalog);
-
   static Future<Map<String, String>> loadTitles({
     bool allowNetwork = true,
   }) async {

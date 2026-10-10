@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:path/path.dart' as path;
 import '../config_service.dart';
 
 /// Media resolution helpers for ScreenScraper downloads.
@@ -104,18 +103,5 @@ class ScreenscraperMediaResolver {
     }
 
     return bestMedia;
-  }
-
-  /// Verifies if a specific media asset exists in the local cache.
-  static Future<bool> checkFileExists(
-    String relativePath,
-    String userDataDir,
-  ) async {
-    try {
-      final fullPath = path.join(userDataDir, relativePath);
-      return await File(fullPath).exists();
-    } catch (e) {
-      return false;
-    }
   }
 }

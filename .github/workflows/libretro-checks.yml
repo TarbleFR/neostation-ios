@@ -12,7 +12,15 @@ name: Libretro engine checks
     - lib/services/game/game_launch_service.dart
     - lib/screens/game_screen/my_games_list.dart
     - lib/screens/game_screen/game_settings_dialog/game_settings_emulator_tab.dart
+    - lib/screens/libretro/**
+    - lib/screens/settings_screen/new_settings_options/directories_settings_content.dart
+    - lib/services/ios_library_root_relocation.dart
+    - lib/services/neostation_rom_library.dart
+    - lib/widgets/setup_wizard.dart
+    - lib/main.dart
     - test/libretro_*
+    - test/ios_library_root_relocation_test.dart
+    - test/neostation_rom_library_test.dart
     - test/libretro_host/**
     - build-utils/libretro/**
     - build-utils/validate_libretro_ipa.py
@@ -37,7 +45,16 @@ jobs:
         xcode-version: '26.3'
     - name: Run the portable host against a test core
       run: python3 test/libretro_host_test.py
+    - name: Run the portable frontend modules (geometry, controls, settings, skins)
+      # Runs even when an earlier native check failed, so one CI round reports every
+      # native problem; the job still fails.
+      if: ${{ !cancelled() }}
+      run: python3 test/libretro_frontend_test.py
+    - name: Compile and render every shader preset with Metal
+      if: ${{ !cancelled() }}
+      run: python3 test/libretro_shader_test.py
     - name: Compile every bridge and rcheevos source for iPhone
+      if: ${{ !cancelled() }}
       run: python3 test/libretro_ios_syntax_test.py
   dart:
     runs-on: ubuntu-24.04
@@ -61,7 +78,7 @@ jobs:
         flutter analyze --no-fatal-infos
     - name: Libretro, launch and library tests
       run: |
-        flutter test test/libretro_locale_test.dart test/libretro_core_catalog_test.dart test/frontend_media_gate_test.dart test/rom_folder_registration_test.dart test/library_scan_restart_test.dart test/retroarch_library_protocol_test.dart test/retroarch_library_cache_test.dart test/retroarch_launch_diagnostics_test.dart test/retroarch_sync_locale_test.dart test/ios_selective_rollback_test.dart test/armsx2_retroarch_routing_isolation_test.dart test/game_repository_test.dart test/system_repository_test.dart test/rpcs3_embedded_identity_test.dart test/audio_policy_service_test.dart
+        flutter test test/libretro_locale_test.dart test/libretro_core_catalog_test.dart test/frontend_media_gate_test.dart test/rom_folder_registration_test.dart test/library_scan_restart_test.dart test/retroarch_library_protocol_test.dart test/retroarch_library_cache_test.dart test/retroarch_launch_diagnostics_test.dart test/retroarch_sync_locale_test.dart test/ios_selective_rollback_test.dart test/armsx2_retroarch_routing_isolation_test.dart test/game_repository_test.dart test/system_repository_test.dart test/rpcs3_embedded_identity_test.dart test/audio_policy_service_test.dart test/libretro_skin_service_test.dart test/libretro_skin_catalog_test.dart test/libretro_skin_manager_test.dart test/libretro_playlist_actions_test.dart test/ios_library_root_relocation_test.dart test/neostation_rom_library_test.dart
     - name: Download the libretro cores pinned by the delivery
       uses: actions/download-artifact@v4
       with:
@@ -73,6 +90,8 @@ jobs:
       run: |
         python3 test/libretro_core_options_test.py --cores dist/libretro
         python3 test/libretro_route_contract_test.py
+        python3 test/libretro_shader_catalog_test.py
+        python3 test/libretro_frontend_ui_contract_test.py
         python3 test/integrated_import_tab_contract_test.py
         python3 test/localization_12_locale_coverage_test.py
         python3 test/cheats_media_source_contract_test.py

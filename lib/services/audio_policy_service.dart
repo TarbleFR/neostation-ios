@@ -30,10 +30,8 @@ class AudioPolicyService with WidgetsBindingObserver {
 
   bool _initialized = false;
   Future<void> _serial = Future<void>.value();
-  int _applicationCount = 0;
 
   bool get isInitialized => _initialized;
-  int get applicationCountForTesting => _applicationCount;
 
   Future<void> initialize() async {
     if (_initialized) return;
@@ -66,9 +64,7 @@ class AudioPolicyService with WidgetsBindingObserver {
       try {
         final applied =
             await ExternalFolderAccess.configureAudioSessionForSilentMode();
-        if (applied == true) {
-          _applicationCount++;
-        } else {
+        if (applied != true) {
           _log.w(
             '[AudioPolicy] Native ambient session was not applied: '
             '$reason',

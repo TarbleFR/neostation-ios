@@ -1,11 +1,9 @@
 import 'dart:io';
 import 'dart:async';
-import 'package:path/path.dart' as path;
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import '../models/game_model.dart';
 import '../models/system_model.dart';
-import '../providers/file_provider.dart';
 import 'music_player_service.dart';
 import 'game/game_list_service.dart';
 import 'game/favorites_service.dart';
@@ -137,21 +135,6 @@ class GameService {
   /// Delegates to [FavoritesService].
   static Future<void> recordGamePlayed(GameModel game) =>
       FavoritesService.recordGamePlayed(game);
-
-  /// Verifies if a valid screenshots folder exists for the specified system.
-  static bool hasScreenshotsFolder(String systemFolderName) {
-    final fileProvider = FileProvider();
-    if (fileProvider.isInitialized) {
-      final screenshotsPath = path.join(
-        fileProvider.mediaPath ?? 'media',
-        'screenshots',
-        systemFolderName,
-      );
-      return Directory(screenshotsPath).existsSync();
-    }
-    final screenshotsPath = path.join('media', 'screenshots', systemFolderName);
-    return Directory(screenshotsPath).existsSync();
-  }
 
   /// Gracefully terminates the active game session and finalizes playtime tracking.
   /// Delegates to [GameSessionManager].

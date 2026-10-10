@@ -8,9 +8,10 @@ Ces règles expriment les exigences du mainteneur du 18 septembre 2026 et s'appl
 - Travailler sur une seule version candidate clairement identifiée pendant le cycle de correction. Chaque modification crée naturellement un nouveau SHA : consigner ce SHA exact, ne pas mélanger des binaires ou des résultats de tests provenant de révisions différentes.
 - Ne jamais réutiliser le nom d'un artefact pour faire passer une autre révision pour celle déjà testée. Associer version, SHA, entrées natives et résultats de validation.
 
-## Branche réservée à Claude — consigne du 9 octobre 2026
+## Branche de travail unique — dernière consigne du mainteneur du 9 octobre 2026
 
-- La branche `Claude` (ancienne `experimental`, renommée à la demande du mainteneur au commit `0bf904a`, source de la Build 423) est réservée aux travaux de Claude. Claude y fait toutes ses modifications, commits, CI et builds, et ne consulte ni n'utilise aucune autre branche.
+- À la demande du mainteneur, tous les assistants, y compris ChatGPT/Codex et Claude, travaillent désormais uniquement sur la branche `Claude` (ancienne `experimental`, renommée au commit `0bf904a`, source de la Build 423). Toutes les modifications, commits, CI et builds de travail se font sur cette branche. Cette consigne remplace la réservation précédente de cette branche à l'assistant Claude.
+- Les branches de travail `ChatGPT` et `neoplay-v2-frames` ont été supprimées ; aucune branche NeoSwap n'était présente. Ne pas recréer de branches de travail ChatGPT, NeoSwap ou NeoPlay sans demande explicite du mainteneur. La règle existante exigeant une demande explicite pour modifier `main`, `backup` ou les références de baseline reste applicable.
 - Les workflows déclenchés par push filtrent encore `experimental` : sur `Claude`, une build ou un contrôle se lance par `workflow_dispatch` avec `--ref Claude`.
 
 ## Décision du mainteneur — lancement RetroArch, 9 octobre 2026 après-midi
@@ -25,6 +26,12 @@ Ces règles expriment les exigences du mainteneur du 18 septembre 2026 et s'appl
 - Le moteur est le pont `packages/libretro_internal_bridge` : hôte libretro natif, session plein écran, menu en jeu, sauvegardes, états, triches et RetroAchievements. Les cœurs officiels du buildbot sont empaquetés par `.github/workflows/libretro-cores.yml` (artefact `LibretroCores-<sha>`), copiés après `xcodebuild` et chargés seulement au lancement d'un jeu.
 - Aucun des dix fichiers de bibliothèque verrouillés sur la Build 419 n'est modifié : les jeux importés vont dans `Documents/roms/<système>`, enregistré comme dossier de bibliothèque, et les ROM des dossiers déjà liés sont lues sur place.
 - La route `retroarch://` reste pour les systèmes sans cœur intégré, pour les jeux connus seulement de la bibliothèque RetroArch et pour les jeux réglés sur « Application RetroArch (externe) ».
+
+## Décisions du mainteneur — bibliothèques, 10 octobre 2026
+
+- Les jeux importés vont dans une bibliothèque existante de l’utilisateur, jamais dans une seconde bibliothèque créée à côté : choix parmi les dossiers enregistrés accessibles (direct s’il n’y en a qu’un) ; le dossier `roms` de NeoStation n’est utilisé que si aucune bibliothèque n’est enregistrée ; un jeu déjà présent (même nom, même taille) n’est pas recopié.
+- Première ouverture iOS : NeoStation propose de créer un dossier par console dans `NeoStation › roms` (recommandé, sans autre action), de **déplacer** une bibliothèque existante dans ce dossier (l’autre dossier n’est ensuite plus utilisé), ou de lier un dossier sans le déplacer. Les mêmes actions sont dans Réglages › Dossiers › Consoles intégrées.
+- Autorisation explicite de modifier le démarrage (`lib/main.dart`, verrouillé sur la 419) : les dossiers enregistrés introuvables après le déplacement d’un conteneur iOS sont retrouvés au même endroit du conteneur actuel (blocs `LIBRARY_RELOCATION_*`, exception documentée dans `test/retroarch_baseline_scope_test.py`). Aucun fichier de jeu n’est déplacé, aucune ligne de jeu n’est réécrite. Voir `docs/library-folders-2026-10-10.md`.
 
 ## Précision du mainteneur — 9 octobre 2026, 13 h
 

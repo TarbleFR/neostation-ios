@@ -62,11 +62,6 @@ abstract final class AppTabs {
 /// Facilitates tab switching and navigation lifecycle control from deep within
 /// the component tree without requiring direct context propagation.
 class AppNavigation {
-  /// Switches directly to [index] (see [AppTabs]).
-  static void goToTab(int index) {
-    AppScreenState._selectTabStatic(index);
-  }
-
   /// Temporarily suspends global gamepad and keyboard navigation.
   static void deactivate() {
     AppScreenState.deactivateNavigation();
@@ -368,10 +363,6 @@ class AppScreenState extends State<AppScreen> with WidgetsBindingObserver {
 
   static void _navigateToPreviousTabStatic() {
     _currentInstance?._navigateToPreviousTab();
-  }
-
-  static void _selectTabStatic(int index) {
-    _currentInstance?._onTabSelected(index);
   }
 
   // ==========================================

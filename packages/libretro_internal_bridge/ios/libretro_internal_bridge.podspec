@@ -20,7 +20,7 @@ starts; no external RetroArch application is involved.
   s.platform = :ios, '17.4'
   s.ios.deployment_target = '17.4'
   s.frameworks = 'UIKit', 'Foundation', 'Metal', 'QuartzCore', 'AVFoundation', 'GameController',
-                 'OpenGLES', 'CoreVideo', 'Security'
+                 'OpenGLES', 'CoreVideo', 'Security', 'ImageIO', 'CoreGraphics'
   s.libraries = 'z'
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES',

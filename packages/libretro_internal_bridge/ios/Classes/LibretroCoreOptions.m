@@ -23,6 +23,7 @@ static NSString *StringOrEmpty(const char *value) {
   NSMutableDictionary<NSString *, NSString *> *_stored;
   NSMutableDictionary<NSString *, NSString *> *_overrides;
   NSMutableDictionary<NSString *, NSString *> *_defaults;
+  NSMutableSet<NSString *> *_locked;
   NSMutableDictionary<NSString *, NSData *> *_cStrings;
   BOOL _updatePending;
 }
@@ -34,6 +35,7 @@ static NSString *StringOrEmpty(const char *value) {
     _options = [NSMutableArray array];
     _overrides = [NSMutableDictionary dictionary];
     _defaults = [NSMutableDictionary dictionary];
+    _locked = [NSMutableSet set];
     _cStrings = [NSMutableDictionary dictionary];
     _stored = [NSMutableDictionary dictionary];
     NSData *data = [NSData dataWithContentsOfFile:storePath];
@@ -65,17 +67,47 @@ static NSString *StringOrEmpty(const char *value) {
   }
 }
 
+/// Merges `values` into `target` (session overrides or NeoStation defaults).
+/// Values given before the core declares its options are kept and resolved
+/// once declared. Only keys whose effective value changes lose their cached
+/// C string, and a change of a declared option is flagged for the core.
+- (void)mergeValuesLocked:(NSDictionary<NSString *, NSString *> *)values
+                     into:(NSMutableDictionary<NSString *, NSString *> *)target
+                   locked:(BOOL)locked {
+  for (id key in values) {
+    id value = values[key];
+    if (![key isKindOfClass:[NSString class]] || ![value isKindOfClass:[NSString class]]) continue;
+    NSString *previous = [self effectiveValueLocked:key];
+    target[key] = value;
+    if (locked) [_locked addObject:key];
+    NSString *current = [self effectiveValueLocked:key];
+    if (current == previous || [current isEqualToString:previous]) continue;
+    [_cStrings removeObjectForKey:key];
+    if ([self optionForKeyLocked:key] != nil) _updatePending = YES;
+  }
+}
+
 - (void)applySessionOverrides:(NSDictionary<NSString *, NSString *> *)overrides {
   @synchronized(self) {
-    [_overrides addEntriesFromDictionary:overrides];
-    [_cStrings removeAllObjects];
+    [self mergeValuesLocked:overrides into:_overrides locked:NO];
+  }
+}
+
+- (void)lockSessionOverrides:(NSDictionary<NSString *, NSString *> *)overrides {
+  @synchronized(self) {
+    [self mergeValuesLocked:overrides into:_overrides locked:YES];
   }
 }
 
 - (void)applyDefaults:(NSDictionary<NSString *, NSString *> *)defaults {
   @synchronized(self) {
-    [_defaults addEntriesFromDictionary:defaults];
-    [_cStrings removeAllObjects];
+    [self mergeValuesLocked:defaults into:_defaults locked:NO];
+  }
+}
+
+- (BOOL)isLockedKey:(NSString *)key {
+  @synchronized(self) {
+    return [_locked containsObject:key];
   }
 }
 
@@ -233,6 +265,8 @@ static LibretroCoreOption *OptionFromValues(NSString *key, const char *desc, con
 
 - (BOOL)setValue:(NSString *)value forKey:(NSString *)key persist:(BOOL)persist {
   @synchronized(self) {
+    // NeoStation needs these values for the whole session (DS / 3DS screens).
+    if ([_locked containsObject:key]) return NO;
     LibretroCoreOption *option = [self optionForKeyLocked:key];
     if (option != nil && ![option.values containsObject:value]) return NO;
     NSString *previous = [self effectiveValueLocked:key];

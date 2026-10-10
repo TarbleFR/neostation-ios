@@ -440,11 +440,6 @@ abstract final class DusklightLocale {
       key: forLocale(locale, key),
   };
 
-  static String emptyLibraryText(BuildContext context) {
-    return emptyLibrary[localeKey(Localizations.localeOf(context))] ??
-        emptyLibrary['en']!;
-  }
-
   static String localeKey(Locale locale) => locale.languageCode == 'zh' &&
           (locale.scriptCode?.toLowerCase() == 'hant' ||
               ['TW', 'HK', 'MO'].contains(locale.countryCode?.toUpperCase()))

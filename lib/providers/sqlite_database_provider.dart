@@ -24,23 +24,15 @@ class SqliteDatabaseProvider extends ChangeNotifier {
   /// Metadata for all supported systems.
   List<SystemModel> _availableSystems = [];
 
-  /// Whether a data retrieval or scanning task is in progress.
-  bool _isLoading = false;
-
   /// Last error message encountered during database operations.
   String? _error;
-
-  /// Timestamp of the last successful database synchronization.
-  DateTime? _lastUpdate;
 
   /// Whether the provider has finished its initial data load.
   bool _initialized = false;
 
   // Getters
   Map<String, List<DatabaseGameModel>> get database => _database;
-  bool get isLoading => _isLoading;
   String? get error => _error;
-  DateTime? get lastUpdate => _lastUpdate;
   bool get initialized => _initialized;
 
   /// Initializes the provider by performing an initial full load of the database.
@@ -54,48 +46,32 @@ class SqliteDatabaseProvider extends ChangeNotifier {
     if (availableSystems != null) _availableSystems = availableSystems;
 
     try {
-      _setLoading(true);
+      notifyListeners();
       await loadDatabase();
       _initialized = true;
     } catch (e) {
       _error = 'Error initializing database provider: $e';
       _log.e('$_error');
     } finally {
-      _setLoading(false);
+      notifyListeners();
     }
-  }
-
-  /// Updates the current ROM folder configuration and available systems metadata.
-  void updateConfig({
-    List<String>? romFolders,
-    List<SystemModel>? availableSystems,
-  }) {
-    if (romFolders != null) _romFolders = romFolders;
-    if (availableSystems != null) _availableSystems = availableSystems;
-    notifyListeners();
   }
 
   /// Performs a full reload of all systems and their games from the SQLite database.
   Future<void> loadDatabase() async {
-    _setLoading(true);
+    notifyListeners();
     _error = null;
 
     try {
       _database = await GameRepository.loadDatabase();
-      _lastUpdate = DateTime.now();
       _log.i('Database loaded: ${_database.length} systems with games');
       notifyListeners();
     } catch (e) {
       _error = 'Error loading database: $e';
       _log.e('$_error');
     } finally {
-      _setLoading(false);
+      notifyListeners();
     }
-  }
-
-  /// Retrieves the list of games associated with a specific system from the in-memory cache.
-  List<DatabaseGameModel> getGamesForSystem(String systemFolderName) {
-    return _database[systemFolderName] ?? [];
   }
 
   /// Loads games for a specific system from SQLite and updates the internal cache.
@@ -120,7 +96,7 @@ class SqliteDatabaseProvider extends ChangeNotifier {
   /// Updates the local database and triggers specialized scrapers (e.g., Steam)
   /// if applicable.
   Future<ScanSummary> scanSystemRoms(SystemModel system) async {
-    _setLoading(true);
+    notifyListeners();
     _error = null;
 
     try {
@@ -135,7 +111,6 @@ class SqliteDatabaseProvider extends ChangeNotifier {
         SteamScraperService.scrapeSteamGames(provider: this);
       }
 
-      _lastUpdate = DateTime.now();
       notifyListeners();
       return summary;
     } catch (e) {
@@ -148,7 +123,7 @@ class SqliteDatabaseProvider extends ChangeNotifier {
         systemName: system.realName,
       );
     } finally {
-      _setLoading(false);
+      notifyListeners();
     }
   }
 
@@ -246,17 +221,6 @@ class SqliteDatabaseProvider extends ChangeNotifier {
     }
   }
 
-  /// Returns a consolidated list of all favorite games across all systems.
-  List<DatabaseGameModel> getAllFavoriteGames() {
-    final favoriteGames = <DatabaseGameModel>[];
-
-    for (final games in _database.values) {
-      favoriteGames.addAll(games.where((game) => game.isFavorite));
-    }
-
-    return favoriteGames;
-  }
-
   /// Returns a list of recently played games across all systems, sorted by timestamp.
   List<DatabaseGameModel> getRecentlyPlayedGames([int limit = 10]) {
     final playedGames = <DatabaseGameModel>[];
@@ -268,43 +232,6 @@ class SqliteDatabaseProvider extends ChangeNotifier {
     playedGames.sort((a, b) => b.lastPlayed!.compareTo(a.lastPlayed!));
 
     return playedGames.take(limit).toList();
-  }
-
-  /// Returns a list of the most frequently played games across all systems.
-  List<DatabaseGameModel> getMostPlayedGames([int limit = 10]) {
-    final playedGames = <DatabaseGameModel>[];
-
-    for (final games in _database.values) {
-      playedGames.addAll(games.where((game) => (game.playTime ?? 0) > 0));
-    }
-
-    playedGames.sort((a, b) => (b.playTime ?? 0).compareTo(a.playTime ?? 0));
-
-    return playedGames.take(limit).toList();
-  }
-
-  /// Performs a case-insensitive search for games by filename.
-  ///
-  /// Can be restricted to a specific [systemFolderName].
-  List<DatabaseGameModel> searchGames(
-    String query, [
-    String? systemFolderName,
-  ]) {
-    final lowerQuery = query.toLowerCase();
-    final allGames = <DatabaseGameModel>[];
-
-    if (systemFolderName != null) {
-      final games = _database[systemFolderName] ?? [];
-      allGames.addAll(games);
-    } else {
-      for (final games in _database.values) {
-        allGames.addAll(games);
-      }
-    }
-
-    return allGames
-        .where((game) => game.filename.toLowerCase().contains(lowerQuery))
-        .toList();
   }
 
   /// Retrieves a mapping of system folder names to their respective ROM counts.
@@ -333,12 +260,6 @@ class SqliteDatabaseProvider extends ChangeNotifier {
     await loadDatabase();
   }
 
-  /// Whether any games are currently loaded for the specified system.
-  bool hasGamesForSystem(String systemFolderName) {
-    final games = _database[systemFolderName];
-    return games != null && games.isNotEmpty;
-  }
-
   /// Returns the total number of games currently indexed in the database.
   int get totalGames {
     return _database.values
@@ -361,16 +282,5 @@ class SqliteDatabaseProvider extends ChangeNotifier {
         .expand((games) => games)
         .where((game) => game.lastPlayed != null)
         .length;
-  }
-
-  void _setLoading(bool loading) {
-    _isLoading = loading;
-    notifyListeners();
-  }
-
-  /// Resets the current error state.
-  void clearError() {
-    _error = null;
-    notifyListeners();
   }
 }

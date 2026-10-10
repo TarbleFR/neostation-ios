@@ -81,7 +81,10 @@ void main() {
     final ports = router.substring(start, end);
     expect(ports, contains('DusklightLocale.launchError(locale, report.errorCode)'));
     expect(ports, contains(r'${report.technicalDetails}\n${report.message}'));
-    final widget = File('lib/widgets/dusklight_internal_playlist_actions.dart').readAsStringSync();
+    // The Ports menu imports Dusklight games since the old Dusklight-only
+    // widget was removed as unused; it must not branch on French either.
+    final widget = File('lib/widgets/ports_internal_playlist_actions.dart').readAsStringSync();
+    expect(widget, contains('DusklightInternalService.importGames'));
     expect(widget, isNot(contains('bool get _fr')));
   });
 }

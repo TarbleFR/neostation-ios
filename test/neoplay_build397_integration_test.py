@@ -68,7 +68,9 @@ REVIEWED_RPCS3_HOST_POSTIMAGES = {
     # gow3_mlaa_bypass milestones; host_cpu_topology milestone at game boot.
     # Build412 graph: RPCS3ProcessFootprintBytes feeds the overlay's device RAM line;
     # boot milestones are mirrored before the budget filter the boot-stability test compiles.
-    'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm': '476df0044014f4104b1187d1d24b96be0182371a0dabca3a146b6658cc8fe530',
+    # 9 October 2026: the thirteen Build260 action-sheet menu methods nothing
+    # called were deleted (pure deletion); the rest of this postimage is unchanged.
+    'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm': '8036e94ece85d7f6f7654720dc7d25ba03c480faeffd5c76853ee7d35285397c',
     'packages/rpcs3_internal_bridge/ios/Classes/RPCS3PerformanceSnapshot.h': 'badde59ea1202e288e48bd8c318d61fde82b764815a83484da37db075be69c79',
 }
 APPROVED_RPCS3_MENU_FILES = frozenset({
@@ -166,7 +168,8 @@ REVIEWED_POST410_POSTIMAGES = {
     # Build412 (7 October 2026): God of War III profile adds Accurate SPU
     # Reservations false and Frame limit 30 as measured hypotheses; nothing else.
     'lib/services/rpcs3_game_profile_service.dart': '628b961602c6456cb0051cb88ddd0a4247cd48a775adbe2766a242718308bcfb',
-    'lib/services/rpcs3_internal_service.dart': '683dd34422949a3bd8345c9dcfff9f32adbb3c86e2cf0bd36916ca2bf7a7cc27',
+    # 9 October 2026: only the uncalled gameplayMode getter was deleted.
+    'lib/services/rpcs3_internal_service.dart': '939974feda45a42ca48fd9fb5040dd400c24aea4634e6d28beb82cb559ef94c2',
     # Explicit busy result and nonblocking donor acquisition. Build419 also
     # retires an entirely idle donor under the same pool mutex as acquisition.
     'native/neoswap-donation/Broker.h': 'f551f55fb5e77e5594fb0ef8e3de28331b1e8c4c308ee761cda2aaded98fb6b3',
@@ -198,6 +201,27 @@ APPROVED_BUILD414_FILES = frozenset(REVIEWED_BUILD414_POSTIMAGES)
 REVIEWED_BUILD421_RETROARCH_POSTIMAGES = {'lib/services/config_service.dart': 'ac6aefc1d972387c0253af0c9490407f0bc2abbe4a2b7716225962aeafcee80b', 'lib/services/retroarch_folder_recovery.dart': 'b78a9641c350b4801a312affcd433d0624706525a30fd478bd9f5c6779f6b659', 'lib/services/retroarch_library_protocol.dart': 'ba1deeca3d900ff2a831acc258d77efd1a52c24314ce475101c471a21bee0f96', 'lib/services/retroarch_library_service.dart': '8b2a0408ef516e66101de88601725fd5e1ed575d596a2a83aa576326c28ac691', 'lib/services/retroarch_library_importer.dart': 'c00b9234d7378b5991b76688ba9c4c2b70ed08797719e40d65ce404d044a8d55', 'lib/services/ios_rom_library_root_resolver.dart': '5b2cba22d2fbf518f5d337df03cc0cb927d8c4619682344aeb838318e4baef29'}
 
 APPROVED_BUILD421_RETROARCH_FILES = frozenset(REVIEWED_BUILD421_RETROARCH_POSTIMAGES)
+# Build434 (10 October 2026): measured host jetsam envelope in the budget
+# policy, demand-driven size-class shelves for relay host loans, cold-storage
+# prefetch planner and the plugin diagnostics exporting them. Core, relay and
+# donor extensions, storage engine and every other native source unchanged.
+APPROVED_BUILD434_FILES = frozenset({
+    'packages/neo_swap/ios/Classes/NeoSwap.cpp',
+    'packages/neo_swap/ios/Classes/NeoSwapBudget.h',
+    'packages/neo_swap/ios/Classes/NeoSwapColdPrefetch.h',
+    'packages/neo_swap/ios/Classes/NeoSwapHost.h',
+    'packages/neo_swap/ios/Classes/NeoSwapPlugin.mm',
+})
+APPROVED_BUILD435_FILES = frozenset({
+    'build-utils/rpcs3/embedded-core.patch',
+    'build-utils/rpcs3/canonical-source.json',
+    'build-utils/build_rpcs3_embedded_core.sh',
+    'build-utils/rpcs3_core_syntax_gate.py',
+    'test/neo_swap_core_pin_test.py',
+    'test/rpcs3_build352_gow3_memory_test.py',
+    'test/check_neo_swap_scope.py',
+    'native/import-memory-candidate.json',
+})
 
 def original(path, revision=BASE):
     return subprocess.check_output(['git', 'show', revision + ':' + path], cwd=ROOT)
@@ -209,7 +233,8 @@ class Build398Integration(unittest.TestCase):
         self.assertEqual(changed - APPROVED_RPCS3_MENU_FILES - APPROVED_MANAGED_SWAP_FILES
                          - APPROVED_SWAP_INTEGRATION_FILES - APPROVED_ARMSX2_INTEGRATION_FILES
                          - APPROVED_BUILD409_FILES - APPROVED_POST410_FILES - APPROVED_BUILD414_FILES
-                         - APPROVED_BUILD421_RETROARCH_FILES, set(),
+                         - APPROVED_BUILD421_RETROARCH_FILES - APPROVED_BUILD434_FILES
+                         - APPROVED_BUILD435_FILES, set(),
                          'Only explicitly reviewed integrations and exact post410/RetroArch postimages may differ from Build396')
         for path, expected in REVIEWED_BUILD421_RETROARCH_POSTIMAGES.items():
             self.assertEqual(hashlib.sha256((ROOT / path).read_bytes()).hexdigest(), expected, path)
@@ -311,9 +336,10 @@ class Build398Integration(unittest.TestCase):
         subprocess.run([sys.executable, str(ROOT / 'test/neoswap_ipa_previous_build_gate_test.py')], cwd=ROOT, check=True, timeout=60)
         self.assertIn('cp docs/neoplay/BUILD418.md build/private-test/Notes-NeoPlay-Build418.md', text)
         self.assertIn('cp docs/neoswap-build419-memory.md build/private-test/Notes-NeoSwap-Build419.md', text)
-        # The Build412 Core (writer-lock attribution): its inputs no longer match the Build411 Core pin.
-        self.assertIn("RPCS3_CORE_HOST_SHA: afb33454db50236485bd5ec963a722dcb5f65610", text)
-        self.assertIn("RPCS3_CORE_RUN_ID: '37620034517'", text)
+        # The Build435 Core (measured allowance, deferred SPU compilation, writer-lock
+        # precheck): its inputs no longer match the Build412 Core pin.
+        self.assertIn("RPCS3_CORE_HOST_SHA: 6fede58ae799214ce59cfecbae79b66d01d33b37", text)
+        self.assertIn("RPCS3_CORE_RUN_ID: '38068094552'", text)
         self.assertIn('needs: wait-evidence', text)
         self.assertIn("xcode-version: '26.3'", text)
         self.assertLess(text.index('python3 build-utils/configure_neoplay_ios.py'), text.index('pod install --project-directory=ios'))

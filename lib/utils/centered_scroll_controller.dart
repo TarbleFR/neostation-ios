@@ -32,7 +32,6 @@ class CenteredScrollController with WindowListener, WidgetsBindingObserver {
   int? _currentSelectedIndex;
   int _totalItems = 0;
   Size? _lastSize;
-  double _totalPadding = 0;
   double? _itemExtent;
   double _paddingTop = 0;
 
@@ -47,12 +46,6 @@ class CenteredScrollController with WindowListener, WidgetsBindingObserver {
     this.animationDuration = const Duration(milliseconds: 360),
     this.animationCurve = Curves.easeInOut,
   }) : scrollController = scrollController ?? ScrollController();
-
-  /// Sets the total vertical padding of the ListView (top + bottom).
-  /// Used to improve scroll centering accuracy.
-  void setListPadding(double padding) {
-    _totalPadding = padding;
-  }
 
   /// Sets the fixed height of each list item and the top padding of the list.
   ///
@@ -191,7 +184,7 @@ class CenteredScrollController with WindowListener, WidgetsBindingObserver {
       return null;
     }
     final contentHeight = scrollableHeight + viewportHeight;
-    return (contentHeight - _totalPadding) / _totalItems;
+    return contentHeight / _totalItems;
   }
 
   /// Computes the scroll offset that places the item at [index] at the configured
@@ -281,48 +274,6 @@ class CenteredScrollController with WindowListener, WidgetsBindingObserver {
         _log.e('CenteredScrollController: Error scrolling to index: $e');
       }
     });
-  }
-
-  /// Calculates the index of the item currently closest to the [centerPosition].
-  int? getCenteredItemIndex(int maxItems) {
-    if (!scrollController.hasClients || _totalItems == 0 || maxItems == 0) {
-      return null;
-    }
-
-    try {
-      final viewportHeight = scrollController.position.viewportDimension;
-      final currentOffset = scrollController.offset;
-      final scrollableHeight = scrollController.position.maxScrollExtent;
-
-      if (scrollableHeight == 0) {
-        return 0;
-      }
-
-      final itemHeight = _resolveItemHeight(viewportHeight, scrollableHeight);
-      if (itemHeight == null) {
-        return null;
-      }
-      final centerPositionInContent =
-          currentOffset + (viewportHeight * centerPosition);
-
-      int closestIndex = 0;
-      double closestDistance = double.infinity;
-
-      for (int i = 0; i < _totalItems; i++) {
-        final itemCenter = _paddingTop + (i * itemHeight) + (itemHeight / 2);
-        final distance = (itemCenter - centerPositionInContent).abs();
-
-        if (distance < closestDistance) {
-          closestDistance = distance;
-          closestIndex = i;
-        }
-      }
-
-      return closestIndex.clamp(0, maxItems - 1).toInt();
-    } catch (e) {
-      _log.e('CenteredScrollController: Error identifying centered index: $e');
-      return null;
-    }
   }
 
   /// Manually updates the tracked selected index without triggering a scroll.

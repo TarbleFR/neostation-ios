@@ -2,20 +2,24 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:battery_plus/battery_plus.dart';
 import 'package:material_symbols_icons/symbols.dart';
+import 'package:neoplay_bridge/neoplay_bridge.dart';
 import 'package:provider/provider.dart';
 
 import 'dart:async';
 import 'dart:io';
 
+import 'package:neostation/l10n/neoplay_companion_locale.dart';
 import 'package:neostation/l10n/rpcs3_ui_locale.dart';
 import 'package:neostation/providers/theme_provider.dart';
 import 'package:neostation/responsive.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:neostation/themes/app_themes.dart';
+import 'package:neostation/services/controller_battery_service.dart';
 import 'package:neostation/services/sfx_service.dart';
 import 'package:neostation/services/permission_service.dart';
 import 'package:neostation/services/rpcs3_internal_service.dart';
 import 'package:neostation/providers/sqlite_config_provider.dart';
+import 'package:neostation/widgets/header_battery.dart';
 import 'package:neostation/widgets/header_sort_dropdown.dart';
 import 'package:neostation/widgets/main_menu_tab_strip.dart';
 import 'package:neostation/widgets/bumper_glyph.dart';
@@ -46,7 +50,9 @@ class Header extends StatefulWidget {
 
 class HeaderState extends State<Header> {
   final Battery _battery = Battery();
-  int _batteryLevel = 100;
+  // Unknown until read: never show a level the device did not report.
+  int _batteryLevel = -1;
+  bool _batteryRetried = false;
   BatteryState? _batteryState;
   StreamSubscription<BatteryState>? _batteryStateSubscription;
   StreamSubscription<Rpcs3RuntimeState>? _rpcs3RuntimeSubscription;
@@ -68,6 +74,7 @@ class HeaderState extends State<Header> {
     );
     _getBatteryLevel();
     _listenToBatteryState();
+    ControllerBatteryService.instance.attach();
     _rpcs3RuntimeSubscription = Rpcs3InternalService.runtimeStates.listen((
       state,
     ) {
@@ -95,6 +102,7 @@ class HeaderState extends State<Header> {
   void dispose() {
     _timeUpdateTimer?.cancel();
     _batteryStateSubscription?.cancel();
+    ControllerBatteryService.instance.detach();
     _rpcs3RuntimeSubscription?.cancel();
     _jitStatusTimer?.cancel();
     for (final node in _tabFocusNodes) {
@@ -178,17 +186,25 @@ class HeaderState extends State<Header> {
           _batteryLevel = -1; // Indicate no battery
         });
       }
+      // iOS reports an unknown state right after battery monitoring is
+      // switched on: read again shortly instead of waiting a minute.
+      if (!_batteryRetried && Platform.isIOS) {
+        _batteryRetried = true;
+        Future<void>.delayed(const Duration(seconds: 2), () {
+          if (mounted) _getBatteryLevel();
+        });
+      }
     }
   }
+
+  bool get _deviceCharging =>
+      _batteryState == BatteryState.charging ||
+      _batteryState == BatteryState.full;
 
   /// Resolves the appropriate Material Symbols battery icon based on charge
   /// level and charging state.
   IconData _getBatteryIconData() {
-    final isCharging =
-        _batteryState == BatteryState.charging ||
-        _batteryState == BatteryState.full;
-
-    if (_batteryLevel == -1 || isCharging) {
+    if (_batteryLevel == -1 || _deviceCharging) {
       return Symbols.battery_android_frame_bolt;
     }
 
@@ -201,17 +217,76 @@ class HeaderState extends State<Header> {
     return Symbols.battery_android_frame_1;
   }
 
-  Color _getBatteryColor(dynamic customColors) {
-    if (_batteryLevel == -1) {
+  Color _getBatteryColor(dynamic customColors, int? level) {
+    if (level == null || level == -1) {
       return customColors.batteryPower;
     }
-    if (_batteryLevel > 20) {
+    if (level > 20) {
       return customColors.batteryFull;
-    } else if (_batteryLevel > 5) {
+    } else if (level > 5) {
       return customColors.batteryMedium;
     } else {
       return customColors.batteryLow;
     }
+  }
+
+  /// The battery beside the clock: the connected controller's when there is
+  /// one (gamepad icon, "—" when it does not report a level), else the
+  /// device's.
+  Widget _buildBattery(
+    BuildContext context,
+    dynamic customColors,
+    List<NeoPlayControllerBattery> controllers,
+  ) {
+    final battery = HeaderBattery.choose(
+      controllers: controllers,
+      deviceLevel: _batteryLevel,
+      deviceCharging: _deviceCharging,
+    );
+    if (battery == null) return const SizedBox.shrink();
+    final color = battery.controller && battery.percent == null
+        ? Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6)
+        : _getBatteryColor(customColors, battery.percent);
+    final text = battery.percent == null ? '—' : '${battery.percent}%';
+    final row = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(width: 12.r),
+        Icon(
+          battery.controller ? Symbols.sports_esports : _getBatteryIconData(),
+          color: color,
+          size: 16.r,
+        ),
+        if (battery.controller && battery.charging)
+          Icon(Symbols.bolt, color: color, size: 12.r),
+        SizedBox(width: 4.r),
+        Text(
+          text,
+          style: TextStyle(
+            color: color,
+            fontSize: 12.r,
+            fontWeight: FontWeight.w500,
+            letterSpacing: 0.3.r,
+          ),
+        ),
+      ],
+    );
+    if (!battery.controller) return row;
+    final label = NeoPlayCompanionLocale.get(context, 'battery');
+    return Tooltip(
+      message: label,
+      child: Semantics(
+        key: const ValueKey('header-controller-battery'),
+        label: label,
+        value: battery.percent == null
+            ? NeoPlayCompanionLocale.get(context, 'unavailable')
+            : [
+                text,
+                if (battery.charging) NeoPlayCompanionLocale.get(context, 'charging'),
+              ].join(', '),
+        child: ExcludeSemantics(child: row),
+      ),
+    );
   }
 
   @override
@@ -337,26 +412,14 @@ class HeaderState extends State<Header> {
                             letterSpacing: 0.3.r,
                           ),
                         ),
-                        if (_batteryLevel != -1 &&
-                            !_isTelevision &&
-                            !Responsive.isHandheldXS(context)) ...[
-                          SizedBox(width: 12.r),
-                          Icon(
-                            _getBatteryIconData(),
-                            color: _getBatteryColor(customColors),
-                            size: 16.r,
+                        if (!_isTelevision &&
+                            !Responsive.isHandheldXS(context))
+                          ValueListenableBuilder<List<NeoPlayControllerBattery>>(
+                            valueListenable:
+                                ControllerBatteryService.instance.controllers,
+                            builder: (context, controllers, _) =>
+                                _buildBattery(context, customColors, controllers),
                           ),
-                          SizedBox(width: 4.r),
-                          Text(
-                            "$_batteryLevel%",
-                            style: TextStyle(
-                              color: _getBatteryColor(customColors),
-                              fontSize: 12.r,
-                              fontWeight: FontWeight.w500,
-                              letterSpacing: 0.3.r,
-                            ),
-                          ),
-                        ],
                         if (Platform.isIOS && _jitActive) ...[
                           SizedBox(width: 8.r),
                           Tooltip(

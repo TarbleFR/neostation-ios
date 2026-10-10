@@ -41,9 +41,13 @@ jobs:
     - name: Reuse successful unchanged Dart validation
       id: dart-evidence
       uses: actions/cache@v4
+      # The key also covers the native files some Dart tests read (the bridge's
+      # Objective-C sources and headers, the cores manifest), so a native-only
+      # change re-runs them instead of reusing an older result. The same
+      # expression is recorded and re-checked below.
       with:
         path: build/delivery/dart-validation.json
-        key: neostation-validation-v1-ubuntu24.04-${{ runner.arch }}-flutter3.47.2-${{ hashFiles('lib/**','packages/**/*.dart','packages/**/pubspec.yaml','assets/**','test/**/*.dart','pubspec.lock','pubspec.yaml')
+        key: neostation-validation-v1-ubuntu24.04-${{ runner.arch }}-flutter3.47.2-${{ hashFiles('lib/**','packages/**/*.dart','packages/**/pubspec.yaml','assets/**','test/**/*.dart','pubspec.lock','pubspec.yaml','packages/libretro_internal_bridge/ios/Classes/*.m','packages/libretro_internal_bridge/ios/Classes/*.h','build-utils/libretro/cores.json')
           }}
     - uses: subosito/flutter-action@v2
       with:
@@ -84,11 +88,11 @@ jobs:
         PYTHON
     - name: Validate changed library, callback, launch and restart behavior
       run: |
-        flutter test test/rom_folder_registration_test.dart test/library_scan_restart_test.dart test/retroarch_library_protocol_test.dart test/retroarch_library_cache_test.dart test/retroarch_launch_diagnostics_test.dart test/retroarch_sync_locale_test.dart test/rom_scan_symlink_alias_test.dart test/rom_scan_emulator_default_test.dart test/ios_selective_rollback_test.dart test/armsx2_retroarch_routing_isolation_test.dart test/game_repository_test.dart test/system_repository_test.dart test/config_repository_test.dart test/scraper_repository_test.dart test/sqlite_database_service_hidden_files_test.dart test/ios_rom_library_root_resolver_test.dart test/libretro_locale_test.dart test/libretro_core_catalog_test.dart test/frontend_media_gate_test.dart test/rpcs3_embedded_identity_test.dart
+        flutter test test/rom_folder_registration_test.dart test/library_scan_restart_test.dart test/retroarch_library_protocol_test.dart test/retroarch_library_cache_test.dart test/retroarch_launch_diagnostics_test.dart test/retroarch_sync_locale_test.dart test/rom_scan_symlink_alias_test.dart test/rom_scan_emulator_default_test.dart test/ios_selective_rollback_test.dart test/armsx2_retroarch_routing_isolation_test.dart test/game_repository_test.dart test/system_repository_test.dart test/config_repository_test.dart test/scraper_repository_test.dart test/sqlite_database_service_hidden_files_test.dart test/ios_rom_library_root_resolver_test.dart test/libretro_locale_test.dart test/libretro_core_catalog_test.dart test/frontend_media_gate_test.dart test/rpcs3_embedded_identity_test.dart test/libretro_skin_service_test.dart test/libretro_skin_catalog_test.dart test/libretro_skin_manager_test.dart test/libretro_playlist_actions_test.dart test/ios_library_root_relocation_test.dart test/neostation_rom_library_test.dart test/header_battery_test.dart
         python3 - <<'PY'
         import json,os
         from pathlib import Path
-        Path("build/delivery/dart-validation.json").write_text(json.dumps({"result":"passed","testedSHA":os.environ["GITHUB_SHA"],"key":"neostation-validation-v1-ubuntu24.04-${{ runner.arch }}-flutter3.47.2-${{ hashFiles('lib/**','packages/**/*.dart','packages/**/pubspec.yaml','assets/**','test/**/*.dart','pubspec.lock','pubspec.yaml') }}","tool":"Flutter 3.47.2, Ubuntu 24.04"}))
+        Path("build/delivery/dart-validation.json").write_text(json.dumps({"result":"passed","testedSHA":os.environ["GITHUB_SHA"],"key":"neostation-validation-v1-ubuntu24.04-${{ runner.arch }}-flutter3.47.2-${{ hashFiles('lib/**','packages/**/*.dart','packages/**/pubspec.yaml','assets/**','test/**/*.dart','pubspec.lock','pubspec.yaml','packages/libretro_internal_bridge/ios/Classes/*.m','packages/libretro_internal_bridge/ios/Classes/*.h','build-utils/libretro/cores.json') }}","tool":"Flutter 3.47.2, Ubuntu 24.04"}))
         PY
       if: ${{ steps.dart-evidence.outputs.cache-hit != 'true' }}
     - name: Verify reused Dart evidence and changed pipeline guards
@@ -100,13 +104,15 @@ jobs:
         assert record['result']=='passed'
         assert record['key']
         assert record['tool']=='Flutter 3.47.2, Ubuntu 24.04'
-        assert record['key']=='neostation-validation-v1-ubuntu24.04-${{ runner.arch }}-flutter3.47.2-${{ hashFiles('lib/**','packages/**/*.dart','packages/**/pubspec.yaml','assets/**','test/**/*.dart','pubspec.lock','pubspec.yaml') }}'
+        assert record['key']=='neostation-validation-v1-ubuntu24.04-${{ runner.arch }}-flutter3.47.2-${{ hashFiles('lib/**','packages/**/*.dart','packages/**/pubspec.yaml','assets/**','test/**/*.dart','pubspec.lock','pubspec.yaml','packages/libretro_internal_bridge/ios/Classes/*.m','packages/libretro_internal_bridge/ios/Classes/*.h','build-utils/libretro/cores.json') }}'
         print('Dart tests validated at',record['testedSHA'],'; exact locked input key verified')
         PY
         python3 test/retroarch_baseline_scope_test.py
         python3 test/delivery_pipeline_test.py
         python3 test/libretro_route_contract_test.py
         python3 test/libretro_core_options_test.py
+        python3 test/libretro_shader_catalog_test.py
+        python3 test/libretro_frontend_ui_contract_test.py
         python3 test/integrated_import_tab_contract_test.py
         python3 test/localization_12_locale_coverage_test.py
         python3 test/cheats_media_source_contract_test.py
@@ -120,7 +126,9 @@ jobs:
   native:
     if: ${{ github.event_name == 'workflow_dispatch' || (contains(github.event.head_commit.message, '[retroarch-delivery]') && !contains(github.event.head_commit.message, '[retroarch-relaunch-only]') && !contains(github.event.head_commit.message, '[retroarch-source-proof]') && !contains(github.event.head_commit.message, '[retroarch-receiver-ipa]')) }}
     runs-on: macos-15
-    timeout-minutes: 25
+    # Room for the frontend, shader (possibly with a Metal toolchain download)
+    # and iPhone compile-and-link checks added to the Swift and host checks.
+    timeout-minutes: 35
     steps:
     - *id001
     - name: Select Xcode 26.3 for NeoPlay and Google Cast
@@ -157,7 +165,16 @@ jobs:
         xcrun swiftc -parse -target arm64-apple-ios18.0 -sdk "$(xcrun --sdk iphoneos --show-sdk-path)" packages/external_folder_access/ios/Classes/ExternalFolderAccessPlugin.swift packages/external_folder_access/ios/Classes/RetroArchURLHandoff.swift
     - name: Run the embedded libretro host against a test core
       run: python3 test/libretro_host_test.py
-    - name: Compile every libretro bridge source for iPhone
+    - name: Run the portable libretro frontend modules (geometry, controls, settings, skins)
+      # Runs even when an earlier native check failed, so one round reports
+      # every native problem; the job still fails and blocks the IPA.
+      if: ${{ !cancelled() }}
+      run: python3 test/libretro_frontend_test.py
+    - name: Compile and render every libretro shader preset with Metal
+      if: ${{ !cancelled() }}
+      run: python3 test/libretro_shader_test.py
+    - name: Compile and link every libretro bridge source for iPhone
+      if: ${{ !cancelled() }}
       run: python3 test/libretro_ios_syntax_test.py
   cold:
     name: Release device build • cold
@@ -178,8 +195,8 @@ jobs:
       DOLPHIN_CORE_HOST_SHA: ae7d46f90dff64ce698b8c18e0c12510dbae96fe
       ARMSX2_CORE_HOST_SHA: 899d3c44f8f465c8da0d93c763817ffca519c00c
       ARMSX2_CORE_RUN_ID: '37641466835'
-      RPCS3_CORE_HOST_SHA: afb33454db50236485bd5ec963a722dcb5f65610
-      RPCS3_CORE_RUN_ID: '37620034517'
+      RPCS3_CORE_HOST_SHA: 6fede58ae799214ce59cfecbae79b66d01d33b37
+      RPCS3_CORE_RUN_ID: '38068094552'
       DUSKLIGHT_CORE_HOST_SHA: 899d3c44f8f465c8da0d93c763817ffca519c00c
       DUSKLIGHT_CORE_RUN_ID: '37641472546'
       LIBRETRO_CORES_HOST_SHA: 48635465f4bdb324db4ff41b8b9815ff101ad360
@@ -356,6 +373,8 @@ jobs:
           test/rpcs3_build351_gow3_engine_test.py \
           test/rpcs3_build353_xitrix_v010_test.py \
           test/rpcs3_armsx3_performance_patch_test.py \
+          test/rpcs3_build435_core_delta_test.py \
+          test/native/rpcs3_build435_core_delta_test.cpp \
           test/rpcs3_build352_gow3_memory_test.py \
           test/rpcs3_ios_ppu_compile_budget_test.cpp \
           test/rpcs3_ppu_no_size_split_policy_test.cpp \
@@ -1044,8 +1063,8 @@ jobs:
       DOLPHIN_CORE_HOST_SHA: ae7d46f90dff64ce698b8c18e0c12510dbae96fe
       ARMSX2_CORE_HOST_SHA: 899d3c44f8f465c8da0d93c763817ffca519c00c
       ARMSX2_CORE_RUN_ID: '37641466835'
-      RPCS3_CORE_HOST_SHA: afb33454db50236485bd5ec963a722dcb5f65610
-      RPCS3_CORE_RUN_ID: '37620034517'
+      RPCS3_CORE_HOST_SHA: 6fede58ae799214ce59cfecbae79b66d01d33b37
+      RPCS3_CORE_RUN_ID: '38068094552'
       DUSKLIGHT_CORE_HOST_SHA: 899d3c44f8f465c8da0d93c763817ffca519c00c
       DUSKLIGHT_CORE_RUN_ID: '37641472546'
       LIBRETRO_CORES_HOST_SHA: 48635465f4bdb324db4ff41b8b9815ff101ad360

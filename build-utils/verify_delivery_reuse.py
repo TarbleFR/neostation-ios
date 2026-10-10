@@ -202,6 +202,338 @@ LIBRETRO_DELTA = {
     'test/localization_12_locale_coverage_test.py',
 }
 DELTA |= LIBRETRO_DELTA
+# Obsolete files removed on 9 October 2026 at the maintainer's request: Dart
+# code unreachable from lib/main.dart, the tests of that dead code, and build
+# files nothing references. dusklight_locale_test now checks the live Ports
+# import menu instead of the removed Dusklight-only widget.
+CLEANUP_DELTA = {
+    'build-utils/canonical-host-285.json',
+    'build-utils/generate_import_labels.py',
+    'build-utils/materialize_dolphin_isolated_v2.py',
+    'build-utils/migrations/candidate302/part0.b64',
+    'build-utils/patches/grid_title_build243.patch',
+    'build-utils/private-test-360-recipient.pem',
+    'build-utils/private-test-361-recipient.pem',
+    'build-utils/private-test-362-recipient.pem',
+    'build-utils/private-test-363-recipient.pem',
+    'build-utils/private-test-364-recipient.pem',
+    'build-utils/private-test-366-recipient.pem',
+    'build-utils/private-test-367-recipient.pem',
+    'build-utils/verify_delivery_reuse.py',
+    'lib/models/retroarch_config_model.dart',
+    'lib/services/metadata_cleanup_service.dart',
+    'lib/services/retroarch_config_service.dart',
+    'lib/services/retroarch_playlist_service.dart',
+    'lib/services/rom_folder_organizer_service.dart',
+    'lib/services/scraped_media_migration_service.dart',
+    'lib/utils/switch_save_detector.dart',
+    'lib/widgets/dusklight_internal_playlist_actions.dart',
+    'lib/widgets/info_dialog.dart',
+    'lib/widgets/selection_grid/grid_navigation.dart',
+    'lib/widgets/selection_grid/selection_grid.dart',
+    'lib/widgets/selection_grid/selection_grid_geometry.dart',
+    'test/dusklight_locale_test.dart',
+    'test/metadata_cleanup_service_test.dart',
+    'test/rom_folder_organizer_service_test.dart',
+    'test/selection_grid_cache_test.dart',
+    'test/selection_grid_test.dart',
+}
+DELTA |= CLEANUP_DELTA
+# Second pass, same day: declarations nothing calls (found by reference
+# counts over the whole repository, iterated to a fixed point), the
+# RetroAchievements hash strategies left without caller, imports they used,
+# and the unused Dart wrapper of the Dolphin plugin.
+UNUSED_CODE_DELTA = {
+    'lib/data/datasources/sqlite_config_service.dart',
+    'lib/l10n/dusklight_locale.dart',
+    'lib/l10n/fork_onboarding_locale.dart',
+    'lib/models/database_game_model.dart',
+    'lib/models/my_systems.dart',
+    'lib/providers/file_provider.dart',
+    'lib/providers/menu_app_provider.dart',
+    'lib/providers/neo_assets_provider.dart',
+    'lib/providers/retro_achievements_provider.dart',
+    'lib/providers/retroachievements/console_lookup_hash_strategy.dart',
+    'lib/providers/retroachievements/default_md5_hash_strategy.dart',
+    'lib/providers/retroachievements/ds_hash_strategy.dart',
+    'lib/providers/retroachievements/nes_hash_strategy.dart',
+    'lib/providers/retroachievements/retro_achievements_hash_strategy.dart',
+    'lib/providers/retroachievements/strategy_factory.dart',
+    'lib/providers/scraping_provider.dart',
+    'lib/providers/sqlite_config_provider/mutators.dart',
+    'lib/providers/sqlite_database_provider.dart',
+    'lib/responsive.dart',
+    'lib/screens/app_screen.dart',
+    'lib/services/audio_policy_service.dart',
+    'lib/services/game_service.dart',
+    'lib/services/game_session_persistence.dart',
+    'lib/services/home_music_service.dart',
+    'lib/services/library_addon_service.dart',
+    'lib/services/library_metadata_provider_service.dart',
+    'lib/services/melonx_library_service.dart',
+    'lib/services/music_player_service.dart',
+    'lib/services/neo_assets_service.dart',
+    'lib/services/permission_service.dart',
+    'lib/services/retro_achievements_service.dart',
+    'lib/services/saf_directory_service.dart',
+    'lib/services/screenscraper/media_resolver.dart',
+    'lib/services/screenscraper_service.dart',
+    'lib/services/systems_update_service.dart',
+    'lib/services/user_data_location_service.dart',
+    'lib/themes/app_themes.dart',
+    'lib/themes/corner_radii.dart',
+    'lib/utils/centered_scroll_controller.dart',
+    'lib/utils/color.dart',
+    'lib/utils/gamepad_mapping.dart',
+    'lib/utils/gamepad_nav.dart',
+    'lib/utils/gamepad_translator.dart',
+    'lib/utils/login_form_selection.dart',
+    'lib/utils/optimized_md5_utils.dart',
+    'lib/widgets/custom_notification.dart',
+    'lib/widgets/game_view_mode_dropdown.dart',
+    'packages/dolphin_internal_bridge/lib/dolphin_internal_bridge.dart',
+    'packages/dolphin_internal_bridge/ios/Classes/TouchController/TCWiiPad.swift',
+    'lib/models/emulator_model.dart',
+    'lib/models/system_model.dart',
+    'lib/services/stikjit_melonx_service.dart',
+}
+DELTA |= UNUSED_CODE_DELTA
+# Third pass, same day, after the maintainer allowed removing unusable
+# RPCS3 code: the Build 260 action-sheet menus nothing presents, the
+# recovery-core patch pipeline no workflow runs, the Dolphin touch-resource
+# generator, the tests of those removed files, and the RPCS3 Dart
+# declarations nothing calls.
+RPCS3_UNUSED_DELTA = {
+    'build-utils/.rpcs3_patch_chunk00',
+    'build-utils/.rpcs3_patch_chunk01',
+    'build-utils/.rpcs3_patch_chunk02',
+    'build-utils/.rpcs3_patch_chunk02a',
+    'build-utils/.rpcs3_patch_chunk02b',
+    'build-utils/.rpcs3_patch_chunk02c',
+    'build-utils/.rpcs3_patch_chunk03',
+    'build-utils/.rpcs3_patch_chunk03a',
+    'build-utils/.rpcs3_patch_chunk04',
+    'build-utils/.rpcs3_patch_chunk05',
+    'build-utils/benchmark_rpcs3_pipeline_scheduler.py',
+    'build-utils/build_rpcs3_recovery_core.sh',
+    'build-utils/compare_rpcs3_core_profiles.py',
+    'build-utils/compare_rpcs3_telemetry.py',
+    'build-utils/generate_rpcs3_ios_profiles.py',
+    'build-utils/materialize_rpcs3_internal.py',
+    'build-utils/patch_rpcs3_armsx3_performance.py',
+    'build-utils/patch_rpcs3_build251_upscale.py',
+    'build-utils/patch_rpcs3_build256_host.py',
+    'build-utils/patch_rpcs3_build256_savestates.py',
+    'build-utils/patch_rpcs3_build258_core_architecture.py',
+    'build-utils/patch_rpcs3_build258_runtime_resilience.py',
+    'build-utils/patch_rpcs3_build260_modern_menu.py',
+    'build-utils/patch_rpcs3_build264_gow3_core.py',
+    'build-utils/patch_rpcs3_build265_core.py',
+    'build-utils/patch_rpcs3_build265_host.py',
+    'build-utils/patch_rpcs3_build266_v09_core.py',
+    'build-utils/patch_rpcs3_build283_host.py',
+    'build-utils/patch_rpcs3_build295_fixed_reservation.py',
+    'build-utils/patch_rpcs3_embedded_boot.py',
+    'build-utils/patch_rpcs3_iso_integrity.py',
+    'build-utils/patch_rpcs3_jit_memory.py',
+    'build-utils/patch_rpcs3_neostation_session.py',
+    'build-utils/patch_rpcs3_performance_telemetry.py',
+    'build-utils/patch_rpcs3_savestate_stability.py',
+    'build-utils/patch_rpcs3_savestate_ui.py',
+    'build-utils/patch_rpcs3_serial_profiles.py',
+    'build-utils/patch_rpcs3_stop_reply270.py',
+    'build-utils/patches/rpcs3_build243_host.patch',
+    'build-utils/patches/rpcs3_build243_menu_transition.patch',
+    'build-utils/patches/rpcs3_build246_safe_controls.patch',
+    'build-utils/patches/rpcs3_build247_localization.patch',
+    'build-utils/patches/rpcs3_build251_upscale.patch',
+    'build-utils/patches/rpcs3_build264_spu_arm64_lowering.patch',
+    'build-utils/patches/rpcs3_build265_core.patch',
+    'build-utils/rpcs3/build266-v09-manifest.json',
+    'build-utils/rpcs3/jit_arena.cpp.inc',
+    'build-utils/rpcs3/jit_write_scope.h.inc',
+    'build-utils/validate_rpcs3_recovery_core.py',
+    'lib/l10n/rpcs3_library_locale.dart',
+    'lib/l10n/rpcs3_ui_locale.dart',
+    'lib/services/rpcs3_internal_service.dart',
+    'lib/services/rpcs3_launch_service.dart',
+    'lib/services/rpcs3_library_service.dart',
+    'lib/services/rpcs3_title_catalog_service.dart',
+    'packages/dolphin_internal_bridge/ci/materialize_touch_resources.py',
+    'packages/dolphin_internal_bridge/ci/touch_resources.json',
+    'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm',
+    'packages/rpcs3_internal_bridge/vendor/README.md',
+    'test/neoplay_build397_integration_test.py',
+    'test/rpcs3_build251_contract_test.py',
+    'test/rpcs3_build256_host_patch_test.py',
+    'test/rpcs3_build258_core_profile_comparison_test.py',
+    'test/rpcs3_build258_pipeline_scheduler_benchmark_test.py',
+    'test/rpcs3_build260_modern_menu_test.py',
+    'test/rpcs3_build265_host_test.py',
+    'test/rpcs3_build266_v09_core_test.py',
+    'test/rpcs3_build295_fixed_reservation_test.py',
+    'test/rpcs3_embedded_boot_test.py',
+    'test/rpcs3_ingame_ui_contract_test.py',
+    'test/rpcs3_jit_memory_test.py',
+    'test/rpcs3_performance_snapshot_test.py',
+    'test/rpcs3_recovery_core_contract_test.py',
+    'test/rpcs3_savestate_ui_contract_test.py',
+    'test/rpcs3_silent_mode_policy_test.dart',
+    'test/rpcs3_stop_reply270_test.py',
+    'test/rpcs3_telemetry_comparison_test.py',
+}
+DELTA |= RPCS3_UNUSED_DELTA
+# Same day: the Armsx2 action builder left from the retired contextual
+# UIMenu, and the command handler and overload only it invoked.
+ARMSX2_UNUSED_DELTA = {
+    'packages/armsx2_internal_bridge/ios/Classes/Armsx2InternalBridgePlugin.mm',
+}
+DELTA |= ARMSX2_UNUSED_DELTA
+# Embedded libretro frontend (maintainer request of 9 October 2026): PSP and
+# 3DS on the embedded cores, skins per console with Delta / Provenance
+# import, Metal shader presets, screen format, controls customisation,
+# portrait, twelve languages. New native modules, their macOS behaviour
+# tests, the Dart services and screens, and the call sites switched to the
+# canonical console key. Reviewed source changes; see
+# docs/libretro-skins-shaders.md.
+FRONTEND_DELTA = {
+    'lib/screens/libretro/libretro_consoles_screen.dart',
+    'lib/screens/libretro/libretro_skin_catalog_screen.dart',
+    'lib/screens/libretro/libretro_skin_manager_screen.dart',
+    'lib/services/libretro_skin_catalog_service.dart',
+    'lib/services/libretro_skin_service.dart',
+    'packages/libretro_internal_bridge/ios/Classes/LibretroDefaultSkins.h',
+    'packages/libretro_internal_bridge/ios/Classes/LibretroDefaultSkins.m',
+    'packages/libretro_internal_bridge/ios/Classes/LibretroFrontendMenu.h',
+    'packages/libretro_internal_bridge/ios/Classes/LibretroFrontendMenu.m',
+    'packages/libretro_internal_bridge/ios/Classes/LibretroFrontendStore.h',
+    'packages/libretro_internal_bridge/ios/Classes/LibretroFrontendStore.m',
+    'packages/libretro_internal_bridge/ios/Classes/LibretroGeometry.h',
+    'packages/libretro_internal_bridge/ios/Classes/LibretroGeometry.m',
+    'packages/libretro_internal_bridge/ios/Classes/LibretroInputMap.h',
+    'packages/libretro_internal_bridge/ios/Classes/LibretroInputMap.m',
+    'packages/libretro_internal_bridge/ios/Classes/LibretroOrientation.h',
+    'packages/libretro_internal_bridge/ios/Classes/LibretroOrientation.m',
+    'packages/libretro_internal_bridge/ios/Classes/LibretroShaderLibrary.h',
+    'packages/libretro_internal_bridge/ios/Classes/LibretroShaderLibrary.m',
+    'packages/libretro_internal_bridge/ios/Classes/LibretroSkin.h',
+    'packages/libretro_internal_bridge/ios/Classes/LibretroSkin.m',
+    'packages/libretro_internal_bridge/ios/Classes/LibretroSkinLayout.h',
+    'packages/libretro_internal_bridge/ios/Classes/LibretroSkinLayout.m',
+    'packages/libretro_internal_bridge/ios/Classes/LibretroSkinRenderer.h',
+    'packages/libretro_internal_bridge/ios/Classes/LibretroSkinRenderer.m',
+    'test/libretro_frontend_test.py',
+    'test/libretro_frontend_ui_contract_test.py',
+    'test/libretro_host/frontend/default_skins_test.m',
+    'test/libretro_host/frontend/frontend_store_test.m',
+    'test/libretro_host/frontend/geometry_test.m',
+    'test/libretro_host/frontend/input_map_test.m',
+    'test/libretro_host/frontend/skin_layout_test.m',
+    'test/libretro_host/frontend/skin_test.m',
+    'test/libretro_host/shader_test.m',
+    'test/libretro_shader_catalog_test.py',
+    'test/libretro_shader_test.py',
+    'test/libretro_skin_catalog_test.dart',
+    'test/libretro_skin_manager_test.dart',
+    'test/libretro_skin_service_test.dart',
+    'packages/libretro_internal_bridge/ios/Classes/LibretroChromeLayout.h',
+    'packages/libretro_internal_bridge/ios/Classes/LibretroChromeLayout.m',
+    'test/libretro_host/frontend/chrome_layout_test.m',
+    'test/libretro_playlist_actions_test.dart',
+}
+DELTA |= FRONTEND_DELTA
+# 3DS close and PSP start (maintainer report of 10 October 2026, video
+# ScreenRecording_10-10-2026 01-04-54): RetroArch's teardown order (the
+# hardware context outlives retro_unload_game and retro_deinit), core stops
+# during startup reported as launch failures, the session journal, the
+# PPSSPP memory window report, their macOS tests and the iOS Simulator probe
+# with the real cores. See docs/libretro-3ds-psp-lifecycle.md.
+LIFECYCLE_DELTA = {
+    'packages/libretro_internal_bridge/ios/Classes/LibretroAddressSpace.h',
+    'packages/libretro_internal_bridge/ios/Classes/LibretroAddressSpace.m',
+    'packages/libretro_internal_bridge/ios/Classes/LibretroSessionJournal.h',
+    'packages/libretro_internal_bridge/ios/Classes/LibretroSessionJournal.m',
+    'test/libretro_host/frontend/address_space_test.m',
+    'test/libretro_host/frontend/session_journal_test.m',
+    'test/libretro_host/vulkan_test_core.c',
+    'test/libretro_simulator/probe.m',
+    'test/libretro_simulator_probe.py',
+}
+DELTA |= LIFECYCLE_DELTA
+# Library folders (maintainer requests of 10 October 2026): saved folders
+# found again after iOS moved an app container, imports into one of the
+# user's own libraries without duplicates, NeoStation's console folders and
+# moving a library into them, offered at first launch and in Settings.
+LIBRARY_DELTA = {
+    'lib/screens/libretro/libretro_library_actions.dart',
+    'lib/services/ios_library_root_relocation.dart',
+    'lib/services/neostation_rom_library.dart',
+    'lib/widgets/setup_wizard.dart',
+    'test/ios_library_root_relocation_test.dart',
+    'test/neostation_rom_library_test.dart',
+}
+DELTA |= LIBRARY_DELTA
+# NeoSwap Build434 (maintainer request of 10 October 2026, RPCS3 memory):
+# the measured jetsam envelope of the host process in the budget policy, the
+# demand-driven size-class shelves of relay host loans in the broker, the
+# cold-storage prefetch planner, the plugin diagnostics that export them,
+# their portable tests, and the hash manifest the NeoSwap scope gate reads
+# (bookkeeping of those same files, not an engine). The pinned RPCS3 Core,
+# the relay and donor extensions, the storage engine and every other native
+# engine are byte-identical. See docs/neoswap-build434-7go-envelope.md.
+NEOSWAP_434_DELTA = {
+    'packages/neo_swap/ios/Classes/NeoSwap.cpp',
+    'packages/neo_swap/ios/Classes/NeoSwapBudget.h',
+    'packages/neo_swap/ios/Classes/NeoSwapColdPrefetch.h',
+    'packages/neo_swap/ios/Classes/NeoSwapHost.h',
+    'packages/neo_swap/ios/Classes/NeoSwapPlugin.mm',
+    'test/neoswap_budget_test.cpp',
+    'test/neoswap_cold_prefetch_test.cpp',
+    'test/neoswap_relay_loans_test.cpp',
+    'test/import_memory_candidate_scope_test.py',
+    'test/neoplay_build397_integration_test.py',
+    'native/import-memory-candidate.json',
+}
+DELTA |= NEOSWAP_434_DELTA
+# RPCS3 Core Build435 (maintainer request of 10 October 2026): the three
+# reviewed Core deltas of docs/neoswap-build435-core-delta.md inside the single
+# canonical patch (measured memory allowance, deferred SPU compilation,
+# writer-lock precheck), its hash manifest, the host-executed policy test,
+# the Core build recipe and syntax gate that run it, the pinned-input test,
+# the updated Build352 contract, the scope gates and the hash manifest they
+# read. The delivery lane still reuses the Core artifact pinned by run id;
+# a new Core run is pinned only after it succeeds.
+NEOSWAP_435_DELTA = {
+    'build-utils/rpcs3/embedded-core.patch',
+    'build-utils/rpcs3/canonical-source.json',
+    'build-utils/build_rpcs3_embedded_core.sh',
+    'build-utils/rpcs3_core_syntax_gate.py',
+    'test/neo_swap_core_pin_test.py',
+    'test/rpcs3_build352_gow3_memory_test.py',
+    'test/rpcs3_build435_core_delta_test.py',
+    'test/native/rpcs3_build435_core_delta_test.cpp',
+    'test/check_neo_swap_scope.py',
+    'test/import_memory_candidate_scope_test.py',
+    'test/delivery_pipeline_test.py',
+    'test/neoplay_build397_integration_test.py',
+    'native/import-memory-candidate.json',
+}
+DELTA |= NEOSWAP_435_DELTA
+# Controller battery in the header (maintainer report of 10 October 2026: the
+# indicator stayed at 100% with an Xbox Series X controller; it showed the
+# phone's battery). The header now shows the connected controller's battery,
+# read by NeoPlay's existing GameController monitor.
+BATTERY_DELTA = {
+    'lib/services/controller_battery_service.dart',
+    'lib/widgets/header.dart',
+    'lib/widgets/header_battery.dart',
+    'packages/neoplay_bridge/ios/Classes/NPControllerBatteryMonitor.swift',
+    'packages/neoplay_bridge/ios/Classes/NeoPlayBridgePlugin.swift',
+    'packages/neoplay_bridge/lib/neoplay_bridge.dart',
+    'test/header_battery_test.dart',
+    'test/neoplay/companion_tests.swift',
+}
+DELTA |= BATTERY_DELTA
 INPUT_ROOTS = ('lib/', 'packages/', 'native/', 'build-utils/', 'assets/', 'test/')
 
 def sha(data):

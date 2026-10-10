@@ -32,10 +32,19 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nonatomic, assign, nullable) retro_core_options_update_display_callback_t updateDisplayCallback;
 
 /// Session-only values that take precedence over stored ones (for instance
-/// interpreter CPU cores while JIT is unavailable).
+/// interpreter CPU cores while JIT is unavailable). May be called before
+/// the core declares its options. Sets `updatePending` when the effective
+/// value of an already declared option changes.
 - (void)applySessionOverrides:(NSDictionary<NSString *, NSString *> *)overrides;
-/// NeoStation defaults, used only while the user has stored no value.
+/// Same as applySessionOverrides:, and `setValue:forKey:persist:` then
+/// refuses these keys for the rest of the session (returns NO, nothing
+/// stored).
+- (void)lockSessionOverrides:(NSDictionary<NSString *, NSString *> *)overrides;
+/// NeoStation defaults, used only while the user has stored no value. Sets
+/// `updatePending` when the effective value of a declared option changes.
 - (void)applyDefaults:(NSDictionary<NSString *, NSString *> *)defaults;
+/// YES for keys passed to lockSessionOverrides:.
+- (BOOL)isLockedKey:(NSString *)key;
 
 - (BOOL)declareVariables:(const struct retro_variable *)variables;
 - (BOOL)declareDefinitions:(const struct retro_core_option_definition *)definitions

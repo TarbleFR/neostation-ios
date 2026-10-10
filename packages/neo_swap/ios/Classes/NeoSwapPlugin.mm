@@ -67,6 +67,9 @@ static_assert(kDonationInitialChunkBytes == neostation::preparation::chunk_bytes
 @property(nonatomic, strong) dispatch_source_t timer;
 @property(nonatomic, strong) dispatch_source_t cpuBufferPressureSource;
 @property(nonatomic, assign) BOOL cpuBufferPressureRaised;
+// Build434: iOS applies its lower inactive limit to a backgrounded process;
+// the budget controller treats that state like pressure until the return.
+@property(nonatomic, assign) BOOL applicationBackground;
 @property(nonatomic, copy) NSString* directory;
 @property(nonatomic, copy) NSString* diagnosticPath;
 @property(nonatomic, copy) NSString* operationPath;
@@ -214,6 +217,24 @@ static NSDictionary* NeoSwapEffectivePermissions() {
             [owner appendRecord:[owner snapshot:@"ios_memory_warning"]];
         });
     }];
+    for (NSString* name in @[UIApplicationDidEnterBackgroundNotification, UIApplicationWillEnterForegroundNotification]) {
+        const BOOL background = [name isEqualToString:UIApplicationDidEnterBackgroundNotification];
+        [NSNotificationCenter.defaultCenter addObserverForName:name object:nil queue:nil
+            usingBlock:^(__unused NSNotification* notification) {
+            NeoSwapPlugin* owner = weakSelf;
+            if (!owner) return;
+            dispatch_async(owner.queue, ^{
+                if (owner.applicationBackground == background) return;
+                owner.applicationBackground = background;
+                // The decision changes state (pressure) and, in the background,
+                // asks the storage tier to archive before iOS enforces its
+                // inactive limit. The record keeps the transition in the log.
+                [owner applyBudget];
+                if (NeoSwap_OwnerSessionActive(NEOSWAP_RPCS3))
+                    [owner appendRecord:[owner snapshot:background ? @"application_background" : @"application_foreground"]];
+            });
+        }];
+    }
     self.cpuBufferPressureSource = dispatch_source_create(DISPATCH_SOURCE_TYPE_MEMORYPRESSURE, 0,
         DISPATCH_MEMORYPRESSURE_NORMAL | DISPATCH_MEMORYPRESSURE_WARN | DISPATCH_MEMORYPRESSURE_CRITICAL,
         self.queue);
@@ -800,6 +821,7 @@ static NSDictionary* NeoSwapEffectivePermissions() {
     // A successful os_proc_available_memory() returning zero is exhausted
     // headroom, not a missing measurement. It must request cold-data shrink.
     in.host_available_valid = !TARGET_OS_SIMULATOR || in.host_available_bytes != 0;
+    in.foreground = !self.applicationBackground;
     in.dispatch_warning = self.cpuBufferPressureRaised ||
         NSProcessInfo.processInfo.systemUptime < self.iosWarningUntil;
     in.thermal_serious = NSProcessInfo.processInfo.thermalState >= NSProcessInfoThermalStateSerious;
@@ -1021,6 +1043,13 @@ static NSDictionary* NeoSwapEffectivePermissions() {
     NeoSwap_FastSnapshot(&fastAllocation);
     NeoSwapRelayLoanStats relayLoans{};
     NeoSwap_RelayLoanSnapshot(&relayLoans);
+    NSMutableArray* shelves = [NSMutableArray new];
+    for (unsigned klass = 0; klass < NEOSWAP_SHELF_CLASS_COUNT; ++klass) {
+        const BOOL exact = klass == NEOSWAP_SHELF_CLASS_COUNT - 1;
+        [shelves addObject:@{@"classBytes":exact ? NSNull.null : @(65536ULL << klass), @"exactSizes":@(exact),
+            @"ready":@(relayLoans.shelf_ready_blocks[klass]), @"target":@(relayLoans.shelf_target_blocks[klass]),
+            @"misses":@(relayLoans.shelf_misses[klass]), @"hits":@(relayLoans.shelf_hits[klass])}];
+    }
 #if defined(NEOSWAP_TESTING)
     const BOOL diagnosticProbesAvailable = YES;
 #else
@@ -1063,6 +1092,19 @@ static NSDictionary* NeoSwapEffectivePermissions() {
         @"donorReserveBytes":@(decision.donor_reserve_bytes),
         @"donorGrowthAdmitted":@(decision.donor_growth_admitted),
         @"storageShrinkRequested":@(decision.storage_shrink_requested),
+        // Build434: measured jetsam envelope of this process. The kernel does
+        // not publish its limit; this is footprint plus headroom, high-water
+        // marked over the session, bounded by the physical memory. Relay and
+        // donor pages are outside it. An estimate, never a kernel guarantee.
+        @"hostEnvelope":@{
+            @"schema":@1,
+            @"limitEstimateBytes":decision.host_limit_valid ? @(decision.host_limit_estimate_bytes) : NSNull.null,
+            @"safetyReserveBytes":@(decision.host_safety_reserve_bytes),
+            @"allocatableBytes":@(decision.host_allocatable_bytes),
+            @"roomBytes":decision.host_room_valid ? @(decision.host_room_bytes) : NSNull.null,
+            @"growthRampPercent":@(decision.growth_ramp_percent),
+            @"applicationForeground":@(in.foreground),
+            @"definition":@"footprint + os_proc_available_memory, session high-water mark; estimate of the active per-process limit, not a kernel value; relay and donor pages excluded"},
         @"inputs":@{
             @"sessionActive":@(in.session_active), @"physicalBytes":@(in.physical_bytes),
             @"systemUsableBytes":in.system_valid ? @(in.system_usable_bytes) : NSNull.null,
@@ -1088,7 +1130,16 @@ static NSDictionary* NeoSwapEffectivePermissions() {
             @"kindAllocations":@{@"cpuData":@(relayLoans.kind_allocation_count[1]), @"cpuCache":@(relayLoans.kind_allocation_count[2]),
                 @"gpuHostVisible":@(relayLoans.kind_allocation_count[3]), @"videoFrame":@(relayLoans.kind_allocation_count[4])},
             @"kindRefusals":@{@"cpuData":@(relayLoans.kind_refusal_count[1]), @"cpuCache":@(relayLoans.kind_refusal_count[2]),
-                @"gpuHostVisible":@(relayLoans.kind_refusal_count[3]), @"videoFrame":@(relayLoans.kind_refusal_count[4])}}};
+                @"gpuHostVisible":@(relayLoans.kind_refusal_count[3]), @"videoFrame":@(relayLoans.kind_refusal_count[4])},
+            // Build434 shelves: ready stock, last refill target, cumulative
+            // misses (FAST requests served by the ordinary allocator) and
+            // hits per size class; the last class holds exact odd sizes.
+            @"shelves":shelves,
+            @"shelfPreparedBlocks":@(relayLoans.shelf_prepared_blocks),
+            @"shelfPrepareSkips":@(relayLoans.shelf_prepare_skips),
+            @"shelfBudgetBytes":@(relayLoans.shelf_budget_bytes),
+            @"shelfLastRefillUs":@(relayLoans.shelf_last_refill_us),
+            @"shelfMaxRefillUs":@(relayLoans.shelf_max_refill_us)}};
     return @{@"scope":@"rpcs3_only", @"diagnosticProbesAvailable":@(diagnosticProbesAvailable),
         @"schema":@1, @"event":event, @"timestamp":@([NSDate date].timeIntervalSince1970),
         @"experiment":@{@"mode":[NSString stringWithUTF8String:NeoSwapExperimentProfile().name()],

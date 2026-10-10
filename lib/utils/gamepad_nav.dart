@@ -8,7 +8,6 @@ import 'package:window_manager/window_manager.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/services/sfx_service.dart';
 
-import '../responsive.dart';
 import 'gamepad_translator.dart';
 import 'select_tap.dart';
 import '../main.dart' show FullscreenNotifier;
@@ -111,16 +110,6 @@ class GamepadNavigation {
   final bool Function()? isTextFieldFocused;
 
   static final _log = LoggerService.instance;
-
-  /// When true, all raw input events are logged for diagnostic purposes.
-  static bool _debugLogging = false;
-  static bool get debugLogging => _debugLogging;
-  static void setDebugLogging(bool enabled) {
-    _debugLogging = enabled;
-    _log.i(
-      '[GamepadNavigation] Debug logging ${enabled ? 'ENABLED' : 'DISABLED'}',
-    );
-  }
 
   StreamSubscription<GamepadEvent>? _subscription;
   DateTime? _lastDirectionalEventTime;
@@ -269,7 +258,6 @@ class GamepadNavigation {
   static const int _reactivationGraceMs = 150;
 
   String? _currentGamepadId;
-  String? _currentGamepadName;
 
   final GamepadEventTranslator _translator = GamepadEventTranslator();
 
@@ -369,7 +357,6 @@ class GamepadNavigation {
       if (gamepads.isNotEmpty) {
         final firstGamepad = gamepads.first;
         _currentGamepadId = firstGamepad.id;
-        _currentGamepadName = firstGamepad.name;
 
         _translator.updateGamepadSystemInfo(
           firstGamepad.id,
@@ -403,15 +390,9 @@ class GamepadNavigation {
       _translator.updateGamepadName(gamepadId, gamepad.name);
       final connectionType = gamepad.deviceInfo.connectionType;
       _translator.updateGamepadConnectionType(gamepadId, connectionType);
-      _currentGamepadName = gamepad.name;
     } catch (e) {
       _log.e('[GamepadNavigation] Error detecting connection type: $e');
     }
-  }
-
-  /// Manually triggers a refresh of the connected gamepads list.
-  Future<void> refreshGamepadInfo() async {
-    await _initializeGamepadInfo();
   }
 
   /// Enables input processing for this navigator instance.
@@ -489,12 +470,6 @@ class GamepadNavigation {
   /// Indicates if this navigator is currently processing events.
   bool get isActive => _isActive;
 
-  /// Identifier of the currently active gamepad.
-  String? get currentGamepadId => _currentGamepadId;
-
-  /// Name of the currently active gamepad.
-  String? get currentGamepadName => _currentGamepadName;
-
   /// Utility to fetch a list of all currently connected [GamepadController]s.
   static Future<List<GamepadController>> getConnectedGamepads() async {
     try {
@@ -504,52 +479,6 @@ class GamepadNavigation {
       _log.e('[GamepadNavigation] Error listing gamepads: $e');
       return [];
     }
-  }
-
-  /// Fetches detailed information for a specific gamepad.
-  static Future<GamepadController?> getGamepadInfo(String gamepadId) async {
-    try {
-      final gamepads = await Gamepads.list();
-      return gamepads.where((gamepad) => gamepad.id == gamepadId).firstOrNull;
-    } catch (e) {
-      _log.e(
-        '[GamepadNavigation] Error getting gamepad info for $gamepadId: $e',
-      );
-      return null;
-    }
-  }
-
-  /// Fetches a list of standardized [GamepadInfo] objects for all connected devices.
-  static Future<List<GamepadInfo>> getAllConnectedGamepadsInfo() async {
-    try {
-      final gamepads = await Gamepads.list();
-      final gamepadInfos = <GamepadInfo>[];
-
-      for (final gamepad in gamepads) {
-        final deviceInfo = gamepad.deviceInfo;
-
-        gamepadInfos.add(
-          GamepadInfo(
-            id: gamepad.id,
-            name: gamepad.name,
-            connectionType: deviceInfo.connectionType.name,
-            driver: deviceInfo.driver,
-            devicePath: gamepad.id,
-            systemInfo: gamepad.systemInfo,
-          ),
-        );
-      }
-
-      return gamepadInfos;
-    } catch (e) {
-      _log.e('[GamepadNavigation] Error getting all gamepads info: $e');
-      return [];
-    }
-  }
-
-  /// Returns all gamepads including their active connection status.
-  Future<List<GamepadInfo>> getAllGamepadsWithActiveStatus() async {
-    return await getAllConnectedGamepadsInfo();
   }
 
   /// Releases resources held by the navigator.
@@ -597,13 +526,6 @@ class GamepadNavigation {
         );
         _currentGamepadId = event.gamepadId;
         await _ensureConnectionTypeDetected(event.gamepadId);
-      }
-
-      if (_debugLogging) {
-        _log.i(
-          '[GamepadRaw] gamepad="${event.gamepadId}" key="${event.key}" '
-          'type=${event.type.name} value=${event.value.toStringAsFixed(4)}',
-        );
       }
 
       final now = DateTime.now();
@@ -997,14 +919,6 @@ class GamepadNavigation {
       return false;
     }
 
-    if (_debugLogging) {
-      _log.i(
-        '[KeyboardRaw] key="${event.logicalKey.keyLabel}" '
-        'physical="${event.physicalKey.usbHidUsage.toRadixString(16)}" '
-        '${isKeyDown ? "DOWN" : "UP"}',
-      );
-    }
-
     if (_isTextFieldFocused()) {
       cancelAllRepeatTimers();
       return false;
@@ -1315,11 +1229,6 @@ class GamepadNavigation {
 
 /// Helper utilities for grid-based navigation.
 class GridNavUtils {
-  /// Retrieves the current crossAxisCount based on screen responsiveness.
-  static int getCurrentCrossAxisCount(BuildContext context) {
-    return Responsive.getCrossAxisCount(context);
-  }
-
   /// Calculates the new index when navigating right in a grid.
   static int navigateRight({
     required int currentIndex,
@@ -1380,58 +1289,6 @@ class GridNavUtils {
     } else {
       return currentIndex - crossAxisCount;
     }
-  }
-
-  static int navigateRightWithContext({
-    required BuildContext context,
-    required int currentIndex,
-    required int maxItems,
-  }) {
-    final crossAxisCount = getCurrentCrossAxisCount(context);
-    return navigateRight(
-      currentIndex: currentIndex,
-      crossAxisCount: crossAxisCount,
-      maxItems: maxItems,
-    );
-  }
-
-  static int navigateLeftWithContext({
-    required BuildContext context,
-    required int currentIndex,
-    required int maxItems,
-  }) {
-    final crossAxisCount = getCurrentCrossAxisCount(context);
-    return navigateLeft(
-      currentIndex: currentIndex,
-      crossAxisCount: crossAxisCount,
-      maxItems: maxItems,
-    );
-  }
-
-  static int navigateDownWithContext({
-    required BuildContext context,
-    required int currentIndex,
-    required int maxItems,
-  }) {
-    final crossAxisCount = getCurrentCrossAxisCount(context);
-    return navigateDown(
-      currentIndex: currentIndex,
-      crossAxisCount: crossAxisCount,
-      maxItems: maxItems,
-    );
-  }
-
-  static int navigateUpWithContext({
-    required BuildContext context,
-    required int currentIndex,
-    required int maxItems,
-  }) {
-    final crossAxisCount = getCurrentCrossAxisCount(context);
-    return navigateUp(
-      currentIndex: currentIndex,
-      crossAxisCount: crossAxisCount,
-      maxItems: maxItems,
-    );
   }
 }
 

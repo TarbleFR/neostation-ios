@@ -227,6 +227,108 @@ int main() {
     d = decide(wrap, {});
     assert(d.mobilized_bytes == UINT64_MAX && d.neoswap_total_bytes == UINT64_MAX);
 
+    // Build434: measured jetsam envelope of the host process.
+    static_assert(host_safety_reserve(0) == host_reserve_floor_bytes);
+    static_assert(host_safety_reserve(6 * GiB) == 384 * MiB);
+    static_assert(host_safety_reserve(8 * GiB) == 512 * MiB);
+    static_assert(host_safety_reserve(64 * GiB) == host_reserve_ceiling_bytes);
+    static_assert(ramped(256 * MiB, 100) == 256 * MiB && ramped(256 * MiB, 50) == 128 * MiB);
+    static_assert(ramped(256 * MiB, 25) == 64 * MiB && ramped(0, 25) == 0 && ramped(99, 50) == 49);
+    static_assert(growth_ramp(3 * GiB, 384 * MiB, true) == growth_ramp_full_percent);
+    static_assert(growth_ramp(500 * MiB, 384 * MiB, true) == growth_ramp_half_percent);
+    static_assert(growth_ramp(100 * MiB, 384 * MiB, true) == growth_ramp_quarter_percent);
+    static_assert(growth_ramp(3 * GiB, 384 * MiB, false) == 0);
+    {
+        // The limit is footprint plus headroom of the same tick, bounded by the RAM.
+        Inputs sampled = device_inputs(); // 3 GiB footprint, 3900 MiB headroom, 7.44 GiB RAM
+        const auto expected_limit = 3 * GiB + 3900 * MiB;
+        assert(host_limit_sample(sampled) == expected_limit);
+        Decision envelope = decide(sampled, {});
+        assert(envelope.host_limit_valid && envelope.host_limit_estimate_bytes == expected_limit);
+        assert(envelope.host_safety_reserve_bytes == host_safety_reserve(expected_limit));
+        assert(envelope.host_allocatable_bytes == expected_limit - envelope.host_safety_reserve_bytes);
+        assert(envelope.host_room_valid && envelope.host_room_bytes == envelope.host_allocatable_bytes - 3 * GiB);
+        assert(envelope.growth_ramp_percent == growth_ramp_full_percent && envelope.state == State::growing);
+        assert(!envelope.storage_shrink_requested);
+        // An over-reported sum cannot exceed the physical memory.
+        Inputs absurd = sampled;
+        absurd.host_available_bytes = 64 * GiB;
+        assert(host_limit_sample(absurd) == absurd.physical_bytes);
+        // Either reading missing: no sample, and the previous estimate carries over.
+        Inputs blind = sampled;
+        blind.host_available_valid = false;
+        assert(host_limit_sample(blind) == 0);
+        Decision carried = decide(blind, envelope);
+        assert(carried.host_limit_valid && carried.host_limit_estimate_bytes == expected_limit);
+        assert(carried.host_room_valid); // the footprint is still known
+        blind.host_footprint_valid = false;
+        carried = decide(blind, envelope);
+        assert(carried.host_limit_valid && !carried.host_room_valid);
+        assert(carried.growth_ramp_percent == growth_ramp_full_percent); // unknown room is not a brake
+        // Session high-water mark: a lower later sample never lowers the estimate,
+        // a higher one raises it, and a fresh session (no previous) restarts it.
+        Inputs lower = sampled;
+        lower.host_available_bytes = 1 * GiB;
+        Decision kept = decide(lower, envelope);
+        assert(kept.host_limit_estimate_bytes == expected_limit);
+        Inputs higher = sampled;
+        higher.host_available_bytes = 4000 * MiB;
+        assert(decide(higher, envelope).host_limit_estimate_bytes == 3 * GiB + 4000 * MiB);
+        assert(decide(lower, {}).host_limit_estimate_bytes == 3 * GiB + 1 * GiB);
+        // The envelope brakes the shared grant as the host approaches its
+        // allocatable share: half below two reserves, a quarter below one, and
+        // the room at zero asks the storage tier to archive before the
+        // operational reserve of os_proc_available_memory() is reached.
+        const auto reserve_h = envelope.host_safety_reserve_bytes;
+        Inputs near = sampled;
+        const auto occupy = [&](std::uint64_t footprint) {
+            near.host_footprint_bytes = footprint;
+            near.host_available_bytes = expected_limit - footprint; // same limit, less headroom
+        };
+        occupy(expected_limit - reserve_h - reserve_h - reserve_h / 2); // 1.5 reserves of room
+        Decision braked = decide(near, envelope);
+        assert(braked.state == State::growing && braked.growth_ramp_percent == growth_ramp_half_percent);
+        assert(braked.host_loan_quota_bytes == near.relay_host_live_bytes + maximum_growth_grant_bytes / 2);
+        assert(!braked.storage_shrink_requested);
+        occupy(expected_limit - reserve_h - reserve_h / 2); // half a reserve of room
+        braked = decide(near, envelope);
+        assert(braked.growth_ramp_percent == growth_ramp_quarter_percent);
+        assert(braked.host_loan_quota_bytes == near.relay_host_live_bytes + maximum_growth_grant_bytes / 4);
+        assert(braked.host_loans_admitted); // a brake, never a second gate
+        occupy(expected_limit - reserve_h); // room exhausted
+        braked = decide(near, envelope);
+        assert(braked.host_room_valid && braked.host_room_bytes == 0 && braked.storage_shrink_requested);
+        assert(braked.state == State::growing); // the system sample still admits, slowly
+        // Relay growth and donor room still share exactly the ramped grant.
+        Inputs capped_near = near;
+        capped_near.relay_capacity_bytes = guest_reserve_floor_bytes + capped_near.relay_host_live_bytes + 10 * MiB;
+        braked = decide(capped_near, envelope);
+        assert((braked.host_loan_quota_bytes - capped_near.relay_host_live_bytes) + braked.donor_room_bytes
+               == maximum_growth_grant_bytes / 4);
+        // Background: the inactive limit is far lower than the measured one, so
+        // the application state fails closed like pressure, keeps live loans,
+        // archives cold data and opens no growth at all.
+        Inputs background = sampled;
+        background.foreground = false;
+        Decision parked = decide(background, envelope);
+        assert(parked.state == State::pressure && std::strcmp(parked.reason, "application_background") == 0);
+        assert(!parked.host_loans_admitted && !parked.donor_growth_admitted && !parked.small_cpu_admitted);
+        assert(parked.host_loan_quota_bytes == background.relay_host_live_bytes && parked.storage_shrink_requested);
+        assert(parked.growth_ramp_percent == 0 && parked.host_limit_estimate_bytes == expected_limit);
+        // Returning to the foreground obeys the shrink hysteresis, like pressure.
+        Decision resumed = decide(sampled, parked);
+        assert(resumed.state == State::shrinking || resumed.state == State::growing);
+        Inputs ample = sampled;
+        ample.system_usable_bytes = 4 * GiB;
+        assert(decide(ample, resumed).state == State::growing);
+        // Pressure and background keep the envelope estimate for display.
+        Inputs warned_bg = sampled;
+        warned_bg.dispatch_warning = true;
+        assert(decide(warned_bg, envelope).host_limit_estimate_bytes == expected_limit);
+        assert(decide(warned_bg, envelope).growth_ramp_percent == 0);
+    }
+
     std::puts("PASS NeoSwap budget: idle/warming/growing/holding/shrinking/pressure, measured room, guest reserve, "
-              "relay host quota bounds, donor floors, small-CPU gate, hysteresis, saturating sums");
+              "relay host quota bounds, donor floors, small-CPU gate, hysteresis, saturating sums, "
+              "measured host envelope (limit estimate, safety reserve, ramp, background)");
 }

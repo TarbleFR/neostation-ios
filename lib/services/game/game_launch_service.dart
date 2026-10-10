@@ -348,7 +348,7 @@ class GameLaunchService {
         // app, or known only from RetroArch's exported library, keeps the
         // external route below. A failure here returns its real error and
         // never falls through to RetroArch.
-        if (LibretroInternalService.handlesSystem(system.folderName)) {
+        if (LibretroInternalService.handlesSystemModel(system)) {
           final locale = Localizations.localeOf(context);
           if (await LibretroInternalService.shouldLaunchEmbedded(system, game)) {
             final outcome = await LibretroInternalService.launch(

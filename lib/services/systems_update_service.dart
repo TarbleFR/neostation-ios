@@ -28,11 +28,6 @@ class SystemsUpdateResult {
     required this.filesUpdated,
     required this.filesTotal,
   });
-
-  /// Whether every file in the set landed. A partial update applies the files
-  /// it did get but deliberately leaves the stored version behind, so the next
-  /// check retries — see `checkAndUpdate`.
-  bool get isComplete => filesUpdated == filesTotal;
 }
 
 /// Info returned when a systems update is available but not yet downloaded.

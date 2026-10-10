@@ -95,14 +95,4 @@ class GameSessionPersistence {
       return false;
     }
   }
-
-  /// Checks if an active session flag exists without reading the full metadata.
-  static Future<bool> hasActiveSession() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      return prefs.getBool(_keyGameActive) ?? false;
-    } catch (e) {
-      return false;
-    }
-  }
 }

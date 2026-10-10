@@ -13,9 +13,6 @@ import 'package:neostation/services/logger_service.dart';
 /// (screenshots, videos), and localized assets. Implements smart ROM extension
 /// stripping and standardizes I/O operations.
 class FileProvider extends ChangeNotifier {
-  /// Default folder name for internal user configuration and database.
-  static const String userDataFolder = 'user-data';
-
   /// Default folder name for game artwork and media assets.
   static const String mediaFolder = 'media';
 
@@ -32,9 +29,6 @@ class FileProvider extends ChangeNotifier {
 
   /// Absolute path to the root media directory.
   String? _mediaPath;
-
-  /// Absolute path to the user's standard Documents directory.
-  String? _documentsPath;
 
   /// Whether the provider has finished resolving all platform-specific paths.
   bool _isInitialized = false;
@@ -79,8 +73,6 @@ class FileProvider extends ChangeNotifier {
 
   // Getters
   String? get userDataPath => _userDataPath;
-  String? get mediaPath => _mediaPath;
-  String? get documentsPath => _documentsPath;
   bool get isInitialized => _isInitialized;
 
   /// Resolves physical filesystem paths based on the current operating system.
@@ -93,7 +85,6 @@ class FileProvider extends ChangeNotifier {
     try {
       if (Platform.isAndroid || Platform.isIOS) {
         final appSupportDir = await getApplicationSupportDirectory();
-        _documentsPath = appSupportDir.path;
         _userDataPath = appSupportDir.path;
 
         if (Platform.isAndroid) {
@@ -125,8 +116,6 @@ class FileProvider extends ChangeNotifier {
 
         final fullMediaPath = await ConfigService.getMediaPath();
         _mediaPath = path.dirname(fullMediaPath);
-
-        _documentsPath = path.dirname(userDataDir.path);
       }
 
       // Ensure directory structures exist.
@@ -152,7 +141,6 @@ class FileProvider extends ChangeNotifier {
       _log.e('FileProvider: Error initializing: $e');
       _userDataPath = null;
       _mediaPath = null;
-      _documentsPath = null;
       _isInitialized = false;
       notifyListeners();
     }
@@ -308,27 +296,6 @@ class FileProvider extends ChangeNotifier {
     );
   }
 
-  /// Joins a relative path with the absolute user-data directory.
-  String getAbsolutePath(String relativePath) {
-    if (!_isInitialized || _userDataPath == null) {
-      return path.join(userDataFolder, relativePath);
-    }
-    return path.join(_userDataPath!, relativePath);
-  }
-
-  /// Resolves the expected internal path for a ROM file.
-  String getRomPath(String systemFolderName, String romName) {
-    if (!_isInitialized || _userDataPath == null) {
-      return path.join(
-        userDataFolder,
-        'roms',
-        systemFolderName,
-        '$romName.zip',
-      );
-    }
-    return path.join(_userDataPath!, 'roms', systemFolderName, '$romName.zip');
-  }
-
   /// Checks if a file exists asynchronously.
   Future<bool> fileExists(String filePath) async {
     try {
@@ -338,86 +305,6 @@ class FileProvider extends ChangeNotifier {
       _log.e('Error checking file existence $filePath: $e');
       return false;
     }
-  }
-
-  /// Recursively creates the parent directories for a given file path if they do not exist.
-  Future<void> ensureDirectoryExists(String filePath) async {
-    try {
-      final directory = Directory(path.dirname(filePath));
-      if (!await directory.exists()) {
-        await directory.create(recursive: true);
-      }
-    } catch (e) {
-      _log.e('Error creating directory for $filePath: $e');
-    }
-  }
-
-  /// Returns a list of all files and directories within a given path.
-  Future<List<FileSystemEntity>> getFilesInDirectory(
-    String directoryPath,
-  ) async {
-    try {
-      final directory = Directory(directoryPath);
-      if (await directory.exists()) {
-        return await directory.list().toList();
-      }
-      return [];
-    } catch (e) {
-      _log.e('Error listing files in $directoryPath: $e');
-      return [];
-    }
-  }
-
-  /// Retrieves the file size in bytes.
-  Future<int> getFileSize(String filePath) async {
-    try {
-      final file = File(filePath);
-      if (await file.exists()) {
-        return await file.length();
-      }
-      return 0;
-    } catch (e) {
-      _log.e('Error getting file size $filePath: $e');
-      return 0;
-    }
-  }
-
-  /// Copies a file to a new location, ensuring destination directories exist.
-  Future<bool> copyFile(String sourcePath, String destinationPath) async {
-    try {
-      await ensureDirectoryExists(destinationPath);
-      final sourceFile = File(sourcePath);
-      await sourceFile.copy(destinationPath);
-      return true;
-    } catch (e) {
-      _log.e('Error copying file $sourcePath to $destinationPath: $e');
-      return false;
-    }
-  }
-
-  /// Deletes a file from the filesystem if it exists.
-  Future<bool> deleteFile(String filePath) async {
-    try {
-      final file = File(filePath);
-      if (await file.exists()) {
-        await file.delete();
-        return true;
-      }
-      return false;
-    } catch (e) {
-      _log.e('Error deleting file $filePath: $e');
-      return false;
-    }
-  }
-
-  /// Returns the system's Documents directory path.
-  String getDocumentsPath() {
-    return _documentsPath ?? Directory.current.path;
-  }
-
-  /// Returns the absolute path to the application's user-data directory.
-  String getAppDirectoryPath() {
-    return _userDataPath ?? userDataFolder;
   }
 
   /// Returns the absolute path to the application's root media directory.
@@ -568,7 +455,6 @@ class FileProvider extends ChangeNotifier {
   void reset() {
     _userDataPath = null;
     _mediaPath = null;
-    _documentsPath = null;
     _esdeRoot = null;
     _esdeSystemDirs = {};
     _esdeMediaSubdirs = {};

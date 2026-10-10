@@ -131,12 +131,4 @@ class TCWiiPad: TCView, UIGestureRecognizerDelegate {
   @objc func setTouchIRMode(_ newMode: TCWiiTouchIRMode) {
     self.mode = newMode
   }
-  
-  @objc func resetPointer() {
-    touchStartPoint = CGPoint(x: 0, y: 0)
-    oldX = 0
-    oldY = 0
-    pointerX = 0
-    pointerY = 0
-  }
 }

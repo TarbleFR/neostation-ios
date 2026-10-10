@@ -95,7 +95,6 @@ class SystemModel {
   /// List of absolute directory paths monitored for ROM files.
   final List<String> folders;
 
-
   /// Internal version counter to force image cache invalidation.
   final int imageVersion;
 
@@ -132,18 +131,6 @@ class SystemModel {
     this.folders = const [],
     this.imageVersion = 0,
   });
-
-  /// Resolves the final background image path (custom background takes priority).
-  String get carouselImagePath =>
-      customBackgroundPath != null && customBackgroundPath!.isNotEmpty
-      ? customBackgroundPath!
-      : (backgroundImage ?? '');
-
-  /// Resolves the final grid image path (custom background takes priority).
-  String get gridImagePath =>
-      customBackgroundPath != null && customBackgroundPath!.isNotEmpty
-      ? customBackgroundPath!
-      : iconImage;
 
   /// Converts the [color] hex string into a Flutter [Color] object.
   Color get colorAsColor {

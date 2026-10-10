@@ -118,7 +118,6 @@ abstract final class Rpcs3UiLocale {
     return _v[code]?[key] ?? _service[code]?[key] ?? _v['en']?[key] ?? _service['en']?[key] ?? key;
   }
 
-
   static String canonicalLocale(String localeTag) {
     final normalized = localeTag.replaceAll('-', '_');
     final lower = normalized.toLowerCase();
@@ -141,18 +140,6 @@ abstract final class Rpcs3UiLocale {
         _v['en']?[key] ??
         _service['en']?[key] ??
         key;
-  }
-
-  static String formatForLocale(
-    String localeTag,
-    String key,
-    Map<String, Object?> values,
-  ) {
-    var value = textForLocale(localeTag, key);
-    for (final item in values.entries) {
-      value = value.replaceAll('{'+item.key+'}', item.value?.toString() ?? '');
-    }
-    return value;
   }
 
   static String format(

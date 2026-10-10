@@ -87,7 +87,6 @@ static UIViewController* ARMSX2RootViewController(void) {
 @property(nonatomic, assign) UIView* coreView;
 @property(nonatomic, copy) dispatch_block_t closeHandler;
 @property(nonatomic, copy) dispatch_block_t menuHandler;
-@property(nonatomic, copy) void (^commandHandler)(NSString* command, NSNumber* value);
 @property(nonatomic, strong) UIView* controlsView;
 @property(nonatomic, strong) UIButton* menuButton;
 @property(nonatomic, strong) UILabel* statusLabel;
@@ -332,28 +331,6 @@ static UIViewController* ARMSX2RootViewController(void) {
   if (self.closing || !self.menuReady) return;
   [self resetInput];
   if (self.menuHandler) self.menuHandler();
-}
-
-- (UIAction*)commandAction:(NSString*)title
-                   command:(NSString*)command
-                     value:(NSNumber*)value
-                  selected:(BOOL)selected
-                   enabled:(BOOL)enabled {
-  __weak Armsx2GameViewController* weakSelf=self;
-  UIAction* action=[UIAction actionWithTitle:title image:nil identifier:nil handler:^(__kindof UIAction* _) {
-    Armsx2GameViewController* strongSelf=weakSelf; if(!strongSelf) return;
-    if([command isEqualToString:@"toggleTouch"]) {
-      strongSelf.touchControlsVisible=!strongSelf.touchControlsVisible;
-      if(!strongSelf.touchControlsVisible) [strongSelf resetInput];
-      strongSelf.controlsView.hidden=!strongSelf.touchControlsVisible;
-      [strongSelf refreshMenu];
-      return;
-    }
-    if(strongSelf.commandHandler) strongSelf.commandHandler(command,value);
-  }];
-  action.state=selected ? UIMenuElementStateOn : UIMenuElementStateOff;
-  if(!enabled) action.attributes=UIMenuElementAttributesDisabled;
-  return action;
 }
 
 - (void)refreshMenu {
@@ -1085,12 +1062,6 @@ static UIViewController* ARMSX2RootViewController(void) {
   });
 }
 
-- (void)performGameCommand:(NSString*)command
-                     value:(NSNumber*)value
-                controller:(Armsx2GameViewController*)controller {
-  [self performGameCommand:command value:value controller:controller completion:nil];
-}
-
 - (void)handleMethodCall:(FlutterMethodCall*)call result:(FlutterResult)result {
   if ([call.method isEqualToString:@"diagnostics"]) {
     NSString* path = [self corePath];
@@ -1168,12 +1139,6 @@ static UIViewController* ARMSX2RootViewController(void) {
         Armsx2GameViewController* strongController = weakController;
         if (!strongSelf || !strongController) return;
         [strongSelf presentSessionMenuForController:strongController];
-      };
-      controller.commandHandler = ^(NSString* command, NSNumber* value) {
-        Armsx2InternalBridgePlugin* strongSelf = weakSelf;
-        Armsx2GameViewController* strongController = weakController;
-        if (!strongSelf || !strongController) return;
-        [strongSelf performGameCommand:command value:value controller:strongController];
       };
       [controller loadViewIfNeeded];
       if (!controller.coreView) { controller = nil; return; }

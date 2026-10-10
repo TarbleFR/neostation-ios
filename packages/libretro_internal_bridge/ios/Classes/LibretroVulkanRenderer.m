@@ -12,6 +12,7 @@
 #include "libretro_vulkan.h"
 
 #include <dlfcn.h>
+#include <mach/mach_time.h>
 #include <os/lock.h>
 #include <pthread.h>
 #include <string.h>
@@ -20,6 +21,14 @@
 #define LIBRETRO_VK_MAX_SEMAPHORES 16
 #define LIBRETRO_VK_MAX_COMMANDS 16
 #define LIBRETRO_VK_MAX_EXTENSIONS 32
+/// Frame hand-off ring: one slot is recorded while the previous one is read.
+#define LIBRETRO_VK_HANDOFF_SLOTS 2
+/// Initial read-back buffer of each slot (1024x1024 at 4 bytes per pixel).
+#define LIBRETRO_VK_HANDOFF_INITIAL_BYTES ((VkDeviceSize)4 * 1024 * 1024)
+/// Read-back buffers grow by whole MiB.
+#define LIBRETRO_VK_HANDOFF_GROWTH ((VkDeviceSize)1024 * 1024)
+/// Read-back timings are logged every this many handed-off frames.
+#define LIBRETRO_VK_HANDOFF_LOG_INTERVAL 600
 
 static NSError *VulkanError(NSString *detail) {
   return [NSError errorWithDomain:@"org.neostation.libretro.vulkan"
@@ -44,6 +53,53 @@ static BOOL ContainsName(const char *const *names, uint32_t count, const char *n
   return NO;
 }
 
+/// Metal format of a core image whose bytes are handed off unchanged; NO for
+/// formats first converted to B8G8R8A8_UNORM.
+static BOOL HandOffPixelFormat(VkFormat format, MTLPixelFormat *pixelFormat) {
+  switch (format) {
+    case VK_FORMAT_R8G8B8A8_UNORM:
+    case VK_FORMAT_R8G8B8A8_SRGB:
+      *pixelFormat = MTLPixelFormatRGBA8Unorm;
+      return YES;
+    case VK_FORMAT_B8G8R8A8_UNORM:
+    case VK_FORMAT_B8G8R8A8_SRGB:
+      *pixelFormat = MTLPixelFormatBGRA8Unorm;
+      return YES;
+    case VK_FORMAT_A2B10G10R10_UNORM_PACK32:
+      *pixelFormat = MTLPixelFormatRGB10A2Unorm;
+      return YES;
+    case VK_FORMAT_A2R10G10B10_UNORM_PACK32:
+      *pixelFormat = MTLPixelFormatBGR10A2Unorm;
+      return YES;
+    default:
+      return NO;
+  }
+}
+
+/// One hand-off slot: what the GPU may still use for the frame recorded in
+/// it, and the host copy of that frame.
+typedef struct {
+  VkCommandBuffer command;
+  VkFence fence;
+  /// The fence belongs to a submission not yet waited for.
+  BOOL submitted;
+  VkBuffer buffer;
+  VkDeviceMemory memory;
+  void *mapped;
+  VkDeviceSize capacity;
+  /// Owned B8G8R8A8_UNORM image for formats that are not copied raw.
+  VkImage convertImage;
+  VkDeviceMemory convertMemory;
+  uint32_t convertWidth;
+  uint32_t convertHeight;
+  /// Holds a copied frame not yet given to the frame handler.
+  BOOL pending;
+  unsigned width;
+  unsigned height;
+  size_t bytesPerRow;
+  MTLPixelFormat pixelFormat;
+} LibretroVkSlot;
+
 @implementation LibretroVulkanRenderer {
   CAMetalLayer *_layer;
   const struct retro_hw_render_context_negotiation_interface_vulkan *_negotiation;
@@ -56,6 +112,8 @@ static BOOL ContainsName(const char *const *names, uint32_t count, const char *n
   PFN_vkDestroyInstance _destroyInstance;
   PFN_vkEnumeratePhysicalDevices _enumeratePhysicalDevices;
   PFN_vkGetPhysicalDeviceQueueFamilyProperties _getQueueFamilies;
+  PFN_vkGetPhysicalDeviceMemoryProperties _getMemoryProperties;
+  PFN_vkGetPhysicalDeviceFormatProperties _getFormatProperties;
   PFN_vkGetPhysicalDeviceSurfaceSupportKHR _getSurfaceSupport;
   PFN_vkGetPhysicalDeviceSurfaceCapabilitiesKHR _getSurfaceCapabilities;
   PFN_vkGetPhysicalDeviceSurfaceFormatsKHR _getSurfaceFormats;
@@ -75,12 +133,14 @@ static BOOL ContainsName(const char *const *names, uint32_t count, const char *n
   PFN_vkCreateCommandPool _createCommandPool;
   PFN_vkDestroyCommandPool _destroyCommandPool;
   PFN_vkAllocateCommandBuffers _allocateCommandBuffers;
+  PFN_vkFreeCommandBuffers _freeCommandBuffers;
   PFN_vkResetCommandBuffer _resetCommandBuffer;
   PFN_vkBeginCommandBuffer _beginCommandBuffer;
   PFN_vkEndCommandBuffer _endCommandBuffer;
   PFN_vkCmdPipelineBarrier _cmdPipelineBarrier;
   PFN_vkCmdBlitImage _cmdBlitImage;
   PFN_vkCmdClearColorImage _cmdClearColorImage;
+  PFN_vkCmdCopyImageToBuffer _cmdCopyImageToBuffer;
   PFN_vkQueueSubmit _queueSubmit;
   PFN_vkCreateFence _createFence;
   PFN_vkDestroyFence _destroyFence;
@@ -88,6 +148,18 @@ static BOOL ContainsName(const char *const *names, uint32_t count, const char *n
   PFN_vkResetFences _resetFences;
   PFN_vkCreateSemaphore _createSemaphore;
   PFN_vkDestroySemaphore _destroySemaphore;
+  PFN_vkCreateBuffer _createBuffer;
+  PFN_vkDestroyBuffer _destroyBuffer;
+  PFN_vkGetBufferMemoryRequirements _getBufferMemoryRequirements;
+  PFN_vkBindBufferMemory _bindBufferMemory;
+  PFN_vkCreateImage _createImage;
+  PFN_vkDestroyImage _destroyImage;
+  PFN_vkGetImageMemoryRequirements _getImageMemoryRequirements;
+  PFN_vkBindImageMemory _bindImageMemory;
+  PFN_vkAllocateMemory _allocateMemory;
+  PFN_vkFreeMemory _freeMemory;
+  PFN_vkMapMemory _mapMemory;
+  PFN_vkUnmapMemory _unmapMemory;
 
   VkInstance _instance;
   VkPhysicalDevice _gpu;
@@ -97,13 +169,31 @@ static BOOL ContainsName(const char *const *names, uint32_t count, const char *n
   VkSurfaceKHR _surface;
   BOOL _portabilityEnumeration;
   BOOL _portabilitySubset;
+  VkCommandPool _commandPool;
 
+  // Frame hand-off (normal mode), decided once in prepare:.
+  BOOL _handOff;
+  uint32_t _slot;
+  uint32_t _slotMask;
+  LibretroVkSlot _slots[LIBRETRO_VK_HANDOFF_SLOTS];
+  VkPhysicalDeviceMemoryProperties _memoryProperties;
+  VkFormat _loggedFormat;
+  VkFormat _checkedBlitFormat;
+  BOOL _blitFormatSupported;
+  BOOL _loggedAllocationFailure;
+  BOOL _loggedSubmitFailure;
+  mach_timebase_info_data_t _timebase;
+  uint32_t _statFrames;
+  uint64_t _statWaitTicks;
+  uint64_t _statHandlerTicks;
+  uint64_t _statMaxTicks;
+
+  // Legacy presentation (fallback).
   VkSwapchainKHR _swapchain;
   VkFormat _swapchainFormat;
   VkExtent2D _extent;
   uint32_t _imageCount;
   VkImage _images[LIBRETRO_VK_MAX_IMAGES];
-  VkCommandPool _commandPool;
   VkCommandBuffer _commandBuffers[LIBRETRO_VK_MAX_IMAGES];
   VkFence _fences[LIBRETRO_VK_MAX_IMAGES];
   BOOL _fenceSubmitted[LIBRETRO_VK_MAX_IMAGES];
@@ -117,6 +207,7 @@ static BOOL ContainsName(const char *const *names, uint32_t count, const char *n
   BOOL _acquired;
   BOOL _needsRecreate;
 
+  // State set by the core during retro_run.
   struct retro_vulkan_image _lastImage;
   BOOL _hasLastImage;
   unsigned _lastWidth;
@@ -132,6 +223,26 @@ static BOOL ContainsName(const char *const *names, uint32_t count, const char *n
   struct retro_hw_render_interface_vulkan _interface;
   os_unfair_lock _rectLock;
   CGRect _videoRect;
+}
+
+#pragma mark - Helpers
+
+static void ImageBarrier(LibretroVulkanRenderer *renderer, VkCommandBuffer command, VkImage image,
+                         VkImageSubresourceRange range, VkImageLayout from, VkImageLayout to, VkAccessFlags srcAccess,
+                         VkAccessFlags dstAccess, VkPipelineStageFlags srcStage, VkPipelineStageFlags dstStage,
+                         uint32_t srcFamily, uint32_t dstFamily) {
+  VkImageMemoryBarrier barrier = {
+      .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+      .srcAccessMask = srcAccess,
+      .dstAccessMask = dstAccess,
+      .oldLayout = from,
+      .newLayout = to,
+      .srcQueueFamilyIndex = srcFamily,
+      .dstQueueFamilyIndex = dstFamily,
+      .image = image,
+      .subresourceRange = range,
+  };
+  renderer->_cmdPipelineBarrier(command, srcStage, dstStage, 0, 0, NULL, 0, NULL, 1, &barrier);
 }
 
 #pragma mark - Render interface callbacks
@@ -154,12 +265,15 @@ static void LibretroVkSetImage(void *handle, const struct retro_vulkan_image *im
 
 static uint32_t LibretroVkGetSyncIndex(void *handle) {
   LibretroVulkanRenderer *renderer = (__bridge LibretroVulkanRenderer *)handle;
-  return renderer != nil ? renderer->_currentIndex : 0;
+  if (renderer == nil) return 0;
+  return renderer->_handOff ? renderer->_slot : renderer->_currentIndex;
 }
 
 static uint32_t LibretroVkGetSyncIndexMask(void *handle) {
   LibretroVulkanRenderer *renderer = (__bridge LibretroVulkanRenderer *)handle;
-  if (renderer == nil || renderer->_imageCount == 0) return 1;
+  if (renderer == nil) return 1;
+  if (renderer->_handOff) return renderer->_slotMask;
+  if (renderer->_imageCount == 0) return 1;
   return renderer->_imageCount >= 32 ? 0xFFFFFFFFu : ((1u << renderer->_imageCount) - 1u);
 }
 
@@ -174,6 +288,11 @@ static void LibretroVkSetCommandBuffers(void *handle, uint32_t count, const VkCo
 static void LibretroVkWaitSyncIndex(void *handle) {
   LibretroVulkanRenderer *renderer = (__bridge LibretroVulkanRenderer *)handle;
   if (renderer == nil || renderer->_device == VK_NULL_HANDLE) return;
+  if (renderer->_handOff) {
+    LibretroVkSlot *slot = &renderer->_slots[renderer->_slot];
+    if (slot->submitted) renderer->_waitForFences(renderer->_device, 1, &slot->fence, VK_TRUE, UINT64_MAX);
+    return;
+  }
   uint32_t index = renderer->_currentIndex;
   if (index < LIBRETRO_VK_MAX_IMAGES && renderer->_fenceSubmitted[index]) {
     renderer->_waitForFences(renderer->_device, 1, &renderer->_fences[index], VK_TRUE, UINT64_MAX);
@@ -205,6 +324,7 @@ static VkInstance LibretroVkCreateInstanceWrapper(void *opaque, const VkInstance
   for (uint32_t index = 0; index < createInfo->enabledExtensionCount && count < LIBRETRO_VK_MAX_EXTENSIONS - 4; index++) {
     extensions[count++] = createInfo->ppEnabledExtensionNames[index];
   }
+  // Surface extensions stay enabled so the legacy presentation remains possible.
   const char *required[3] = {VK_KHR_SURFACE_EXTENSION_NAME, VK_EXT_METAL_SURFACE_EXTENSION_NAME,
                              renderer->_portabilityEnumeration ? VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME : NULL};
   for (uint32_t index = 0; index < 3; index++) {
@@ -261,6 +381,9 @@ static VkDevice LibretroVkCreateDeviceWrapper(VkPhysicalDevice gpu, void *opaque
     pthread_mutex_init(&_queueLock, NULL);
     _rectLock = OS_UNFAIR_LOCK_INIT;
     _videoRect = CGRectMake(0, 0, 1, 1);
+    _loggedFormat = VK_FORMAT_MAX_ENUM;
+    _checkedBlitFormat = VK_FORMAT_UNDEFINED;
+    mach_timebase_info(&_timebase);
   }
   return self;
 }
@@ -276,6 +399,10 @@ static VkDevice LibretroVkCreateDeviceWrapper(VkPhysicalDevice gpu, void *opaque
   }
   _negotiation = (const struct retro_hw_render_context_negotiation_interface_vulkan *)negotiation;
   return YES;
+}
+
+- (BOOL)handsOffFrames {
+  return _handOff;
 }
 
 - (CGRect)normalizedVideoRect {
@@ -354,6 +481,8 @@ static VkDevice LibretroVkCreateDeviceWrapper(VkPhysicalDevice gpu, void *opaque
   LOAD_INSTANCE(_destroyInstance, vkDestroyInstance);
   LOAD_INSTANCE(_enumeratePhysicalDevices, vkEnumeratePhysicalDevices);
   LOAD_INSTANCE(_getQueueFamilies, vkGetPhysicalDeviceQueueFamilyProperties);
+  LOAD_INSTANCE(_getMemoryProperties, vkGetPhysicalDeviceMemoryProperties);
+  LOAD_INSTANCE(_getFormatProperties, vkGetPhysicalDeviceFormatProperties);
   LOAD_INSTANCE(_getSurfaceSupport, vkGetPhysicalDeviceSurfaceSupportKHR);
   LOAD_INSTANCE(_getSurfaceCapabilities, vkGetPhysicalDeviceSurfaceCapabilitiesKHR);
   LOAD_INSTANCE(_getSurfaceFormats, vkGetPhysicalDeviceSurfaceFormatsKHR);
@@ -362,18 +491,9 @@ static VkDevice LibretroVkCreateDeviceWrapper(VkPhysicalDevice gpu, void *opaque
   LOAD_INSTANCE(_destroySurface, vkDestroySurfaceKHR);
   LOAD_INSTANCE(_createDevice, vkCreateDevice);
   LOAD_INSTANCE(_getDeviceProcAddr, vkGetDeviceProcAddr);
-  if (_enumeratePhysicalDevices == NULL || _createMetalSurface == NULL || _createDevice == NULL ||
-      _getDeviceProcAddr == NULL) {
+  if (_enumeratePhysicalDevices == NULL || _getQueueFamilies == NULL || _enumerateDeviceExtensions == NULL ||
+      _createDevice == NULL || _getDeviceProcAddr == NULL) {
     if (error) *error = VulkanError(@"Vulkan instance entry points missing");
-    return NO;
-  }
-
-  VkMetalSurfaceCreateInfoEXT surfaceInfo = {
-      .sType = VK_STRUCTURE_TYPE_METAL_SURFACE_CREATE_INFO_EXT,
-      .pLayer = _layer,
-  };
-  if (_createMetalSurface(_instance, &surfaceInfo, NULL, &_surface) != VK_SUCCESS) {
-    if (error) *error = VulkanError(@"vkCreateMetalSurfaceEXT failed");
     return NO;
   }
 
@@ -396,22 +516,25 @@ static VkDevice LibretroVkCreateDeviceWrapper(VkPhysicalDevice gpu, void *opaque
     free(properties);
   }
 
+  // No surface on the visible layer: libretro_vulkan.h makes it optional and
+  // the frames are handed off to Metal. The legacy fallback creates its
+  // surface later, on a queue family MoltenVK can always present from.
   struct retro_vulkan_context context;
   memset(&context, 0, sizeof(context));
   BOOL created = NO;
   if (_negotiation != NULL && _negotiation->interface_version >= 2 && _negotiation->create_device2 != NULL) {
-    created = _negotiation->create_device2(&context, _instance, _gpu, _surface, _getInstanceProcAddr,
+    created = _negotiation->create_device2(&context, _instance, _gpu, VK_NULL_HANDLE, _getInstanceProcAddr,
                                            LibretroVkCreateDeviceWrapper, (__bridge void *)self);
     if (!created) {
       memset(&context, 0, sizeof(context));
-      created = _negotiation->create_device2(&context, _instance, VK_NULL_HANDLE, _surface, _getInstanceProcAddr,
+      created = _negotiation->create_device2(&context, _instance, VK_NULL_HANDLE, VK_NULL_HANDLE, _getInstanceProcAddr,
                                              LibretroVkCreateDeviceWrapper, (__bridge void *)self);
     }
   } else if (_negotiation != NULL && _negotiation->create_device != NULL) {
     const char *extensions[2] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME, "VK_KHR_portability_subset"};
     VkPhysicalDeviceFeatures features;
     memset(&features, 0, sizeof(features));
-    created = _negotiation->create_device(&context, _instance, _gpu, _surface, _getInstanceProcAddr, extensions,
+    created = _negotiation->create_device(&context, _instance, _gpu, VK_NULL_HANDLE, _getInstanceProcAddr, extensions,
                                           _portabilitySubset ? 2 : 1, NULL, 0, &features);
   }
   if (created && context.device != VK_NULL_HANDLE) {
@@ -434,12 +557,14 @@ static VkDevice LibretroVkCreateDeviceWrapper(VkPhysicalDevice gpu, void *opaque
   LOAD_DEVICE(_createCommandPool, vkCreateCommandPool);
   LOAD_DEVICE(_destroyCommandPool, vkDestroyCommandPool);
   LOAD_DEVICE(_allocateCommandBuffers, vkAllocateCommandBuffers);
+  LOAD_DEVICE(_freeCommandBuffers, vkFreeCommandBuffers);
   LOAD_DEVICE(_resetCommandBuffer, vkResetCommandBuffer);
   LOAD_DEVICE(_beginCommandBuffer, vkBeginCommandBuffer);
   LOAD_DEVICE(_endCommandBuffer, vkEndCommandBuffer);
   LOAD_DEVICE(_cmdPipelineBarrier, vkCmdPipelineBarrier);
   LOAD_DEVICE(_cmdBlitImage, vkCmdBlitImage);
   LOAD_DEVICE(_cmdClearColorImage, vkCmdClearColorImage);
+  LOAD_DEVICE(_cmdCopyImageToBuffer, vkCmdCopyImageToBuffer);
   LOAD_DEVICE(_queueSubmit, vkQueueSubmit);
   LOAD_DEVICE(_createFence, vkCreateFence);
   LOAD_DEVICE(_destroyFence, vkDestroyFence);
@@ -447,7 +572,23 @@ static VkDevice LibretroVkCreateDeviceWrapper(VkPhysicalDevice gpu, void *opaque
   LOAD_DEVICE(_resetFences, vkResetFences);
   LOAD_DEVICE(_createSemaphore, vkCreateSemaphore);
   LOAD_DEVICE(_destroySemaphore, vkDestroySemaphore);
-  if (_createSwapchain == NULL || _queueSubmit == NULL || _cmdBlitImage == NULL || _acquireNextImage == NULL) {
+  LOAD_DEVICE(_createBuffer, vkCreateBuffer);
+  LOAD_DEVICE(_destroyBuffer, vkDestroyBuffer);
+  LOAD_DEVICE(_getBufferMemoryRequirements, vkGetBufferMemoryRequirements);
+  LOAD_DEVICE(_bindBufferMemory, vkBindBufferMemory);
+  LOAD_DEVICE(_createImage, vkCreateImage);
+  LOAD_DEVICE(_destroyImage, vkDestroyImage);
+  LOAD_DEVICE(_getImageMemoryRequirements, vkGetImageMemoryRequirements);
+  LOAD_DEVICE(_bindImageMemory, vkBindImageMemory);
+  LOAD_DEVICE(_allocateMemory, vkAllocateMemory);
+  LOAD_DEVICE(_freeMemory, vkFreeMemory);
+  LOAD_DEVICE(_mapMemory, vkMapMemory);
+  LOAD_DEVICE(_unmapMemory, vkUnmapMemory);
+  if (_destroyDevice == NULL || _getDeviceQueue == NULL || _deviceWaitIdle == NULL || _createCommandPool == NULL ||
+      _destroyCommandPool == NULL || _allocateCommandBuffers == NULL || _freeCommandBuffers == NULL ||
+      _resetCommandBuffer == NULL || _beginCommandBuffer == NULL || _endCommandBuffer == NULL ||
+      _cmdPipelineBarrier == NULL || _queueSubmit == NULL || _createFence == NULL || _destroyFence == NULL ||
+      _waitForFences == NULL || _resetFences == NULL) {
     if (error) *error = VulkanError(@"Vulkan device entry points missing");
     return NO;
   }
@@ -459,10 +600,21 @@ static VkDevice LibretroVkCreateDeviceWrapper(VkPhysicalDevice gpu, void *opaque
       .queueFamilyIndex = _queueFamily,
   };
   if (_createCommandPool(_device, &poolInfo, NULL, &_commandPool) != VK_SUCCESS) {
+    _commandPool = VK_NULL_HANDLE;
     if (error) *error = VulkanError(@"vkCreateCommandPool failed");
     return NO;
   }
-  if (![self createSwapchain:error]) return NO;
+
+  // Decided once: the sync index mask and the presentation path never change
+  // after context_reset.
+  _handOff = [self createHandOffResources];
+  if (_handOff) {
+    NSLog(@"[Libretro] Vulkan frames handed off to Metal through %d host buffers", LIBRETRO_VK_HANDOFF_SLOTS);
+  } else {
+    [self destroyHandOffResources];
+    NSLog(@"[Libretro] Vulkan frame hand-off unavailable; presenting through a swapchain on the layer");
+    if (![self prepareLegacyPresentation:error]) return NO;
+  }
 
   memset(&_interface, 0, sizeof(_interface));
   _interface.interface_type = RETRO_HW_RENDER_INTERFACE_VULKAN;
@@ -496,18 +648,16 @@ static VkDevice LibretroVkCreateDeviceWrapper(VkPhysicalDevice gpu, void *opaque
   VkQueueFamilyProperties *families = calloc(familyCount, sizeof(VkQueueFamilyProperties));
   _getQueueFamilies(_gpu, &familyCount, families);
   BOOL found = NO;
+  VkQueueFlags required = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT;
   for (uint32_t index = 0; index < familyCount && !found; index++) {
-    VkBool32 present = VK_FALSE;
-    if (_getSurfaceSupport != NULL) _getSurfaceSupport(_gpu, index, _surface, &present);
-    VkQueueFlags required = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT;
-    if ((families[index].queueFlags & required) == required && present) {
+    if ((families[index].queueFlags & required) == required) {
       _queueFamily = index;
       found = YES;
     }
   }
   free(families);
   if (!found) {
-    if (error) *error = VulkanError(@"no graphics and present queue");
+    if (error) *error = VulkanError(@"no graphics and compute queue");
     return NO;
   }
   float priority = 1.0f;
@@ -528,6 +678,265 @@ static VkDevice LibretroVkCreateDeviceWrapper(VkPhysicalDevice gpu, void *opaque
     return NO;
   }
   return YES;
+}
+
+#pragma mark - Hand-off resources
+
+- (BOOL)createHandOffResources {
+  if (_cmdCopyImageToBuffer == NULL || _cmdBlitImage == NULL || _createBuffer == NULL || _destroyBuffer == NULL ||
+      _getBufferMemoryRequirements == NULL || _bindBufferMemory == NULL || _createImage == NULL ||
+      _destroyImage == NULL || _getImageMemoryRequirements == NULL || _bindImageMemory == NULL ||
+      _allocateMemory == NULL || _freeMemory == NULL || _mapMemory == NULL || _unmapMemory == NULL ||
+      _getMemoryProperties == NULL) {
+    NSLog(@"[Libretro] Vulkan hand-off entry points missing");
+    return NO;
+  }
+  memset(&_memoryProperties, 0, sizeof(_memoryProperties));
+  _getMemoryProperties(_gpu, &_memoryProperties);
+  VkCommandBuffer commands[LIBRETRO_VK_HANDOFF_SLOTS];
+  VkCommandBufferAllocateInfo allocation = {
+      .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+      .commandPool = _commandPool,
+      .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+      .commandBufferCount = LIBRETRO_VK_HANDOFF_SLOTS,
+  };
+  if (_allocateCommandBuffers(_device, &allocation, commands) != VK_SUCCESS) {
+    NSLog(@"[Libretro] Vulkan hand-off command buffers unavailable");
+    return NO;
+  }
+  for (uint32_t index = 0; index < LIBRETRO_VK_HANDOFF_SLOTS; index++) _slots[index].command = commands[index];
+  VkFenceCreateInfo fenceInfo = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
+  for (uint32_t index = 0; index < LIBRETRO_VK_HANDOFF_SLOTS; index++) {
+    LibretroVkSlot *slot = &_slots[index];
+    if (_createFence(_device, &fenceInfo, NULL, &slot->fence) != VK_SUCCESS) {
+      slot->fence = VK_NULL_HANDLE;
+      NSLog(@"[Libretro] Vulkan hand-off fence unavailable");
+      return NO;
+    }
+    if (![self ensureBufferOfSlot:index bytes:LIBRETRO_VK_HANDOFF_INITIAL_BYTES]) return NO;
+  }
+  _slot = 0;
+  _slotMask = (1u << LIBRETRO_VK_HANDOFF_SLOTS) - 1u;
+  return YES;
+}
+
+/// Releases every slot resource after waiting for its fence. The slots can
+/// be partially created (failed `prepare:`).
+- (void)destroyHandOffResources {
+  if (_device == VK_NULL_HANDLE) return;
+  for (uint32_t index = 0; index < LIBRETRO_VK_HANDOFF_SLOTS; index++) {
+    LibretroVkSlot *slot = &_slots[index];
+    if (slot->submitted && slot->fence != VK_NULL_HANDLE) {
+      _waitForFences(_device, 1, &slot->fence, VK_TRUE, UINT64_MAX);
+    }
+    [self releaseBufferOfSlot:index];
+    [self releaseConvertImageOfSlot:index];
+    if (slot->fence != VK_NULL_HANDLE && _destroyFence != NULL) _destroyFence(_device, slot->fence, NULL);
+    if (slot->command != VK_NULL_HANDLE && _commandPool != VK_NULL_HANDLE && _freeCommandBuffers != NULL) {
+      _freeCommandBuffers(_device, _commandPool, 1, &slot->command);
+    }
+    memset(slot, 0, sizeof(*slot));
+  }
+}
+
+/// Memory type allowed by `bits` with every `required` flag, preferring one
+/// that also has the `preferred` flags; never a lazily allocated type.
+/// UINT32_MAX when none.
+- (uint32_t)memoryTypeForBits:(uint32_t)bits
+                     required:(VkMemoryPropertyFlags)required
+                    preferred:(VkMemoryPropertyFlags)preferred {
+  uint32_t fallback = UINT32_MAX;
+  for (uint32_t index = 0; index < _memoryProperties.memoryTypeCount && index < 32; index++) {
+    if ((bits & (1u << index)) == 0) continue;
+    VkMemoryPropertyFlags flags = _memoryProperties.memoryTypes[index].propertyFlags;
+    if ((flags & VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT) != 0 || (flags & required) != required) continue;
+    if ((flags & preferred) == preferred) return index;
+    if (fallback == UINT32_MAX) fallback = index;
+  }
+  return fallback;
+}
+
+/// Persistently mapped, host-visible and host-coherent read-back buffer of at
+/// least `bytes` (host-cached preferred, for CPU reads). The slot must be
+/// idle.
+- (BOOL)ensureBufferOfSlot:(uint32_t)index bytes:(VkDeviceSize)bytes {
+  LibretroVkSlot *slot = &_slots[index];
+  if (slot->buffer != VK_NULL_HANDLE && slot->mapped != NULL && slot->capacity >= bytes) return YES;
+  [self releaseBufferOfSlot:index];
+  VkDeviceSize growth = LIBRETRO_VK_HANDOFF_GROWTH;
+  VkDeviceSize capacity = (bytes + growth - 1) / growth * growth;
+  VkBufferCreateInfo info = {
+      .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+      .size = capacity,
+      .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+      .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+  };
+  if (_createBuffer(_device, &info, NULL, &slot->buffer) != VK_SUCCESS) {
+    slot->buffer = VK_NULL_HANDLE;
+    [self logAllocationFailure:@"buffer" bytes:capacity];
+    return NO;
+  }
+  VkMemoryRequirements requirements;
+  memset(&requirements, 0, sizeof(requirements));
+  _getBufferMemoryRequirements(_device, slot->buffer, &requirements);
+  uint32_t type = [self memoryTypeForBits:requirements.memoryTypeBits
+                                 required:VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+                                preferred:VK_MEMORY_PROPERTY_HOST_CACHED_BIT];
+  if (type == UINT32_MAX) {
+    [self releaseBufferOfSlot:index];
+    [self logAllocationFailure:@"host-visible memory type" bytes:capacity];
+    return NO;
+  }
+  VkMemoryAllocateInfo allocation = {
+      .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+      .allocationSize = requirements.size,
+      .memoryTypeIndex = type,
+  };
+  if (_allocateMemory(_device, &allocation, NULL, &slot->memory) != VK_SUCCESS) {
+    slot->memory = VK_NULL_HANDLE;
+    [self releaseBufferOfSlot:index];
+    [self logAllocationFailure:@"buffer memory" bytes:capacity];
+    return NO;
+  }
+  if (_bindBufferMemory(_device, slot->buffer, slot->memory, 0) != VK_SUCCESS ||
+      _mapMemory(_device, slot->memory, 0, VK_WHOLE_SIZE, 0, &slot->mapped) != VK_SUCCESS || slot->mapped == NULL) {
+    slot->mapped = NULL;
+    [self releaseBufferOfSlot:index];
+    [self logAllocationFailure:@"mapped buffer" bytes:capacity];
+    return NO;
+  }
+  slot->capacity = capacity;
+  return YES;
+}
+
+- (void)releaseBufferOfSlot:(uint32_t)index {
+  LibretroVkSlot *slot = &_slots[index];
+  if (slot->mapped != NULL && slot->memory != VK_NULL_HANDLE && _unmapMemory != NULL) {
+    _unmapMemory(_device, slot->memory);
+  }
+  slot->mapped = NULL;
+  if (slot->buffer != VK_NULL_HANDLE && _destroyBuffer != NULL) _destroyBuffer(_device, slot->buffer, NULL);
+  slot->buffer = VK_NULL_HANDLE;
+  if (slot->memory != VK_NULL_HANDLE && _freeMemory != NULL) _freeMemory(_device, slot->memory, NULL);
+  slot->memory = VK_NULL_HANDLE;
+  slot->capacity = 0;
+}
+
+/// Owned B8G8R8A8_UNORM image of at least `width` x `height` for formats
+/// converted by a blit. The slot must be idle.
+- (BOOL)ensureConvertImageOfSlot:(uint32_t)index width:(uint32_t)width height:(uint32_t)height {
+  LibretroVkSlot *slot = &_slots[index];
+  if (slot->convertImage != VK_NULL_HANDLE && slot->convertWidth >= width && slot->convertHeight >= height) return YES;
+  uint32_t imageWidth = MAX(width, slot->convertWidth);
+  uint32_t imageHeight = MAX(height, slot->convertHeight);
+  [self releaseConvertImageOfSlot:index];
+  VkImageCreateInfo info = {
+      .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+      .imageType = VK_IMAGE_TYPE_2D,
+      .format = VK_FORMAT_B8G8R8A8_UNORM,
+      .extent = {imageWidth, imageHeight, 1},
+      .mipLevels = 1,
+      .arrayLayers = 1,
+      .samples = VK_SAMPLE_COUNT_1_BIT,
+      .tiling = VK_IMAGE_TILING_OPTIMAL,
+      .usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+      .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+      .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+  };
+  if (_createImage(_device, &info, NULL, &slot->convertImage) != VK_SUCCESS) {
+    slot->convertImage = VK_NULL_HANDLE;
+    [self logAllocationFailure:@"conversion image" bytes:(VkDeviceSize)imageWidth * imageHeight * 4];
+    return NO;
+  }
+  VkMemoryRequirements requirements;
+  memset(&requirements, 0, sizeof(requirements));
+  _getImageMemoryRequirements(_device, slot->convertImage, &requirements);
+  uint32_t type = [self memoryTypeForBits:requirements.memoryTypeBits
+                                 required:0
+                                preferred:VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT];
+  VkMemoryAllocateInfo allocation = {
+      .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+      .allocationSize = requirements.size,
+      .memoryTypeIndex = type,
+  };
+  if (type == UINT32_MAX || _allocateMemory(_device, &allocation, NULL, &slot->convertMemory) != VK_SUCCESS) {
+    slot->convertMemory = VK_NULL_HANDLE;
+    [self releaseConvertImageOfSlot:index];
+    [self logAllocationFailure:@"conversion image memory" bytes:requirements.size];
+    return NO;
+  }
+  if (_bindImageMemory(_device, slot->convertImage, slot->convertMemory, 0) != VK_SUCCESS) {
+    [self releaseConvertImageOfSlot:index];
+    [self logAllocationFailure:@"conversion image binding" bytes:requirements.size];
+    return NO;
+  }
+  slot->convertWidth = imageWidth;
+  slot->convertHeight = imageHeight;
+  return YES;
+}
+
+- (void)releaseConvertImageOfSlot:(uint32_t)index {
+  LibretroVkSlot *slot = &_slots[index];
+  if (slot->convertImage != VK_NULL_HANDLE && _destroyImage != NULL) _destroyImage(_device, slot->convertImage, NULL);
+  slot->convertImage = VK_NULL_HANDLE;
+  if (slot->convertMemory != VK_NULL_HANDLE && _freeMemory != NULL) _freeMemory(_device, slot->convertMemory, NULL);
+  slot->convertMemory = VK_NULL_HANDLE;
+  slot->convertWidth = 0;
+  slot->convertHeight = 0;
+}
+
+- (void)logAllocationFailure:(NSString *)resource bytes:(VkDeviceSize)bytes {
+  if (_loggedAllocationFailure) return;
+  _loggedAllocationFailure = YES;
+  NSLog(@"[Libretro] Vulkan hand-off %@ allocation failed (%llu bytes); frames are dropped", resource,
+        (unsigned long long)bytes);
+}
+
+/// Whether a core image of `format` can be blitted into the B8G8R8A8_UNORM
+/// conversion image (checked once per format).
+- (BOOL)canConvertFormat:(VkFormat)format {
+  if (format == _checkedBlitFormat) return _blitFormatSupported;
+  _checkedBlitFormat = format;
+  VkFormatProperties properties;
+  memset(&properties, 0, sizeof(properties));
+  if (_getFormatProperties != NULL && format != VK_FORMAT_UNDEFINED) _getFormatProperties(_gpu, format, &properties);
+  _blitFormatSupported = (properties.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_SRC_BIT) != 0;
+  if (!_blitFormatSupported) {
+    NSLog(@"[Libretro] Vulkan core image format %d cannot be converted; frames are dropped", (int)format);
+  }
+  return _blitFormatSupported;
+}
+
+#pragma mark - Legacy presentation
+
+/// Fallback when the hand-off resources cannot be created: a surface and a
+/// swapchain on the session's layer, as before the frame hand-off.
+- (BOOL)prepareLegacyPresentation:(NSError **)error {
+  if (_createMetalSurface == NULL || _destroySurface == NULL || _getSurfaceCapabilities == NULL ||
+      _getSurfaceFormats == NULL || _createSwapchain == NULL || _destroySwapchain == NULL ||
+      _getSwapchainImages == NULL || _acquireNextImage == NULL || _queuePresent == NULL || _cmdBlitImage == NULL ||
+      _cmdClearColorImage == NULL || _createSemaphore == NULL || _destroySemaphore == NULL) {
+    if (error) *error = VulkanError(@"Vulkan presentation entry points missing");
+    return NO;
+  }
+  VkMetalSurfaceCreateInfoEXT surfaceInfo = {
+      .sType = VK_STRUCTURE_TYPE_METAL_SURFACE_CREATE_INFO_EXT,
+      .pLayer = _layer,
+  };
+  if (_createMetalSurface(_instance, &surfaceInfo, NULL, &_surface) != VK_SUCCESS) {
+    _surface = VK_NULL_HANDLE;
+    if (error) *error = VulkanError(@"vkCreateMetalSurfaceEXT failed");
+    return NO;
+  }
+  if (_getSurfaceSupport != NULL) {
+    VkBool32 present = VK_FALSE;
+    _getSurfaceSupport(_gpu, _queueFamily, _surface, &present);
+    if (!present) {
+      if (error) *error = VulkanError(@"Vulkan queue cannot present to the layer");
+      return NO;
+    }
+  }
+  return [self createSwapchain:error];
 }
 
 - (BOOL)createSwapchain:(NSError **)error {
@@ -639,10 +1048,8 @@ static VkDevice LibretroVkCreateDeviceWrapper(VkPhysicalDevice gpu, void *opaque
     _renderSemaphores[index] = VK_NULL_HANDLE;
     _fenceSubmitted[index] = NO;
   }
-  if (_imageCount > 0 && _commandPool != VK_NULL_HANDLE) {
-    PFN_vkFreeCommandBuffers freeCommandBuffers =
-        (PFN_vkFreeCommandBuffers)_getDeviceProcAddr(_device, "vkFreeCommandBuffers");
-    if (freeCommandBuffers != NULL) freeCommandBuffers(_device, _commandPool, _imageCount, _commandBuffers);
+  if (_imageCount > 0 && _commandPool != VK_NULL_HANDLE && _freeCommandBuffers != NULL) {
+    _freeCommandBuffers(_device, _commandPool, _imageCount, _commandBuffers);
   }
   _imageCount = 0;
 }
@@ -650,9 +1057,12 @@ static VkDevice LibretroVkCreateDeviceWrapper(VkPhysicalDevice gpu, void *opaque
 #pragma mark - Frames
 
 - (void)beginFrame {
-  _acquired = NO;
   _coreCommandCount = 0;
   _signalSemaphore = VK_NULL_HANDLE;
+  // Hand-off: the slot was made idle when the previous frame was handed off;
+  // the core waits for it itself through wait_sync_index.
+  if (_handOff) return;
+  _acquired = NO;
   if (_device == VK_NULL_HANDLE || _swapchain == VK_NULL_HANDLE) return;
   if (_needsRecreate) {
     _deviceWaitIdle(_device);
@@ -686,25 +1096,11 @@ static VkDevice LibretroVkCreateDeviceWrapper(VkPhysicalDevice gpu, void *opaque
   _acquired = YES;
 }
 
-static void ImageBarrier(LibretroVulkanRenderer *renderer, VkCommandBuffer command, VkImage image,
-                         VkImageSubresourceRange range, VkImageLayout from, VkImageLayout to, VkAccessFlags srcAccess,
-                         VkAccessFlags dstAccess, VkPipelineStageFlags srcStage, VkPipelineStageFlags dstStage,
-                         uint32_t srcFamily, uint32_t dstFamily) {
-  VkImageMemoryBarrier barrier = {
-      .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-      .srcAccessMask = srcAccess,
-      .dstAccessMask = dstAccess,
-      .oldLayout = from,
-      .newLayout = to,
-      .srcQueueFamilyIndex = srcFamily,
-      .dstQueueFamilyIndex = dstFamily,
-      .image = image,
-      .subresourceRange = range,
-  };
-  renderer->_cmdPipelineBarrier(command, srcStage, dstStage, 0, 0, NULL, 0, NULL, 1, &barrier);
-}
-
 - (void)endFrameWithWidth:(unsigned)width height:(unsigned)height valid:(BOOL)valid {
+  if (_handOff) {
+    [self endHandOffFrameWithWidth:width height:height valid:valid];
+    return;
+  }
   if (!_acquired) return;
   uint32_t index = _currentIndex;
   VkCommandBuffer command = _commandBuffers[index];
@@ -827,14 +1223,252 @@ static void ImageBarrier(LibretroVulkanRenderer *renderer, VkCommandBuffer comma
   _acquired = NO;
 }
 
+/// Records and submits the current slot (the core's command buffers, then
+/// the copy), then hands the previous slot to the frame handler.
+- (void)endHandOffFrameWithWidth:(unsigned)width height:(unsigned)height valid:(BOOL)valid {
+  if (_device == VK_NULL_HANDLE) return;
+  uint32_t index = _slot;
+  LibretroVkSlot *slot = &_slots[index];
+  if (slot->submitted) {
+    _waitForFences(_device, 1, &slot->fence, VK_TRUE, UINT64_MAX);
+    slot->submitted = NO;
+  }
+  // Still pending only if it was never handed off; a newer frame has been.
+  slot->pending = NO;
+  _resetFences(_device, 1, &slot->fence);
+  VkCommandBuffer command = slot->command;
+  _resetCommandBuffer(command, 0);
+  VkCommandBufferBeginInfo begin = {
+      .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+      .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+  };
+  _beginCommandBuffer(command, &begin);
+  // Duplicated frames copy nothing: the presenter keeps the last frame.
+  BOOL copied = valid && [self recordCopyInSlot:index width:width height:height];
+  _endCommandBuffer(command);
+
+  // libretro_vulkan.h: no semaphore wait for duplicated frames or when the
+  // core passes command buffers.
+  VkSemaphore waits[LIBRETRO_VK_MAX_SEMAPHORES];
+  VkPipelineStageFlags stages[LIBRETRO_VK_MAX_SEMAPHORES];
+  uint32_t waitCount = 0;
+  if (valid && _coreCommandCount == 0) {
+    for (uint32_t pending = 0; pending < _pendingWaitCount; pending++) {
+      waits[waitCount] = _pendingWait[pending];
+      stages[waitCount++] = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+    }
+  }
+  _pendingWaitCount = 0;
+  // The core's command buffers run exactly once, duplicated frame or not.
+  VkCommandBuffer commands[LIBRETRO_VK_MAX_COMMANDS + 1];
+  uint32_t commandCount = 0;
+  for (uint32_t core = 0; core < _coreCommandCount; core++) commands[commandCount++] = _coreCommands[core];
+  commands[commandCount++] = command;
+  // Signalled for duplicated frames too.
+  VkSemaphore signal = _signalSemaphore;
+  VkSubmitInfo submit = {
+      .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+      .waitSemaphoreCount = waitCount,
+      .pWaitSemaphores = waits,
+      .pWaitDstStageMask = stages,
+      .commandBufferCount = commandCount,
+      .pCommandBuffers = commands,
+      .signalSemaphoreCount = signal != VK_NULL_HANDLE ? 1u : 0u,
+      .pSignalSemaphores = &signal,
+  };
+  pthread_mutex_lock(&_queueLock);
+  VkResult submitted = _queueSubmit(_queue, 1, &submit, slot->fence);
+  pthread_mutex_unlock(&_queueLock);
+  _coreCommandCount = 0;
+  _signalSemaphore = VK_NULL_HANDLE;
+  if (submitted == VK_SUCCESS) {
+    slot->submitted = YES;
+    slot->pending = copied;
+  } else if (!_loggedSubmitFailure) {
+    _loggedSubmitFailure = YES;
+    NSLog(@"[Libretro] Vulkan frame submission failed (%d)", (int)submitted);
+  }
+
+  uint32_t previous = (index + LIBRETRO_VK_HANDOFF_SLOTS - 1) % LIBRETRO_VK_HANDOFF_SLOTS;
+  _slot = (index + 1) % LIBRETRO_VK_HANDOFF_SLOTS;
+  [self handOffSlot:previous];
+}
+
+/// Records, in the slot's command buffer being recorded, the copy of the
+/// core image (0,0,w,h) into the slot's host buffer. Returns NO, having
+/// recorded nothing, when the frame cannot be copied.
+- (BOOL)recordCopyInSlot:(uint32_t)index width:(unsigned)width height:(unsigned)height {
+  if (!_hasLastImage || width == 0 || height == 0) return NO;
+  VkImage source = _lastImage.create_info.image;
+  VkImageLayout layout = _lastImage.image_layout;
+  if (source == VK_NULL_HANDLE || layout == VK_IMAGE_LAYOUT_UNDEFINED || layout == VK_IMAGE_LAYOUT_PREINITIALIZED) {
+    return NO;
+  }
+  VkFormat format = _lastImage.create_info.format;
+  MTLPixelFormat pixelFormat = MTLPixelFormatInvalid;
+  BOOL convert = !HandOffPixelFormat(format, &pixelFormat);
+  if (convert) {
+    if (![self canConvertFormat:format]) return NO;
+    pixelFormat = MTLPixelFormatBGRA8Unorm;
+  }
+  if (format != _loggedFormat) {
+    _loggedFormat = format;
+    NSLog(@"[Libretro] Vulkan core image format %d, %ux%u, %@", (int)format, width, height,
+          convert ? @"converted to BGRA8 before read-back" : @"read back unchanged");
+  }
+  size_t bytesPerRow = (size_t)width * 4;
+  VkDeviceSize bytes = (VkDeviceSize)bytesPerRow * height;
+  if (![self ensureBufferOfSlot:index bytes:bytes]) return NO;
+  if (convert && ![self ensureConvertImageOfSlot:index width:width height:height]) return NO;
+  LibretroVkSlot *slot = &_slots[index];
+  VkCommandBuffer command = slot->command;
+
+  VkImageSubresourceRange range = _lastImage.create_info.subresourceRange;
+  range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+  range.levelCount = 1;
+  range.layerCount = 1;
+  // libretro_vulkan.h forbids layout transitions of a GENERAL image; it is
+  // read in place, after a barrier that makes the core's writes visible.
+  VkImageLayout readLayout =
+      layout == VK_IMAGE_LAYOUT_GENERAL ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+  uint32_t sourceFamily = _imageSourceQueueFamily;
+  BOOL transfer = sourceFamily != VK_QUEUE_FAMILY_IGNORED && sourceFamily != _queueFamily;
+  ImageBarrier(self, command, source, range, layout, readLayout,
+               VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT,
+               VK_ACCESS_TRANSFER_READ_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+               transfer ? sourceFamily : VK_QUEUE_FAMILY_IGNORED, transfer ? _queueFamily : VK_QUEUE_FAMILY_IGNORED);
+
+  VkImage copySource = source;
+  VkImageLayout copyLayout = readLayout;
+  VkImageSubresourceLayers layers = {VK_IMAGE_ASPECT_COLOR_BIT, range.baseMipLevel, range.baseArrayLayer, 1};
+  if (convert) {
+    VkImageSubresourceRange convertRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+    ImageBarrier(self, command, slot->convertImage, convertRange, VK_IMAGE_LAYOUT_UNDEFINED,
+                 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0, VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                 VK_PIPELINE_STAGE_TRANSFER_BIT, VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED);
+    VkImageBlit blit = {
+        .srcSubresource = layers,
+        .srcOffsets = {{0, 0, 0}, {(int32_t)width, (int32_t)height, 1}},
+        .dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
+        .dstOffsets = {{0, 0, 0}, {(int32_t)width, (int32_t)height, 1}},
+    };
+    _cmdBlitImage(command, source, readLayout, slot->convertImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit,
+                  VK_FILTER_NEAREST);
+    ImageBarrier(self, command, slot->convertImage, convertRange, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                 VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT,
+                 VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_QUEUE_FAMILY_IGNORED,
+                 VK_QUEUE_FAMILY_IGNORED);
+    copySource = slot->convertImage;
+    copyLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    layers = (VkImageSubresourceLayers){VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+  }
+  VkBufferImageCopy region = {
+      .bufferOffset = 0,
+      .bufferRowLength = 0,
+      .bufferImageHeight = 0,
+      .imageSubresource = layers,
+      .imageOffset = {0, 0, 0},
+      .imageExtent = {width, height, 1},
+  };
+  _cmdCopyImageToBuffer(command, copySource, copyLayout, slot->buffer, 1, &region);
+
+  // Back to the core's layout, releasing to its queue family; nothing the
+  // core does next starts before the copy is done.
+  ImageBarrier(self, command, source, range, readLayout, layout, VK_ACCESS_TRANSFER_READ_BIT,
+               VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+                   VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT,
+               VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+               transfer ? _queueFamily : VK_QUEUE_FAMILY_IGNORED, transfer ? sourceFamily : VK_QUEUE_FAMILY_IGNORED);
+  VkBufferMemoryBarrier hostRead = {
+      .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+      .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+      .dstAccessMask = VK_ACCESS_HOST_READ_BIT,
+      .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+      .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+      .buffer = slot->buffer,
+      .offset = 0,
+      .size = bytes,
+  };
+  _cmdPipelineBarrier(command, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT, 0, 0, NULL, 1, &hostRead, 0,
+                      NULL);
+
+  slot->width = width;
+  slot->height = height;
+  slot->bytesPerRow = bytesPerRow;
+  slot->pixelFormat = pixelFormat;
+  return YES;
+}
+
+/// Waits for the slot's fence and gives its frame to `frameHandler`, outside
+/// the queue lock. Without a handler the frame is dropped.
+- (void)handOffSlot:(uint32_t)index {
+  LibretroVkSlot *slot = &_slots[index];
+  if (!slot->pending) return;
+  slot->pending = NO;
+  uint64_t start = mach_absolute_time();
+  if (slot->submitted) {
+    if (_waitForFences(_device, 1, &slot->fence, VK_TRUE, UINT64_MAX) != VK_SUCCESS) return;
+    slot->submitted = NO;
+  }
+  uint64_t waited = mach_absolute_time();
+  LibretroVulkanFrameHandler handler = self.frameHandler;
+  if (handler == nil || slot->mapped == NULL) return;
+  handler(slot->mapped, slot->width, slot->height, slot->bytesPerRow, slot->pixelFormat);
+  [self noteReadBackWait:waited - start handOff:mach_absolute_time() - waited];
+}
+
+- (void)flushPendingFrame {
+  if (!_handOff || _device == VK_NULL_HANDLE) return;
+  // Oldest first: `_slot` is the next slot to be recorded.
+  for (uint32_t offset = 0; offset < LIBRETRO_VK_HANDOFF_SLOTS; offset++) {
+    [self handOffSlot:(_slot + offset) % LIBRETRO_VK_HANDOFF_SLOTS];
+  }
+}
+
+/// Diagnostic log of the read-back cost (fence wait and frame handler).
+- (void)noteReadBackWait:(uint64_t)waitTicks handOff:(uint64_t)handOffTicks {
+  _statFrames++;
+  _statWaitTicks += waitTicks;
+  _statHandlerTicks += handOffTicks;
+  if (waitTicks + handOffTicks > _statMaxTicks) _statMaxTicks = waitTicks + handOffTicks;
+  if (_statFrames < LIBRETRO_VK_HANDOFF_LOG_INTERVAL) return;
+  double milliseconds = _timebase.denom > 0 ? (double)_timebase.numer / (double)_timebase.denom / 1e6 : 1e-6;
+  NSLog(@"[Libretro] Vulkan read-back over %u frames: fence wait %.3f ms, hand-off %.3f ms on average; "
+        @"%.3f ms at most",
+        _statFrames, (double)_statWaitTicks * milliseconds / _statFrames,
+        (double)_statHandlerTicks * milliseconds / _statFrames, (double)_statMaxTicks * milliseconds);
+  _statFrames = 0;
+  _statWaitTicks = 0;
+  _statHandlerTicks = 0;
+  _statMaxTicks = 0;
+}
+
+#pragma mark - Teardown
+
 - (void)waitIdle {
-  if (_device != VK_NULL_HANDLE && _deviceWaitIdle != NULL) _deviceWaitIdle(_device);
+  if (_device == VK_NULL_HANDLE) return;
+  if (_waitForFences != NULL) {
+    for (uint32_t index = 0; index < LIBRETRO_VK_HANDOFF_SLOTS; index++) {
+      LibretroVkSlot *slot = &_slots[index];
+      if (!slot->submitted || slot->fence == VK_NULL_HANDLE) continue;
+      _waitForFences(_device, 1, &slot->fence, VK_TRUE, UINT64_MAX);
+      slot->submitted = NO;
+    }
+  }
+  // Work the core submitted itself is covered too; the queue lock keeps a
+  // core thread from submitting meanwhile.
+  if (_deviceWaitIdle != NULL) {
+    pthread_mutex_lock(&_queueLock);
+    _deviceWaitIdle(_device);
+    pthread_mutex_unlock(&_queueLock);
+  }
 }
 
 - (void)teardown {
   if (_instance == VK_NULL_HANDLE) return;
   if (_device != VK_NULL_HANDLE) {
-    if (_deviceWaitIdle != NULL) _deviceWaitIdle(_device);
+    [self waitIdle];
+    [self destroyHandOffResources];
     [self destroySwapchainResources];
     if (_swapchain != VK_NULL_HANDLE) _destroySwapchain(_device, _swapchain, NULL);
     _swapchain = VK_NULL_HANDLE;

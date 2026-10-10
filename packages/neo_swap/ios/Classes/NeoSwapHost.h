@@ -67,6 +67,10 @@ enum NeoSwapHostKind {
 // retained named objects (creator exited, pages charged outside the host
 // footprint). Counts are cumulative independent atomics; live/cached/peak are
 // byte counts of allocated backing intervals, never resident-page proof.
+// Build434: released and prepared intervals wait on size-class shelves
+// (64 KiB .. 16 MiB, plus one exact-size shelf) instead of one 32-entry cache.
+// "cached" below counts every shelved interval, whatever its shelf.
+enum { NEOSWAP_SHELF_CLASS_COUNT = 10 };
 typedef struct NeoSwapRelayLoanStats {
     uint64_t live_bytes, peak_bytes, live_blocks, allocation_count;
     uint64_t quota_bytes, policy_refusals, quota_refusals, backend_refusals;
@@ -76,6 +80,15 @@ typedef struct NeoSwapRelayLoanStats {
     uint64_t kind_allocation_count[NEOSWAP_HOST_KIND_COUNT], kind_refusal_count[NEOSWAP_HOST_KIND_COUNT];
     int32_t last_backend_result;
     uint32_t admitted, available, video_frames_admitted;
+    // Shelves: ready intervals, the refill target of the last maintenance pass
+    // and cumulative misses per class. A miss is a FAST request that found no
+    // ready interval of its class and therefore used the ordinary allocator.
+    uint64_t shelf_ready_blocks[NEOSWAP_SHELF_CLASS_COUNT];
+    uint64_t shelf_target_blocks[NEOSWAP_SHELF_CLASS_COUNT];
+    uint64_t shelf_misses[NEOSWAP_SHELF_CLASS_COUNT];
+    uint64_t shelf_hits[NEOSWAP_SHELF_CLASS_COUNT];
+    uint64_t shelf_prepared_blocks, shelf_prepare_skips, shelf_budget_bytes;
+    uint64_t shelf_last_refill_us, shelf_max_refill_us;
 } NeoSwapRelayLoanStats;
 
 #ifdef __cplusplus

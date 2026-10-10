@@ -1363,57 +1363,6 @@ class ScreenScraperService {
     }
   }
 
-  /// Checks the local availability of required media assets for a given game.
-  static Future<Map<String, dynamic>> checkGameMediaStatus(
-    String appSystemId,
-    String romName,
-  ) async {
-    try {
-      final systemFolder = await ScraperRepository.getSystemFolderNameById(
-        appSystemId,
-      );
-      if (systemFolder == null) {
-        return {'hasAllMedia': false, 'error': 'System not found'};
-      }
-      final userDataDir = await ScreenscraperMediaResolver.getMediaDirectory();
-      const expectedTypes = [
-        'fanarts',
-        'screenshots',
-        'wheels',
-        'box2d',
-        'videos',
-      ];
-      final romBaseName = await ScreenscraperRomHasher.getCleanRomName(
-        romName,
-        appSystemId,
-      );
-      final missing = <String>[];
-      final existing = <String>[];
-
-      for (final type in expectedTypes) {
-        bool found = false;
-        for (final ext in ['.png', '.jpg', '.jpeg', '.mp4', '.webm']) {
-          if (await File(
-            path.join(userDataDir, systemFolder, type, '$romBaseName$ext'),
-          ).exists()) {
-            existing.add(type);
-            found = true;
-            break;
-          }
-        }
-        if (!found) missing.add(type);
-      }
-
-      return {
-        'hasAllMedia': missing.isEmpty,
-        'existingMedia': existing,
-        'missingMedia': missing,
-      };
-    } catch (e) {
-      return {'hasAllMedia': false, 'error': e.toString()};
-    }
-  }
-
   /// Displays the final results of a scraping session in a localized dialog.
   static void _showScrapingSummaryDialog(
     BuildContext context, {

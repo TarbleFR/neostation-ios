@@ -236,25 +236,4 @@ class SystemInfo {
       gameModel: game,
     );
   }
-
-  /// Resolves the background image path for dashboard carousels.
-  String get carouselImagePath =>
-      customBackgroundPath != null && customBackgroundPath!.isNotEmpty
-      ? customBackgroundPath!
-      : 'assets/images/systems/carousel/$_resolvedPrimaryFolderName-background.webp';
-
-  /// Resolves the visual asset path for grid views.
-  String get gridImagePath =>
-      customBackgroundPath != null && customBackgroundPath!.isNotEmpty
-      ? customBackgroundPath!
-      : 'assets/images/logos/$_resolvedPrimaryFolderName.webp';
-
-  /// Internal helper to determine the directory name used for asset resolution.
-  String get _resolvedPrimaryFolderName =>
-      (primaryFolderName != null && primaryFolderName!.isNotEmpty)
-      ? primaryFolderName!
-      : (folderName ?? 'all');
 }
-
-/// Global list of active systems displayed in the UI.
-List mySystems = [];

@@ -42,6 +42,9 @@ import 'package:external_folder_access/external_folder_access.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
 import 'package:neostation/services/retroarch_library_service.dart';
+// LIBRARY_RELOCATION_BEGIN: imports
+import 'package:neostation/services/ios_library_root_relocation.dart';
+// LIBRARY_RELOCATION_END: imports
 import 'package:neostation/services/armsx2_library_service.dart';
 import 'package:neostation/services/armsx2_internal_service.dart';
 import 'package:neostation/services/melonx_library_service.dart';
@@ -340,6 +343,13 @@ void main() async {
   if (Platform.isIOS) {
     ConfigService.linkedExternalFolderPath =
         await ExternalFolderAccess.resolveBookmarkedFolder();
+    // LIBRARY_RELOCATION_BEGIN: startup_folders
+    // iOS can move an app's container when it is reinstalled: find the saved
+    // library folders at their new paths before the configuration reads them.
+    await IosLibraryRootRelocation.run(
+      linkedFolder: ConfigService.linkedExternalFolderPath,
+    );
+    // LIBRARY_RELOCATION_END: startup_folders
 
     // ARMSX2 is embedded in NeoStation. Its canonical library/data root is
     // NeoStation's own Files-visible Documents/ARMSX2 directory.
@@ -480,6 +490,13 @@ void main() async {
   try {
     // 1. Initialize SqliteConfigProvider first so system state is synchronized.
     await sqliteConfigProvider.initialize();
+    // LIBRARY_RELOCATION_BEGIN: startup_scan
+    // Folders found at a new path are scanned now when no startup scan is due.
+    if (IosLibraryRootRelocation.relocatedThisLaunch &&
+        !sqliteConfigProvider.config.scanOnStartup) {
+      unawaited(sqliteConfigProvider.scanSystems());
+    }
+    // LIBRARY_RELOCATION_END: startup_scan
 
     // Seed the game legend visibility from persisted config and wire its
     // persistence sink so the Select + B toggle survives restarts/upgrades.

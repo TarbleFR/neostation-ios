@@ -30,6 +30,55 @@ static char option_value[32];
 static bool jit_capable;
 static bool first_frame = true;
 static uint8_t restored_marker;
+/*
+ * Option values seen by retro_init (like DeSmuME, which reads its options
+ * only there) and the last value re-read after GET_VARIABLE_UPDATE. Exposed
+ * as RETRO_MEMORY_SYSTEM_RAM, which the host never saves or restores:
+ *   [0..15] neotest_init, [16..31] neotest_locked, [32..47] neotest_default
+ *   and [48..63] neotest_mode at retro_init; [64..79] neotest_init re-read
+ *   in retro_run after an update; [80] number of updates seen.
+ */
+#define INIT_REPORT_FIELD 16
+static uint8_t init_report[96];
+
+/*
+ * neotest_hw=on: the core registers a hardware context in retro_load_game
+ * and, like Azahar freeing its Vulkan renderer, asks the frontend for its
+ * hardware render interface in context_destroy, retro_unload_game and
+ * retro_deinit; it logs each step with interface=1 when the frontend still
+ * provides it. neotest_shutdown_frame=N: at frame N the core logs an error
+ * and requests RETRO_ENVIRONMENT_SHUTDOWN, as PPSSPP does when its boot
+ * fails.
+ */
+static bool hardware_context;
+static unsigned shutdown_frame;
+
+static int interface_available(void) {
+  const struct retro_hw_render_interface *interface = NULL;
+  return environ_cb(RETRO_ENVIRONMENT_GET_HW_RENDER_INTERFACE, (void *)&interface) && interface != NULL ? 1 : 0;
+}
+
+static void context_reset(void) {
+  if (log_cb) log_cb(RETRO_LOG_INFO, "neotest context_reset interface=%d\n", interface_available());
+}
+
+static void context_destroy(void) {
+  if (log_cb) log_cb(RETRO_LOG_INFO, "neotest context_destroy interface=%d\n", interface_available());
+}
+
+static bool option_is(const char *key, const char *value) {
+  struct retro_variable variable = {key, NULL};
+  return environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &variable) && variable.value != NULL &&
+         strcmp(variable.value, value) == 0;
+}
+
+static void read_option(const char *key, uint8_t *field) {
+  struct retro_variable variable = {key, NULL};
+  memset(field, 0, INIT_REPORT_FIELD);
+  if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &variable) && variable.value != NULL) {
+    snprintf((char *)field, INIT_REPORT_FIELD, "%s", variable.value);
+  }
+}
 
 static bool set_eject_state(bool ejected) {
   disk_ejected = ejected;
@@ -56,6 +105,16 @@ RETRO_API void retro_set_environment(retro_environment_t cb) {
   environ_cb = cb;
   static struct retro_core_option_v2_definition definitions[] = {
       {"neotest_mode", "Mode", NULL, "Test mode", NULL, NULL, {{"alpha", "Alpha"}, {"beta", "Beta"}, {NULL, NULL}}, "alpha"},
+      {"neotest_init", "Init", NULL, "Read in retro_init", NULL, NULL,
+       {{"one", "One"}, {"two", "Two"}, {"three", "Three"}, {NULL, NULL}}, "one"},
+      {"neotest_locked", "Locked", NULL, "Locked by the frontend", NULL, NULL,
+       {{"free", "Free"}, {"user", "User"}, {"fixed", "Fixed"}, {NULL, NULL}}, "free"},
+      {"neotest_default", "Default", NULL, "Frontend default", NULL, NULL,
+       {{"core", "Core"}, {"neo", "Neo"}, {NULL, NULL}}, "core"},
+      {"neotest_hw", "Hardware context", NULL, "Register a hardware context", NULL, NULL,
+       {{"off", "Off"}, {"on", "On"}, {NULL, NULL}}, "off"},
+      {"neotest_shutdown_frame", "Shutdown frame", NULL, "Request shutdown at this frame", NULL, NULL,
+       {{"0", "Never"}, {"3", "Frame 3"}, {NULL, NULL}}, "0"},
       {NULL, NULL, NULL, NULL, NULL, NULL, {{NULL, NULL}}, NULL},
   };
   static struct retro_core_options_v2 options = {NULL, definitions};
@@ -81,9 +140,17 @@ RETRO_API void retro_init(void) {
   environ_cb(RETRO_ENVIRONMENT_SET_DISK_CONTROL_EXT_INTERFACE, &disk);
   bool jit = false;
   if (environ_cb(RETRO_ENVIRONMENT_GET_JIT_CAPABLE, &jit)) jit_capable = jit;
+  memset(init_report, 0, sizeof(init_report));
+  read_option("neotest_init", init_report);
+  read_option("neotest_locked", init_report + 16);
+  read_option("neotest_default", init_report + 32);
+  read_option("neotest_mode", init_report + 48);
 }
 
-RETRO_API void retro_deinit(void) {}
+RETRO_API void retro_deinit(void) {
+  if (hardware_context && log_cb) log_cb(RETRO_LOG_INFO, "neotest deinit interface=%d\n", interface_available());
+  hardware_context = false;
+}
 RETRO_API unsigned retro_api_version(void) { return RETRO_API_VERSION; }
 
 RETRO_API void retro_get_system_info(struct retro_system_info *info) {
@@ -114,9 +181,18 @@ RETRO_API void retro_run(void) {
     restored_marker = save_ram[1];
     first_frame = false;
   }
+  bool updated = false;
+  if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE, &updated) && updated) {
+    read_option("neotest_init", init_report + 64);
+    init_report[80]++;
+  }
   input_poll_cb();
   int16_t buttons = input_state_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_MASK);
   frame_counter++;
+  if (shutdown_frame != 0 && frame_counter == shutdown_frame) {
+    if (log_cb) log_cb(RETRO_LOG_ERROR, "neotest boot failed: simulated\n");
+    environ_cb(RETRO_ENVIRONMENT_SHUTDOWN, NULL);
+  }
   for (unsigned index = 0; index < 320 * 240; index++) framebuffer[index] = frame_counter;
   framebuffer[1] = restored_marker;
   save_ram[0] = (uint8_t)frame_counter;
@@ -159,6 +235,17 @@ RETRO_API bool retro_load_game(const struct retro_game_info *game) {
   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &variable) && variable.value != NULL) {
     snprintf(option_value, sizeof(option_value), "%s", variable.value);
   }
+  shutdown_frame = option_is("neotest_shutdown_frame", "3") ? 3 : 0;
+  hardware_context = false;
+  if (option_is("neotest_hw", "on")) {
+    static struct retro_hw_render_callback hw;
+    memset(&hw, 0, sizeof(hw));
+    hw.context_type = RETRO_HW_CONTEXT_OPENGLES3;
+    hw.context_reset = context_reset;
+    hw.context_destroy = context_destroy;
+    if (!environ_cb(RETRO_ENVIRONMENT_SET_HW_RENDER, &hw)) return false;
+    hardware_context = true;
+  }
   return true;
 }
 
@@ -166,8 +253,19 @@ RETRO_API bool retro_load_game_special(unsigned type, const struct retro_game_in
   return false;
 }
 
-RETRO_API void retro_unload_game(void) {}
+RETRO_API void retro_unload_game(void) {
+  if (hardware_context && log_cb) log_cb(RETRO_LOG_INFO, "neotest unload_game interface=%d\n", interface_available());
+}
 RETRO_API unsigned retro_get_region(void) { return RETRO_REGION_NTSC; }
 
-RETRO_API void *retro_get_memory_data(unsigned id) { return id == RETRO_MEMORY_SAVE_RAM ? save_ram : NULL; }
-RETRO_API size_t retro_get_memory_size(unsigned id) { return id == RETRO_MEMORY_SAVE_RAM ? sizeof(save_ram) : 0; }
+RETRO_API void *retro_get_memory_data(unsigned id) {
+  if (id == RETRO_MEMORY_SAVE_RAM) return save_ram;
+  if (id == RETRO_MEMORY_SYSTEM_RAM) return init_report;
+  return NULL;
+}
+
+RETRO_API size_t retro_get_memory_size(unsigned id) {
+  if (id == RETRO_MEMORY_SAVE_RAM) return sizeof(save_ram);
+  if (id == RETRO_MEMORY_SYSTEM_RAM) return sizeof(init_report);
+  return 0;
+}

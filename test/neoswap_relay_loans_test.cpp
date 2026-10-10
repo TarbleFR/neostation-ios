@@ -371,6 +371,99 @@ int main() {
     assert(NeoSwap_RelayLoanMaintain(0, 1) == NEOSWAP_OK && !loans().live_blocks);
     assert(!NeoSwap_FastSnapshot(&queued) && queued.retire_requests == queued.retired_loans);
     assert(NeoSwap_SetRelayHostLoanPolicy(8 * MiB, 1, 1) == NEOSWAP_OK);
+    // Build434 shelves: a FAST miss of a size class is measured, and the next
+    // maintenance tick restocks that class by the misses it counted (bounded
+    // by the per-tick cap of 8), not one interval per tick for every size.
+    {
+        auto shelf = loans();
+        for (unsigned k = 0; k < NEOSWAP_SHELF_CLASS_COUNT; ++k)
+            assert(!shelf.shelf_ready_blocks[k] && !shelf.shelf_target_blocks[k]);
+        assert(shelf.shelf_budget_bytes == 256 * MiB);
+        const uint64_t misses_before = shelf.shelf_misses[2]; // 256 KiB class
+        const uint64_t prepared_before = shelf.shelf_prepared_blocks;
+        const int maps_before = os.maps;
+        // Five RSX-sized misses in one tick: five 256 KiB intervals follow.
+        for (unsigned i = 0; i < 5; ++i) assert(!neostation::swap::try_allocate_cpu(0, 200 * KiB, 65536));
+        shelf = loans();
+        assert(shelf.shelf_misses[2] == misses_before + 5 && !shelf.shelf_ready_blocks[2]);
+        assert(NeoSwap_RelayLoanMaintain(0, 0) == NEOSWAP_OK);
+        shelf = loans();
+        assert(shelf.shelf_target_blocks[2] == 5 && shelf.shelf_ready_blocks[2] == 5);
+        assert(shelf.shelf_prepared_blocks == prepared_before + 5 && os.maps == maps_before + 5);
+        assert(shelf.cached_blocks == 5 && shelf.cached_bytes == 5 * 256 * KiB);
+        assert(shelf.shelf_last_refill_us <= shelf.shelf_max_refill_us);
+        // The stock serves the class without any backend call, padding counted.
+        std::vector<void*> rsx;
+        const uint64_t padding_before = loans().padding_bytes;
+        for (unsigned i = 0; i < 5; ++i) {
+            void* loan = neostation::swap::try_allocate_cpu(0, 200 * KiB, 65536);
+            assert(loan); rsx.push_back(loan);
+        }
+        shelf = loans();
+        assert(os.maps == maps_before + 5 && shelf.shelf_hits[2] >= 5 && !shelf.shelf_ready_blocks[2]);
+        assert(shelf.padding_bytes == padding_before + 5 * (256 * KiB - 200 * KiB) && shelf.live_blocks == 5);
+        // A sixth request of the class misses again until the next tick.
+        assert(!neostation::swap::try_allocate_cpu(0, 200 * KiB, 65536));
+        // Releases re-shelve into the class; the hits keep the stock alive
+        // through an aged maintenance pass because the class is still asked for.
+        for (void* loan : rsx) assert(api->release(loan) == NEOSWAP_OK);
+        assert(NeoSwap_RelayLoanMaintain(0, 0) == NEOSWAP_OK); // retires the 5 FAST loans onto the shelf
+        shelf = loans();
+        assert(shelf.shelf_ready_blocks[2] >= 5 && !shelf.live_blocks);
+        // Target follows the misses of the last tick only (one miss above, which
+        // this pass also served by preparing one more interval).
+        assert(shelf.shelf_target_blocks[2] == 1);
+        // Without new misses the target drops to zero and an aged, idle stock is
+        // returned to the relay; a stock under its target would be kept.
+        assert(NeoSwap_RelayLoanMaintain(UINT64_MAX / 2, 0) == NEOSWAP_OK);
+        shelf = loans();
+        assert(!shelf.shelf_ready_blocks[2] && !shelf.shelf_target_blocks[2] && !shelf.cached_blocks);
+        // Quota bounds the refill: misses beyond the quota are skipped, counted,
+        // and never starve a smaller class planned first.
+        assert(NeoSwap_SetRelayHostLoanPolicy(2 * MiB + 128 * KiB, 1, 1) == NEOSWAP_OK);
+        assert(!neostation::swap::try_allocate(NEOSWAP_RPCS3, 2 * MiB, 65536));    // class 5: 2 MiB
+        assert(!neostation::swap::try_allocate_cpu(0, 64 * KiB, 65536));            // class 0: 64 KiB
+        assert(!neostation::swap::try_allocate_cpu(0, 64 * KiB, 65536));
+        const uint64_t skips_before = loans().shelf_prepare_skips;
+        assert(NeoSwap_RelayLoanMaintain(0, 0) == NEOSWAP_OK);
+        shelf = loans();
+        assert(shelf.shelf_ready_blocks[0] == 2 && shelf.shelf_ready_blocks[5] == 1); // both fit exactly
+        assert(shelf.shelf_prepare_skips == skips_before && shelf.cached_bytes == 2 * MiB + 128 * KiB);
+        assert(!neostation::swap::try_allocate(NEOSWAP_RPCS3, 4 * MiB, 65536));    // class 6 cannot fit the quota
+        assert(NeoSwap_RelayLoanMaintain(0, 0) == NEOSWAP_OK);
+        shelf = loans();
+        assert(shelf.shelf_prepare_skips == skips_before + 1 && !shelf.shelf_ready_blocks[6]);
+        // A larger class interval serves a FAST request of an odd size.
+        const uint64_t hits5_before = loans().shelf_hits[5];
+        void* odd = neostation::swap::try_allocate(NEOSWAP_RPCS3, MiB + 64 * KiB, 65536);
+        assert(odd && loans().shelf_hits[5] == hits5_before + 1 && !loans().shelf_ready_blocks[5]);
+        assert(api->release(odd) == NEOSWAP_OK);
+        assert(NeoSwap_RelayLoanMaintain(0, 1) == NEOSWAP_OK);
+        shelf = loans();
+        assert(!shelf.cached_blocks && !shelf.live_blocks);
+        for (unsigned k = 0; k < NEOSWAP_SHELF_CLASS_COUNT; ++k) assert(!shelf.shelf_ready_blocks[k] && !shelf.shelf_target_blocks[k]);
+        assert(NeoSwap_SetRelayHostLoanPolicy(8 * MiB, 1, 1) == NEOSWAP_OK);
+        // Concurrent FAST requests from several threads never block each other
+        // for long and never corrupt the stock: every loan is distinct.
+        for (unsigned i = 0; i < 8; ++i) assert(!neostation::swap::try_allocate_cpu(0, 64 * KiB, 65536));
+        assert(NeoSwap_RelayLoanMaintain(0, 0) == NEOSWAP_OK && loans().shelf_ready_blocks[0] == 8);
+        std::vector<std::thread> workers;
+        std::vector<std::vector<void*>> taken(4);
+        for (unsigned t = 0; t < 4; ++t) workers.emplace_back([&, t] {
+            for (unsigned i = 0; i < 4; ++i) {
+                void* loan = neostation::swap::try_allocate_cpu(0, 64 * KiB, 65536);
+                if (loan) taken[t].push_back(loan);
+            }
+        });
+        for (auto& worker : workers) worker.join();
+        std::vector<void*> all;
+        for (const auto& list : taken) all.insert(all.end(), list.begin(), list.end());
+        std::sort(all.begin(), all.end());
+        assert(all.size() == 8 && std::adjacent_find(all.begin(), all.end()) == all.end());
+        assert(!loans().shelf_ready_blocks[0] && loans().live_blocks == 8);
+        for (void* loan : all) assert(api->release(loan) == NEOSWAP_OK);
+        assert(NeoSwap_RelayLoanMaintain(0, 1) == NEOSWAP_OK && !loans().live_blocks && !loans().cached_blocks);
+    }
     // Session end closes admission and drains the cache; existing blocks stay owned.
     void* kept = allocate(NEOSWAP_CPU_DATA, MiB);
     assert(kept && loans().live_blocks == 1);
@@ -386,6 +479,7 @@ int main() {
     assert(neostation::relay::shutdown() == NEOSWAP_RELAY_OK);
     std::printf("PASS relay host loans: production broker + backend, kinds 1-4, quota/admission/video gates, "
                 "bounded reuse cache, maintenance, map/unmap failure ownership, file fallback, "
-                "FAST miss/lock refusal, off-frame prepare, deferred release/retry, small CPU gate, %llu relay and %llu file churn allocations, address index, session end\n",
+                "FAST miss/lock refusal, off-frame prepare, deferred release/retry, small CPU gate, %llu relay and %llu file churn allocations, address index, "
+                "size-class shelves (measured misses, bounded refill, retained stock, quota skips, concurrent takes), session end\n",
                 static_cast<unsigned long long>(relay_count), static_cast<unsigned long long>(file_count));
 }

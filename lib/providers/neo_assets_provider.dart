@@ -38,11 +38,6 @@ class NeoAssetsProvider extends ChangeNotifier {
   double get downloadProgress => _downloadProgress;
   bool get hasActiveTheme => _activeThemeFolder.isNotEmpty;
 
-  /// Returns the currently active [NeoAssetsTheme] metadata.
-  NeoAssetsTheme? get activeTheme => _themes.isEmpty
-      ? null
-      : _themes.where((t) => t.folder == _activeThemeFolder).firstOrNull;
-
   /// Initializes the theme cache directory and loads the active theme from the database.
   Future<void> init() async {
     if (_initialized) return;
@@ -65,14 +60,6 @@ class NeoAssetsProvider extends ChangeNotifier {
       _loading = false;
       notifyListeners();
     }
-  }
-
-  /// Sets a new active theme and persists the choice to the local database.
-  Future<void> setActiveTheme(String themeFolder) async {
-    if (_activeThemeFolder == themeFolder) return;
-    _activeThemeFolder = themeFolder;
-    await ConfigRepository.updateActiveTheme(themeFolder);
-    notifyListeners();
   }
 
   /// Deselects the current theme and resets the active selection.
@@ -146,29 +133,6 @@ class NeoAssetsProvider extends ChangeNotifier {
     }
   }
 
-  Future<String?> _getCachedVideoBackground(
-    String themeFolder,
-    String systemFolderName,
-  ) async {
-    for (final ext in _videoBackgroundExtensions) {
-      final localPath = await NeoAssetsService.backgroundCachePath(
-        themeFolder,
-        systemFolderName,
-        ext: ext,
-      );
-      if (await File(localPath).exists()) return localPath;
-
-      final url = NeoAssetsService.getBackgroundUrl(
-        themeFolder,
-        systemFolderName,
-        ext: ext,
-      );
-      final result = await NeoAssetsService.downloadAndCacheAsset(url, localPath);
-      if (result != null) return result;
-    }
-    return null;
-  }
-
   String? _resolveCachedVideoBackgroundSync(
     String themeFolder,
     String systemFolderName,
@@ -182,17 +146,6 @@ class NeoAssetsProvider extends ChangeNotifier {
       if (localPath != null && File(localPath).existsSync()) return localPath;
     }
     return null;
-  }
-
-  /// Resolves the absolute path to a system background within the active theme.
-  Future<String?> getBackgroundForSystem(String systemFolderName) async {
-    if (!hasActiveTheme) return null;
-    final image = await NeoAssetsService.getCachedBackground(
-      _activeThemeFolder,
-      systemFolderName,
-    );
-    if (image != null) return image;
-    return _getCachedVideoBackground(_activeThemeFolder, systemFolderName);
   }
 
   /// Synchronous variant for resolving background paths.
@@ -210,16 +163,5 @@ class NeoAssetsProvider extends ChangeNotifier {
           systemFolderName,
         ) ??
         image;
-  }
-
-  /// Logos are no longer loaded from remote themes.
-  /// Returns null to fall through to bundled local assets.
-  Future<String?> getLogoForSystem(String systemFolderName) async {
-    return null;
-  }
-
-  /// Synchronous variant — always returns null.
-  String? getLogoForSystemSync(String systemFolderName) {
-    return null;
   }
 }
