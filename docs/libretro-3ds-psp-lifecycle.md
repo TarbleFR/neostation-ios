@@ -154,8 +154,9 @@ Journal de session : `Fichiers › NeoStation › Libretro › Logs`.
   réel) ; journal (écriture immédiate, rotation, session inachevée
   conservée, écritures concurrentes).
 - **Simulateur iOS 26.2** (`.github/workflows/libretro-simulator.yml`,
-  run 38009696405 sur `de2bd95c`) : la vraie `LibretroSession`, dans la vraie
-  pile UIKit, Metal, OpenGL ES et MoltenVK. Les 8 scénarios réussissent :
+  runs 38009696405 sur `de2bd95c` et 38010857254 sur `19631f95`) : la vraie
+  `LibretroSession`, dans la vraie pile UIKit, Metal, OpenGL ES et MoltenVK.
+  Les 8 scénarios réussissent :
   - le cœur de test logiciel : lancement, quitter, relancer ; arrêt pendant
     le démarrage reçu comme `LIBRETRO_CORE_STOPPED` avec l’erreur du cœur ;
   - PPSSPP : programme de test PSP, puis image ISO deux fois, chacun quitté
@@ -164,11 +165,37 @@ Journal de session : `Fichiers › NeoStation › Libretro › Logs`.
     dans `retro_unload_game` comme Azahar : lancement, quitter, relancer,
     ses objets détruits par le périphérique encore vivant.
 
+  **Défaut reproduit avec les sources d’avant le correctif** (`940f114`,
+  même run, job `before-fix`). Le même cœur Vulkan démarre, puis
+  « Quit game » ferme tout le processus. MoltenVK journalise d’abord
+  « Destroyed VkDevice » et « Destroying VkInstance » (ancien ordre), puis
+  le `retro_unload_game` du cœur attend ce périphérique détruit. L’arrêt
+  vient de `libc++abi: terminating due to uncaught exception of type
+  std::__1::system_error: mutex lock failed: Invalid argument`. C’est le
+  mécanisme de la fermeture 3DS de la vidéo.
+
   Azahar lui-même ne démarre pas dans le simulateur : le GPU simulé n’a pas
   de tableaux de textures ni d’échantillonneurs
   (`vk::FeatureNotPresentError`, avec ou sans correctif). Les cœurs de
   l’iPhone y tournent après le seul changement de plateforme Mach-O (iOS →
   simulateur). Un simulateur n’est pas un iPhone.
+
+## Livraison
+
+**Build 431**, IPA de test :
+
+- source : `19631f95d75f39ddf407878ed32e3120f1e929ce` ;
+- run : [38010863934](https://github.com/TarbleFR/neostation-ios/actions/runs/38010863934)
+  (contrôles, natif, compilation Release à froid réussis) ;
+- IPA scellée : SHA-256
+  `633c3cc580c54b6b37d457ad9fea5495cb90c914eb0d65bccd916db4a7961230`,
+  205 871 564 octets ;
+- signatures : 57 signatures de préparation vérifiées, aucune section de
+  code modifiée par la signature ;
+- installation : par SideStore.
+
+Ce document a été complété après la compilation, sans changer aucune entrée
+de la Build 431.
 
 ## Reste à vérifier sur iPhone
 
