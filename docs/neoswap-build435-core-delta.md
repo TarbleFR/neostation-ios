@@ -172,4 +172,26 @@ La lane `retroarch-delivery.yml` est ré-épinglée sur ce run
   sur le Core 435 (étape Build 435 du test de périmètre candidat, lignes
   appliquées sur les octets de `afc0a96d`).
 
-Renseigné après la lane de livraison suivante.
+- run [38072379293](https://github.com/TarbleFR/neostation-ios/actions/runs/38072379293)
+  (`retroarch-delivery.yml`, `workflow_dispatch`, `build_number=435`) sur
+  `90a4e513e3a97f642bc45963bfb689f7c4677d46` : jobs `checks`, `native` et
+  « Release device build • cold » réussis (job à froid de 17 h 36 à 17 h 46
+  UTC, 9 min 14 s, interfaces StikJIT et dépendances restaurées par identité),
+  Core 435 `5b0a5d09…` installé après vérification de son identité complète ;
+- IPA avant scellement (`shasum` de l'étape de validation) : SHA-256
+  `65183b3f206f198f8badabf5717a673b0d5abc49b6ce2b183760802bcbfca10a` ;
+  l'empreinte scellée est dans `SHA256SUMS` et `signed-payload-identity.json`
+  de l'artefact déchiffré, à relever sur le PC du mainteneur (hors ligne au
+  moment de la livraison ; script `decrypt-435.ps1` fourni) ;
+- artefact chiffré (destinataire `delivery-424-recipient.pem`) :
+  `NeoStation-Build-435-90a4e513e3a97f642bc45963bfb689f7c4677d46-cold`,
+  id [11678040155](https://github.com/TarbleFR/neostation-ios/actions/runs/38072379293/artifacts/11678040155),
+  206 120 349 octets, empreinte SHA-256 du zip
+  `b379ff959340b0888d8e080ef0d45a7e2df684a2a3f7a6a18e4afae40b6ce7b0`,
+  rétention jusqu'au 24 octobre 2026 ; diagnostics chiffrés id 11677376798 ;
+  rapport de validation id 11677093806 ;
+- installation : par SideStore, qui applique la signature et le profil du
+  compte configuré. Aucun test sur iPhone à ce stade.
+
+Ce paragraphe a été ajouté après la compilation, sans changer aucune entrée
+de la Build 435 ; le commit qui le porte n'est pas celui de l'IPA.
